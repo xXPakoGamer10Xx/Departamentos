@@ -56,7 +56,7 @@ JWT_EXPIRES_IN=7d
 
 # Backup
 BACKUP_DIR=/app/backups
-BACKUP_CRON=0 4 * * *
+BACKUP_CRON="0 4 * * *"
 
 # Arrendador (configurable desde la app)
 ARRENDADOR_NOMBRE=Alba Eunice Armijo Ogazon
@@ -76,11 +76,12 @@ else
   echo ""
 fi
 
-# Cargar variables del .env para usarlas en el healthcheck
-set -a
-# shellcheck disable=SC1091
-source .env
-set +a
+# Leer solo las variables necesarias del .env de forma segura (sin ejecutar el archivo)
+# Esto evita problemas con valores como BACKUP_CRON=0 4 * * * que bash interpreta como comandos
+DB_USER=$(grep -E '^DB_USER=' .env | cut -d'=' -f2 | tr -d '"' | tr -d "'")
+DB_NAME=$(grep -E '^DB_NAME=' .env | cut -d'=' -f2 | tr -d '"' | tr -d "'")
+DB_USER="${DB_USER:-depas_user}"
+DB_NAME="${DB_NAME:-departamentos}"
 
 # ─── Crear directorio de backups ────────────────────────────────────────────
 mkdir -p backups

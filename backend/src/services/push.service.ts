@@ -1,4 +1,5 @@
 import { pool } from '../config/database';
+import { emitToUser } from './sse.service';
 
 export async function getUserPushTokens(usuarioId: string): Promise<string[]> {
   const res = await pool.query('SELECT token FROM push_tokens WHERE usuario_id = $1', [usuarioId]);
@@ -28,5 +29,32 @@ export async function sendPush(tokens: string[], title: string, body: string, da
     });
   } catch {
     // Fire-and-forget — never block the main operation
+  }
+}
+
+export async function createAndSendNotification(
+  usuarioId: string,
+  title: string,
+  body: string,
+  tipo: 'renta' | 'cuota' | 'ticket' | 'pago'
+): Promise<void> {
+  try {
+    // 1. Guardar en base de datos para la web y panel histórico
+    await pool.query(
+      `INSERT INTO notificaciones (usuario_id, titulo, mensaje, tipo)
+       VALUES ($1, $2, $3, $4)`,
+      [usuarioId, title, body, tipo]
+    );
+
+    // 2. Emitir por Server-Sent Events (SSE) si está conectado en Web
+    emitToUser(usuarioId, 'notification_new', { title, mensaje: body, tipo });
+
+    // 3. Enviar Push Notification por Expo a móviles
+    const tokens = await getUserPushTokens(usuarioId);
+    if (tokens.length > 0) {
+      await sendPush(tokens, title, body, { tipo });
+    }
+  } catch (err) {
+    console.error('Error al guardar/enviar notificación:', err);
   }
 }

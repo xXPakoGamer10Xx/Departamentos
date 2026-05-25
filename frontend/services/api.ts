@@ -118,6 +118,16 @@ class ApiService {
   registerPushToken = (token: string) =>
     this.request<void>('POST', '/push/token', { token });
 
+  // Notificaciones
+  getNotificaciones = () =>
+    this.request<any[]>('GET', '/notificaciones');
+
+  marcarNotificacionesLeidas = () =>
+    this.request<{ success: boolean; message: string }>('PUT', '/notificaciones/marcar-leidas');
+
+  marcarNotificacionLeida = (id: string) =>
+    this.request<any>('PUT', `/notificaciones/${id}/leida`);
+
   // Departamentos
   getDepartamentos = () =>
     this.request<any[]>('GET', '/departamentos');

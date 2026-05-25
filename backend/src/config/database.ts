@@ -60,6 +60,18 @@ CREATE TABLE IF NOT EXISTS cuotas_extra (
 CREATE INDEX IF NOT EXISTS idx_cuotas_inquilino ON cuotas_extra(inquilino_id);
 CREATE INDEX IF NOT EXISTS idx_cuotas_estado ON cuotas_extra(estado);
 
+CREATE TABLE IF NOT EXISTS notificaciones (
+  id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  usuario_id    UUID NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+  titulo        VARCHAR(200) NOT NULL,
+  mensaje       TEXT NOT NULL,
+  leido         BOOLEAN NOT NULL DEFAULT FALSE,
+  tipo          VARCHAR(50) NOT NULL,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_notificaciones_usuario ON notificaciones(usuario_id);
+CREATE INDEX IF NOT EXISTS idx_notificaciones_leido ON notificaciones(leido);
+
 CREATE TABLE IF NOT EXISTS push_tokens (
   id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   usuario_id  UUID NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,

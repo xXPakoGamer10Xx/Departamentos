@@ -117,7 +117,7 @@ export function Button({
     </>
   );
 
-  const containerStyle: ViewStyle[] = [
+  const containerStyle: any[] = [
     styles.container,
     size === 'sm' && styles.containerSm,
     size === 'lg' && styles.containerLg,
@@ -131,9 +131,12 @@ export function Button({
       <TouchableOpacity
         onPress={onPress}
         disabled={disabled || loading}
-        style={[fullWidth ? styles.fullWidth : undefined, disabled && { opacity: 0.45 }]}
+        style={[
+          fullWidth ? styles.fullWidth : undefined, 
+          disabled && { opacity: 0.45 },
+          Platform.OS === 'web' && ({ cursor: disabled ? 'not-allowed' : 'pointer' } as any)
+        ]}
         activeOpacity={0.8}
-        {...(Platform.OS === 'web' ? { style: [fullWidth ? styles.fullWidth : undefined, disabled && { opacity: 0.45 }, { cursor: disabled ? 'not-allowed' : 'pointer' } as any] } : {})}
       >
         <LinearGradient
           colors={isDark

@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import { pool } from '../config/database';
 import { AppError } from '../middleware/error.middleware';
 import { AuthRequest } from '../middleware/auth.middleware';
+import { createAndSendNotification } from '../services/push.service';
 
 function getCurrentPeriodo(): string {
   const now = new Date();
@@ -53,8 +54,12 @@ export async function createCuota(req: AuthRequest, res: Response, next: NextFun
       throw new AppError('El monto debe ser mayor a cero', 400);
     }
 
-    const inqCheck = await pool.query(`SELECT id FROM inquilinos WHERE id = $1`, [inquilino_id]);
+    const inqCheck = await pool.query(
+      `SELECT id, usuario_id, depto_numero FROM inquilinos WHERE id = $1`,
+      [inquilino_id]
+    );
     if (!inqCheck.rows[0]) throw new AppError('Inquilino no encontrado', 404);
+    const inquilino = inqCheck.rows[0];
 
     const periodo = getCurrentPeriodo();
     const result = await pool.query(
@@ -62,6 +67,17 @@ export async function createCuota(req: AuthRequest, res: Response, next: NextFun
        VALUES ($1, $2, $3, $4, $5) RETURNING *`,
       [inquilino_id, concepto.trim(), Number(monto), periodo, req.user!.id]
     );
+
+    // Enviar notificación al inquilino si está vinculado
+    if (inquilino.usuario_id) {
+      const formattedMonto = Number(monto).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
+      await createAndSendNotification(
+        inquilino.usuario_id,
+        '🔔 Nuevo cargo adicional',
+        `Se ha generado un cobro extra de ${formattedMonto} por: ${concepto.trim()}`,
+        'cuota'
+      );
+    }
 
     res.status(201).json({ success: true, data: result.rows[0] });
   } catch (err) {

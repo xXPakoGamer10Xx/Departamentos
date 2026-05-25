@@ -3,7 +3,7 @@ import { pool } from '../config/database';
 import { AppError } from '../middleware/error.middleware';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { v4 as uuidv4 } from 'uuid';
-import { sendPush, getUserPushTokens, getAdminPushTokens } from '../services/push.service';
+import { sendPush, getUserPushTokens, getAdminPushTokens, createAndSendNotification } from '../services/push.service';
 import { emitToUser, emitToAdmins } from '../services/sse.service';
 
 function getCurrentPeriodo(): string {
@@ -158,8 +158,7 @@ export async function confirmarPago(req: AuthRequest, res: Response, next: NextF
         const tasks: Promise<any>[] = [];
         if (usuarioId) {
           emitToUser(usuarioId, 'payment_confirmed', { pago: pagoData });
-          const tokens = await getUserPushTokens(usuarioId);
-          tasks.push(sendPush(tokens, '✅ ¡Pago confirmado!', `Tu pago de ${pago.periodo} fue confirmado`));
+          tasks.push(createAndSendNotification(usuarioId, '✅ ¡Pago confirmado!', `Tu pago de ${pago.periodo} fue confirmado`, 'pago'));
         }
         const adminTokens = await getAdminPushTokens();
         tasks.push(sendPush(adminTokens, '💰 Pago confirmado', `Depto ${pago.depto_numero} — ${pago.nombre_completo}`));
@@ -273,9 +272,7 @@ export async function confirmarPagoAdmin(req: AuthRequest, res: Response, next: 
     emitToAdmins('payment_confirmed', { pago: pagoData });
     if (pago.inquilino_usuario_id) {
       emitToUser(pago.inquilino_usuario_id, 'payment_confirmed', { pago: pagoData });
-      getUserPushTokens(pago.inquilino_usuario_id).then(tokens =>
-        sendPush(tokens, '✅ ¡Pago confirmado!', `Tu pago de ${pago.periodo} fue confirmado`)
-      ).catch(() => {});
+      createAndSendNotification(pago.inquilino_usuario_id, '✅ ¡Pago confirmado!', `Tu pago de ${pago.periodo} fue confirmado`, 'pago').catch(() => {});
     }
     getAdminPushTokens().then(tokens =>
       sendPush(tokens, '💰 Pago confirmado', `Depto ${pago.depto_numero} — ${pago.nombre_completo}`)

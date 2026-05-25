@@ -2,7 +2,7 @@ import { Response, NextFunction } from 'express';
 import { pool } from '../config/database';
 import { AppError } from '../middleware/error.middleware';
 import { AuthRequest } from '../middleware/auth.middleware';
-import { sendPush, getAdminPushTokens, getUserPushTokens } from '../services/push.service';
+import { sendPush, getAdminPushTokens, getUserPushTokens, createAndSendNotification } from '../services/push.service';
 import { emitToAdmins, emitToUser } from '../services/sse.service';
 
 function getCurrentPeriodo(): string {
@@ -157,7 +157,7 @@ export async function updateTicket(req: AuthRequest, res: Response, next: NextFu
         emitToUser(usuarioId, 'ticket_updated', { ticket: updated });
         const tokens = await getUserPushTokens(usuarioId);
         const label = estado === 'en_revision' ? 'en revisión' : estado === 'resuelto' ? 'resuelto' : 'actualizado';
-        return sendPush(tokens, '📋 Ticket actualizado', `Tu reporte fue marcado como ${label}`);
+        return createAndSendNotification(usuarioId, '📋 Ticket actualizado', `Tu reporte fue marcado como ${label}`, 'ticket');
       }
     }).catch(() => {});
   } catch (err) {

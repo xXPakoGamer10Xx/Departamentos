@@ -13,6 +13,7 @@ import { ticketsRouter } from './routes/tickets.routes';
 import { cuotasRouter } from './routes/cuotas.routes';
 import { pushRouter } from './routes/push.routes';
 import { eventsRouter } from './routes/events.routes';
+import { notificacionesRouter } from './routes/notificaciones.routes';
 import { errorHandler } from './middleware/error.middleware';
 import { requestLogger } from './middleware/logger.middleware';
 import { initDB } from './config/database';
@@ -55,6 +56,7 @@ app.use('/api/tickets', ticketsRouter);
 app.use('/api/cuotas', cuotasRouter);
 app.use('/api/push', pushRouter);
 app.use('/api/events', eventsRouter);
+app.use('/api/notificaciones', notificacionesRouter);
 
 // Error handler global (debe ir al final)
 app.use(errorHandler);

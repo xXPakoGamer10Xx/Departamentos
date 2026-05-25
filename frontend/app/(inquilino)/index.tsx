@@ -13,6 +13,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import api from '../../services/api';
 import { useSSEEvent } from '../../hooks/useSSE';
 import { showWebNotification } from '../../services/webNotifications';
+import { NotificationBell } from '../../components/ui/NotificationBell';
 
 const TOKEN_KEY = 'auth_token';
 const USER_KEY = 'auth_user';
@@ -191,26 +192,283 @@ export default function InquilinoHome() {
   const esTransferencia = inquilino?.metodo_pago === 'transferencia' || inquilino?.metodo_pago === 'ambos';
   const esEfectivo = inquilino?.metodo_pago === 'efectivo' || inquilino?.metodo_pago === 'ambos';
 
+  const renderAptoCard = () => (
+    <View style={[styles.aptoCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#fff' }]}>
+      <View style={[styles.aptoIconWrap, { backgroundColor: theme.primaryLight || theme.primary + '20' }]}>
+        <Ionicons name="home" size={22} color={theme.primary} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={[styles.aptoLabel, { color: theme.textSecondary }]}>Tu departamento</Text>
+        <Text style={[styles.aptoNum, { color: theme.text }]}>Depto {inquilino?.depto_numero}</Text>
+      </View>
+      <View style={{ alignItems: 'flex-end' }}>
+        <Text style={[styles.aptoLabel, { color: theme.textSecondary }]}>Renta mensual</Text>
+        <Text style={[styles.aptoRenta, { color: theme.text }]}>{inquilino ? fmtRenta(inquilino.renta) : ''}</Text>
+      </View>
+    </View>
+  );
+
+  const renderStatusCard = () => (
+    <View style={[styles.statusCard, { backgroundColor: pago?.confirmado ? (isDark ? 'rgba(52,199,89,0.12)' : '#F0FFF4') : (isDark ? 'rgba(255,255,255,0.05)' : '#fff') }]}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <Ionicons
+          name={pago?.confirmado ? 'checkmark-circle' : 'ellipse-outline'}
+          size={28}
+          color={pago?.confirmado ? '#34C759' : theme.textSecondary}
+        />
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.statusMonth, { color: theme.textSecondary }]}>{getPeriodoLabel()}</Text>
+          <Text style={[styles.statusLabel, { color: pago?.confirmado ? '#34C759' : theme.text }]}>
+            {pago?.confirmado ? '¡Pago confirmado!' : pago ? 'Pago pendiente' : 'Sin registro de pago'}
+          </Text>
+          {pago?.confirmado && pago.confirmado_en ? (
+            <Text style={[styles.statusDate, { color: theme.textSecondary }]}>
+              {new Date(pago.confirmado_en).toLocaleString('es-MX')}
+            </Text>
+          ) : null}
+        </View>
+        <Text style={[styles.statusAmount, { color: theme.text }]}>{inquilino ? fmtRenta(inquilino.renta) : ''}</Text>
+      </View>
+    </View>
+  );
+
+  const renderMetodosPago = () => {
+    if (pago?.confirmado) return null;
+    return (
+      <>
+        {/* Sin método de pago configurado */}
+        {!esTransferencia && !esEfectivo && (
+          <View style={[styles.noMethodBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', borderColor: theme.border }]}>
+            <Ionicons name="information-circle-outline" size={20} color={theme.textSecondary} />
+            <Text style={[styles.noMethodText, { color: theme.textSecondary }]}>
+              El administrador aún no ha configurado tu método de pago. Contáctalo para más información.
+            </Text>
+          </View>
+        )}
+
+        {/* Transferencia bancaria */}
+        {esTransferencia && (() => {
+          const bankInfo = detectBankInfo(config.banco_clabe || '');
+          return (
+            <View style={{ gap: 8 }}>
+              <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Datos para transferencia</Text>
+              {(config.banco_clabe || config.banco_nombre) ? (
+                <>
+                  <LinearGradient
+                    colors={['#1a56c4', '#0a3d8a']}
+                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                    style={styles.bankCard}
+                  >
+                    <View style={styles.chip}><View style={styles.chipInner} /></View>
+                    <View style={{ gap: 6 }}>
+                      <Text style={styles.bankName}>{config.banco_nombre || 'BANCO'}</Text>
+                      <Text style={styles.bankClabe}>{bankInfo.formato}</Text>
+                      <Text style={styles.bankTitular}>{config.banco_titular || ''}</Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                      <Ionicons name="card" size={26} color="rgba(255,255,255,0.4)" />
+                      <Text style={styles.bankType}>{bankInfo.tipo}</Text>
+                    </View>
+                  </LinearGradient>
+                  
+                  {comprobantePreview ? (
+                    <View style={[styles.comprobanteBox, { borderColor: '#6366F1' + '40', backgroundColor: isDark ? 'rgba(99,102,241,0.08)' : 'rgba(99,102,241,0.05)' }]}>
+                      <Text style={{ color: '#6366F1', fontWeight: '700', fontSize: 13, marginBottom: 10 }}>Vista previa del comprobante</Text>
+                      <Image source={{ uri: comprobantePreview }} style={styles.comprobanteImg} resizeMode="contain" />
+                      <View style={{ flexDirection: 'row', gap: 8, marginTop: 10, width: '100%' }}>
+                        <TouchableOpacity
+                          style={[styles.actionBtn, { flex: 1, backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}
+                          onPress={seleccionarComprobante}
+                          disabled={subiendoComprobante}
+                        >
+                          <Ionicons name="image-outline" size={16} color={theme.textSecondary} />
+                          <Text style={[styles.actionBtnText, { color: theme.textSecondary }]}>Cambiar</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.actionBtn, { flex: 1, backgroundColor: '#6366F1', opacity: subiendoComprobante ? 0.7 : 1 }]}
+                          onPress={enviarComprobante}
+                          disabled={subiendoComprobante}
+                        >
+                          {subiendoComprobante
+                            ? <ActivityIndicator color="#fff" size="small" />
+                            : <Ionicons name="send-outline" size={16} color="#fff" />
+                          }
+                          <Text style={styles.actionBtnText}>
+                            {subiendoComprobante ? 'Enviando…' : 'Enviar'}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ) : pago?.comprobante_url ? (
+                    <View style={[styles.comprobanteBox, { borderColor: '#10B981' + '40', backgroundColor: isDark ? 'rgba(16,185,129,0.08)' : 'rgba(16,185,129,0.05)' }]}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                        <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+                        <Text style={{ color: '#10B981', fontWeight: '700', fontSize: 13 }}>Comprobante enviado</Text>
+                      </View>
+                      <Image source={{ uri: pago.comprobante_url }} style={styles.comprobanteImg} resizeMode="contain" />
+                      <TouchableOpacity
+                        style={[styles.actionBtn, { backgroundColor: '#10B981' + '20', marginTop: 8 }]}
+                        onPress={seleccionarComprobante}
+                      >
+                        <Ionicons name="refresh-outline" size={16} color="#10B981" />
+                        <Text style={[styles.actionBtnText, { color: '#10B981' }]}>Actualizar comprobante</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      style={[styles.actionBtn, { backgroundColor: '#6366F1', marginTop: 12 }]}
+                      onPress={seleccionarComprobante}
+                    >
+                      <Ionicons name="cloud-upload-outline" size={18} color="#fff" />
+                      <Text style={styles.actionBtnText}>Subir comprobante de pago</Text>
+                    </TouchableOpacity>
+                  )}
+                </>
+              ) : (
+                <View style={[styles.noMethodBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', borderColor: theme.border }]}>
+                  <Ionicons name="information-circle-outline" size={20} color={theme.textSecondary} />
+                  <Text style={[styles.noMethodText, { color: theme.textSecondary }]}>
+                    El administrador aún no ha configurado los datos bancarios. Contacta al administrador.
+                  </Text>
+                </View>
+              )}
+            </View>
+          );
+        })()}
+
+        {/* Efectivo / QR */}
+        {esEfectivo && (
+          <View style={{ gap: 8 }}>
+            <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>
+              {inquilino?.metodo_pago === 'ambos' ? 'O paga en efectivo' : 'Pago en efectivo'}
+            </Text>
+            <View style={[styles.qrCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#fff' }]}>
+              <View style={[styles.qrSteps, { borderColor: theme.border + '60' }]}>
+                <View style={styles.qrStep}>
+                  <View style={[styles.qrStepNum, { backgroundColor: theme.primary }]}><Text style={styles.qrStepNumText}>1</Text></View>
+                  <Text style={[styles.qrStepText, { color: theme.textSecondary }]}>Genera el código QR</Text>
+                </View>
+                <View style={styles.qrStep}>
+                  <View style={[styles.qrStepNum, { backgroundColor: theme.primary }]}><Text style={styles.qrStepNumText}>2</Text></View>
+                  <Text style={[styles.qrStepText, { color: theme.textSecondary }]}>Muéstraselo al administrador</Text>
+                </View>
+                <View style={styles.qrStep}>
+                  <View style={[styles.qrStepNum, { backgroundColor: theme.primary }]}><Text style={styles.qrStepNumText}>3</Text></View>
+                  <Text style={[styles.qrStepText, { color: theme.textSecondary }]}>El admin lo escanea y confirma</Text>
+                </View>
+              </View>
+              {qrDataUrl && (
+                <View style={styles.qrWrapper}>
+                  <Image source={{ uri: qrDataUrl }} style={styles.qrImage} resizeMode="contain" />
+                </View>
+              )}
+              <TouchableOpacity
+                style={[styles.actionBtn, { backgroundColor: theme.primary, opacity: generando ? 0.7 : 1 }]}
+                onPress={generarQr}
+                disabled={generando}
+              >
+                {generando
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Ionicons name="qr-code-outline" size={18} color="#fff" />
+                }
+                <Text style={styles.actionBtnText}>
+                  {generando ? 'Generando…' : qrDataUrl ? 'Regenerar QR' : 'Generar QR'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+      </>
+    );
+  };
+
+  const renderCuotasCard = () => {
+    if (cuotas.length === 0) return null;
+    return (
+      <View style={[styles.cuotasCard, { backgroundColor: isDark ? 'rgba(239,68,68,0.08)' : 'rgba(239,68,68,0.05)', borderColor: '#EF4444' + '30' }]}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <Ionicons name="warning-outline" size={16} color="#EF4444" />
+          <Text style={[styles.cuotasTitle, { color: '#EF4444' }]}>Cargos adicionales este mes</Text>
+        </View>
+        {cuotas.map(c => (
+          <View key={c.id} style={styles.cuotaRow}>
+            <Text style={[styles.cuotaConcepto, { color: theme.text }]}>{c.concepto}</Text>
+            <Text style={[styles.cuotaMonto, { color: '#EF4444' }]}>+${Number(c.monto).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Text>
+          </View>
+        ))}
+        <View style={[styles.cuotaSeparator, { backgroundColor: '#EF4444' + '30' }]} />
+        <View style={styles.cuotaRow}>
+          <Text style={[styles.cuotaTotalLabel, { color: theme.text }]}>Total a pagar</Text>
+          <Text style={[styles.cuotaTotal, { color: theme.text }]}>{inquilino ? fmtRenta(parseFloat(inquilino.renta) + totalExtra) : ''}</Text>
+        </View>
+      </View>
+    );
+  };
+
+  const renderInfoRow = () => (
+    <View style={[styles.infoRow, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)', borderColor: theme.border }]}>
+      <Ionicons name="calendar-outline" size={16} color={theme.textSecondary} />
+      <Text style={[styles.infoText, { color: theme.textSecondary }]}>
+        Fecha de pago: {inquilino?.fecha_pago}
+      </Text>
+    </View>
+  );
+
+  const renderReportBtn = () => (
+    <View style={{ gap: 12 }}>
+      {inquilino && (
+        <TouchableOpacity
+          style={[styles.reportBtn, { backgroundColor: isDark ? 'rgba(99,102,241,0.1)' : 'rgba(99,102,241,0.07)', borderColor: theme.primary + '30' }]}
+          onPress={() => router.push('/(inquilino)/pagos' as any)}
+        >
+          <Ionicons name="receipt-outline" size={18} color={theme.primary} />
+          <Text style={[styles.reportBtnText, { color: theme.primary }]}>Ver historial de pagos</Text>
+          <Ionicons name="chevron-forward" size={16} color={theme.primary} />
+        </TouchableOpacity>
+      )}
+
+      <TouchableOpacity
+        style={[styles.reportBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: theme.border }]}
+        onPress={() => router.push('/(inquilino)/tickets' as any)}
+      >
+        <Ionicons name="chatbox-ellipses-outline" size={18} color={theme.textSecondary} />
+        <Text style={[styles.reportBtnText, { color: theme.textSecondary }]}>Reportar un problema</Text>
+        <Ionicons name="chevron-forward" size={16} color={theme.textSecondary} />
+      </TouchableOpacity>
+    </View>
+  );
+
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <LinearGradient colors={isDark ? ['#0D0F18', '#161929'] : ['#F1F5F9', '#E8EDF5']} style={StyleSheet.absoluteFill} />
 
       {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 16, maxWidth: isWide ? 600 : undefined, alignSelf: isWide ? 'center' : undefined, width: '100%' }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 16, maxWidth: isWide ? 960 : undefined, alignSelf: isWide ? 'center' : undefined, width: '100%' }]}>
         <View style={{ flex: 1 }}>
           <Text style={[styles.greeting, { color: theme.textSecondary }]}>Bienvenido,</Text>
           <Text style={[styles.userName, { color: theme.text }]} numberOfLines={1}>
             {storedUser?.nombre_completo || inquilino?.nombre_completo || 'Inquilino'}
           </Text>
         </View>
-        <TouchableOpacity onPress={handleLogout} style={[styles.logoutBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)' }]}>
-          <Ionicons name="log-out-outline" size={20} color={theme.textSecondary} />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <NotificationBell />
+          <TouchableOpacity onPress={handleLogout} style={[styles.logoutBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)' }]}>
+            <Ionicons name="log-out-outline" size={20} color={theme.textSecondary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 32, maxWidth: isWide ? 600 : undefined, alignSelf: isWide ? 'center' : undefined, width: '100%' }]}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingBottom: insets.bottom + 32,
+            maxWidth: isWide ? 960 : undefined,
+            alignSelf: isWide ? 'center' : undefined,
+            width: '100%',
+          },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         {!inquilino ? (
@@ -226,241 +484,34 @@ export default function InquilinoHome() {
           </View>
         ) : (
           <>
-            {/* Apartment card */}
-            <View style={[styles.aptoCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#fff' }]}>
-              <View style={[styles.aptoIconWrap, { backgroundColor: theme.primaryLight || theme.primary + '20' }]}>
-                <Ionicons name="home" size={22} color={theme.primary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.aptoLabel, { color: theme.textSecondary }]}>Tu departamento</Text>
-                <Text style={[styles.aptoNum, { color: theme.text }]}>Depto {inquilino.depto_numero}</Text>
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={[styles.aptoLabel, { color: theme.textSecondary }]}>Renta mensual</Text>
-                <Text style={[styles.aptoRenta, { color: theme.text }]}>{fmtRenta(inquilino.renta)}</Text>
-              </View>
-            </View>
-
-            {/* Payment status */}
-            <View style={[styles.statusCard, { backgroundColor: pago?.confirmado ? (isDark ? 'rgba(52,199,89,0.12)' : '#F0FFF4') : (isDark ? 'rgba(255,255,255,0.05)' : '#fff') }]}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                <Ionicons
-                  name={pago?.confirmado ? 'checkmark-circle' : 'ellipse-outline'}
-                  size={28}
-                  color={pago?.confirmado ? '#34C759' : theme.textSecondary}
-                />
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.statusMonth, { color: theme.textSecondary }]}>{getPeriodoLabel()}</Text>
-                  <Text style={[styles.statusLabel, { color: pago?.confirmado ? '#34C759' : theme.text }]}>
-                    {pago?.confirmado ? '¡Pago confirmado!' : pago ? 'Pago pendiente' : 'Sin registro de pago'}
-                  </Text>
-                  {pago?.confirmado && pago.confirmado_en ? (
-                    <Text style={[styles.statusDate, { color: theme.textSecondary }]}>
-                      {new Date(pago.confirmado_en).toLocaleString('es-MX')}
-                    </Text>
-                  ) : null}
+            {isWide ? (
+              /* Grid Layout para Escritorio (Web) */
+              <View style={styles.gridContainer}>
+                {/* Columna Izquierda: Renta y Métodos de Pago */}
+                <View style={styles.gridLeft}>
+                  {renderAptoCard()}
+                  {renderStatusCard()}
+                  {renderMetodosPago()}
                 </View>
-                <Text style={[styles.statusAmount, { color: theme.text }]}>{fmtRenta(inquilino.renta)}</Text>
+
+                {/* Columna Derecha: Cargos Extra, Tickets y Soporte */}
+                <View style={styles.gridRight}>
+                  {renderCuotasCard()}
+                  {renderInfoRow()}
+                  {renderReportBtn()}
+                </View>
               </View>
-            </View>
-
-            {!pago?.confirmado && (
+            ) : (
+              /* Layout de Columna Única Estándar (Móvil) */
               <>
-                {/* Sin método de pago configurado */}
-                {!esTransferencia && !esEfectivo && (
-                  <View style={[styles.noMethodBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', borderColor: theme.border }]}>
-                    <Ionicons name="information-circle-outline" size={20} color={theme.textSecondary} />
-                    <Text style={[styles.noMethodText, { color: theme.textSecondary }]}>
-                      El administrador aún no ha configurado tu método de pago. Contáctalo para más información.
-                    </Text>
-                  </View>
-                )}
-
-                {/* Transferencia bancaria */}
-                {esTransferencia && (() => {
-                  const bankInfo = detectBankInfo(config.banco_clabe || '');
-                  return (
-                    <View>
-                      <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Datos para transferencia</Text>
-                      {(config.banco_clabe || config.banco_nombre) ? (
-                        <>
-                          <LinearGradient
-                            colors={['#1a56c4', '#0a3d8a']}
-                            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                            style={styles.bankCard}
-                          >
-                            <View style={styles.chip}><View style={styles.chipInner} /></View>
-                            <View style={{ gap: 6 }}>
-                              <Text style={styles.bankName}>{config.banco_nombre || 'BANCO'}</Text>
-                              <Text style={styles.bankClabe}>{bankInfo.formato}</Text>
-                              <Text style={styles.bankTitular}>{config.banco_titular || ''}</Text>
-                            </View>
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-                              <Ionicons name="card" size={26} color="rgba(255,255,255,0.4)" />
-                              <Text style={styles.bankType}>{bankInfo.tipo}</Text>
-                            </View>
-                          </LinearGradient>
-                          {/* Comprobante — preview antes de enviar */}
-                          {comprobantePreview ? (
-                            <View style={[styles.comprobanteBox, { borderColor: '#6366F1' + '40', backgroundColor: isDark ? 'rgba(99,102,241,0.08)' : 'rgba(99,102,241,0.05)' }]}>
-                              <Text style={{ color: '#6366F1', fontWeight: '700', fontSize: 13, marginBottom: 10 }}>Vista previa del comprobante</Text>
-                              <Image source={{ uri: comprobantePreview }} style={styles.comprobanteImg} resizeMode="contain" />
-                              <View style={{ flexDirection: 'row', gap: 8, marginTop: 10, width: '100%' }}>
-                                <TouchableOpacity
-                                  style={[styles.actionBtn, { flex: 1, backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}
-                                  onPress={seleccionarComprobante}
-                                  disabled={subiendoComprobante}
-                                >
-                                  <Ionicons name="image-outline" size={16} color={theme.textSecondary} />
-                                  <Text style={[styles.actionBtnText, { color: theme.textSecondary }]}>Cambiar</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                  style={[styles.actionBtn, { flex: 1, backgroundColor: '#6366F1', opacity: subiendoComprobante ? 0.7 : 1 }]}
-                                  onPress={enviarComprobante}
-                                  disabled={subiendoComprobante}
-                                >
-                                  {subiendoComprobante
-                                    ? <ActivityIndicator color="#fff" size="small" />
-                                    : <Ionicons name="send-outline" size={16} color="#fff" />
-                                  }
-                                  <Text style={styles.actionBtnText}>
-                                    {subiendoComprobante ? 'Enviando…' : 'Enviar'}
-                                  </Text>
-                                </TouchableOpacity>
-                              </View>
-                            </View>
-                          ) : pago?.comprobante_url ? (
-                            <View style={[styles.comprobanteBox, { borderColor: '#10B981' + '40', backgroundColor: isDark ? 'rgba(16,185,129,0.08)' : 'rgba(16,185,129,0.05)' }]}>
-                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                                <Ionicons name="checkmark-circle" size={16} color="#10B981" />
-                                <Text style={{ color: '#10B981', fontWeight: '700', fontSize: 13 }}>Comprobante enviado</Text>
-                              </View>
-                              <Image source={{ uri: pago.comprobante_url }} style={styles.comprobanteImg} resizeMode="contain" />
-                              <TouchableOpacity
-                                style={[styles.actionBtn, { backgroundColor: '#10B981' + '20', marginTop: 8 }]}
-                                onPress={seleccionarComprobante}
-                              >
-                                <Ionicons name="refresh-outline" size={16} color="#10B981" />
-                                <Text style={[styles.actionBtnText, { color: '#10B981' }]}>Actualizar comprobante</Text>
-                              </TouchableOpacity>
-                            </View>
-                          ) : (
-                            <TouchableOpacity
-                              style={[styles.actionBtn, { backgroundColor: '#6366F1', marginTop: 12 }]}
-                              onPress={seleccionarComprobante}
-                            >
-                              <Ionicons name="cloud-upload-outline" size={18} color="#fff" />
-                              <Text style={styles.actionBtnText}>Subir comprobante de pago</Text>
-                            </TouchableOpacity>
-                          )}
-                        </>
-                      ) : (
-                        <View style={[styles.noMethodBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', borderColor: theme.border }]}>
-                          <Ionicons name="information-circle-outline" size={20} color={theme.textSecondary} />
-                          <Text style={[styles.noMethodText, { color: theme.textSecondary }]}>
-                            El administrador aún no ha configurado los datos bancarios. Contacta al administrador.
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                  );
-                })()}
-
-                {/* Efectivo — el inquilino muestra QR al admin para que lo escanee */}
-                {esEfectivo && (
-                  <View>
-                    <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>
-                      {inquilino.metodo_pago === 'ambos' ? 'O paga en efectivo' : 'Pago en efectivo'}
-                    </Text>
-                    <View style={[styles.qrCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#fff' }]}>
-                      <View style={[styles.qrSteps, { borderColor: theme.border + '60' }]}>
-                        <View style={styles.qrStep}>
-                          <View style={[styles.qrStepNum, { backgroundColor: theme.primary }]}><Text style={styles.qrStepNumText}>1</Text></View>
-                          <Text style={[styles.qrStepText, { color: theme.textSecondary }]}>Genera el código QR</Text>
-                        </View>
-                        <View style={styles.qrStep}>
-                          <View style={[styles.qrStepNum, { backgroundColor: theme.primary }]}><Text style={styles.qrStepNumText}>2</Text></View>
-                          <Text style={[styles.qrStepText, { color: theme.textSecondary }]}>Muéstraselo al administrador</Text>
-                        </View>
-                        <View style={styles.qrStep}>
-                          <View style={[styles.qrStepNum, { backgroundColor: theme.primary }]}><Text style={styles.qrStepNumText}>3</Text></View>
-                          <Text style={[styles.qrStepText, { color: theme.textSecondary }]}>El admin lo escanea y confirma</Text>
-                        </View>
-                      </View>
-                      {qrDataUrl ? (
-                        <View style={styles.qrWrapper}>
-                          <Image source={{ uri: qrDataUrl }} style={styles.qrImage} resizeMode="contain" />
-                        </View>
-                      ) : null}
-                      <TouchableOpacity
-                        style={[styles.actionBtn, { backgroundColor: theme.primary, opacity: generando ? 0.7 : 1 }]}
-                        onPress={generarQr}
-                        disabled={generando}
-                      >
-                        {generando
-                          ? <ActivityIndicator color="#fff" size="small" />
-                          : <Ionicons name="qr-code-outline" size={18} color="#fff" />
-                        }
-                        <Text style={styles.actionBtnText}>
-                          {generando ? 'Generando…' : qrDataUrl ? 'Regenerar QR' : 'Generar QR'}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                )}
+                {renderAptoCard()}
+                {renderStatusCard()}
+                {renderMetodosPago()}
+                {renderCuotasCard()}
+                {renderInfoRow()}
+                {renderReportBtn()}
               </>
             )}
-
-            {/* Cuotas extra */}
-            {cuotas.length > 0 && (
-              <View style={[styles.cuotasCard, { backgroundColor: isDark ? 'rgba(239,68,68,0.08)' : 'rgba(239,68,68,0.05)', borderColor: '#EF4444' + '30' }]}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                  <Ionicons name="warning-outline" size={16} color="#EF4444" />
-                  <Text style={[styles.cuotasTitle, { color: '#EF4444' }]}>Cargos adicionales este mes</Text>
-                </View>
-                {cuotas.map(c => (
-                  <View key={c.id} style={styles.cuotaRow}>
-                    <Text style={[styles.cuotaConcepto, { color: theme.text }]}>{c.concepto}</Text>
-                    <Text style={[styles.cuotaMonto, { color: '#EF4444' }]}>+${Number(c.monto).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Text>
-                  </View>
-                ))}
-                <View style={[styles.cuotaSeparator, { backgroundColor: '#EF4444' + '30' }]} />
-                <View style={styles.cuotaRow}>
-                  <Text style={[styles.cuotaTotalLabel, { color: theme.text }]}>Total a pagar</Text>
-                  <Text style={[styles.cuotaTotal, { color: theme.text }]}>{fmtRenta(parseFloat(inquilino.renta) + totalExtra)}</Text>
-                </View>
-              </View>
-            )}
-
-            {/* Payment date info */}
-            <View style={[styles.infoRow, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)', borderColor: theme.border }]}>
-              <Ionicons name="calendar-outline" size={16} color={theme.textSecondary} />
-              <Text style={[styles.infoText, { color: theme.textSecondary }]}>
-                Fecha de pago: {inquilino.fecha_pago}
-              </Text>
-            </View>
-
-            {/* Historial de pagos */}
-            {inquilino && (
-              <TouchableOpacity
-                style={[styles.reportBtn, { backgroundColor: isDark ? 'rgba(99,102,241,0.1)' : 'rgba(99,102,241,0.07)', borderColor: theme.primary + '30' }]}
-                onPress={() => router.push('/(inquilino)/pagos' as any)}
-              >
-                <Ionicons name="receipt-outline" size={18} color={theme.primary} />
-                <Text style={[styles.reportBtnText, { color: theme.primary }]}>Ver historial de pagos</Text>
-                <Ionicons name="chevron-forward" size={16} color={theme.primary} />
-              </TouchableOpacity>
-            )}
-
-            {/* Reportar problema */}
-            <TouchableOpacity
-              style={[styles.reportBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: theme.border }]}
-              onPress={() => router.push('/(inquilino)/tickets' as any)}
-            >
-              <Ionicons name="chatbox-ellipses-outline" size={18} color={theme.textSecondary} />
-              <Text style={[styles.reportBtnText, { color: theme.textSecondary }]}>Reportar un problema</Text>
-              <Ionicons name="chevron-forward" size={16} color={theme.textSecondary} />
-            </TouchableOpacity>
           </>
         )}
       </ScrollView>
@@ -579,4 +630,20 @@ const styles = StyleSheet.create({
 
   comprobanteBox: { borderRadius: 14, padding: 14, borderWidth: 1, marginTop: 12, alignItems: 'center' },
   comprobanteImg: { width: '100%', height: 180, borderRadius: 10 },
+
+  // Responsive desktop grid styles
+  gridContainer: {
+    flexDirection: 'row',
+    gap: 24,
+    width: '100%',
+    alignItems: 'flex-start',
+  },
+  gridLeft: {
+    flex: 3,
+    gap: 16,
+  },
+  gridRight: {
+    flex: 2,
+    gap: 16,
+  },
 });

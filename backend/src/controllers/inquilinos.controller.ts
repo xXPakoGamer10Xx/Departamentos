@@ -4,6 +4,7 @@ import { AppError } from '../middleware/error.middleware';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { toTitleCase } from '../utils/formatters';
 import { PdfService } from '../services/PdfService';
+import { v4 as uuidv4 } from 'uuid';
 
 // GET /api/inquilinos/mi-depto — para el inquilino autenticado
 export async function getMiDepto(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
@@ -37,10 +38,10 @@ export async function getInquilinos(req: AuthRequest, res: Response, next: NextF
           'ultima_fecha', a.created_at
         ) FROM auditoria a WHERE a.registro_id = i.id ORDER BY a.created_at DESC LIMIT 1) as auditoria
       FROM inquilinos i
-      WHERE 1=1
+      WHERE i.admin_id = $1
     `;
-    const params: any[] = [];
-    let paramIdx = 1;
+    const params: any[] = [req.user!.id];
+    let paramIdx = 2;
 
     if (search) {
       query += ` AND (
@@ -88,8 +89,8 @@ export async function getInquilinoById(req: AuthRequest, res: Response, next: Ne
           'fecha', a.created_at
         ) ORDER BY a.created_at DESC) 
         FROM auditoria a WHERE a.registro_id = i.id) as historial
-       FROM inquilinos i WHERE i.id = $1`,
-      [req.params.id]
+       FROM inquilinos i WHERE i.admin_id = $1 AND i.id = $2`,
+      [req.user!.id, req.params.id]
     );
 
     if (!result.rows[0]) throw new AppError('Inquilino no encontrado', 404);
@@ -139,21 +140,26 @@ export async function createInquilino(req: AuthRequest, res: Response, next: Nex
       throw new AppError('Nombre, departamento, renta y fechas son requeridos', 400);
     }
 
-    // Verificar que el depto exista
+    // Verificar que el depto exista y pertenezca al admin
     const deptoCheck = await pool.query(
-      `SELECT numero FROM departamentos WHERE numero = $1`, [final_depto]
+      `SELECT numero FROM departamentos WHERE admin_id = $1 AND numero = $2`, [req.user!.id, final_depto]
     );
-    if (!deptoCheck.rows[0]) throw new AppError(`Departamento ${final_depto} no existe`, 400);
+    if (!deptoCheck.rows[0]) throw new AppError(`Departamento ${final_depto} no existe o no te pertenece`, 400);
+
+    const invitation_token = uuidv4();
 
     const result = await pool.query(
       `INSERT INTO inquilinos (
+        admin_id, invitation_token,
         nombre_completo, depto_numero, renta, renta_letra, deposito, fecha_pago,
         fecha_inicio, fecha_termino, fiador_nombre, tel_arrendatario,
         fiador_telefono, observaciones, inventario, deposito_tipo, deposito_fechas,
         metodo_pago
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
       RETURNING *`,
       [
+        req.user!.id,
+        invitation_token,
         toTitleCase(final_nombre),
         final_depto,
         renta,
@@ -175,7 +181,7 @@ export async function createInquilino(req: AuthRequest, res: Response, next: Nex
 
     // Marcar departamento como ocupado
     await pool.query(
-      `UPDATE departamentos SET estado = 'ocupado' WHERE numero = $1`, [final_depto]
+      `UPDATE departamentos SET estado = 'ocupado' WHERE admin_id = $1 AND numero = $2`, [req.user!.id, final_depto]
     );
 
     // Auditoría
@@ -195,7 +201,7 @@ export async function updateInquilino(req: AuthRequest, res: Response, next: Nex
     const { id } = req.params;
 
     // Obtener registro anterior para auditoría
-    const anterior = await pool.query(`SELECT * FROM inquilinos WHERE id = $1`, [id]);
+    const anterior = await pool.query(`SELECT * FROM inquilinos WHERE admin_id = $1 AND id = $2`, [req.user!.id, id]);
     if (!anterior.rows[0]) throw new AppError('Inquilino no encontrado', 404);
 
     const current = anterior.rows[0];
@@ -220,7 +226,7 @@ export async function updateInquilino(req: AuthRequest, res: Response, next: Nex
         deposito_tipo     = $15,
         deposito_fechas   = $16,
         metodo_pago       = $17
-       WHERE id = $18 RETURNING *`,
+       WHERE admin_id = $18 AND id = $19 RETURNING *`,
       [
         toTitleCase(body.nombre_completo || body.nombre || current.nombre_completo),
         body.depto_numero || body.depto || current.depto_numero,
@@ -239,6 +245,7 @@ export async function updateInquilino(req: AuthRequest, res: Response, next: Nex
         body.deposito_tipo || body.depositoTipo || current.deposito_tipo || 'ninguno',
         JSON.stringify(body.deposito_fechas || body.depositoFechas || current.deposito_fechas || []),
         body.metodo_pago || body.metodoPago || current.metodo_pago || 'efectivo',
+        req.user!.id,
         id,
       ]
     );
@@ -260,12 +267,12 @@ export async function vincularUsuario(req: AuthRequest, res: Response, next: Nex
     const { id } = req.params;
     const { usuario_id } = req.body;
 
-    const check = await pool.query(`SELECT id FROM inquilinos WHERE id = $1`, [id]);
+    const check = await pool.query(`SELECT id FROM inquilinos WHERE admin_id = $1 AND id = $2`, [req.user!.id, id]);
     if (!check.rows[0]) throw new AppError('Inquilino no encontrado', 404);
 
     const result = await pool.query(
-      `UPDATE inquilinos SET usuario_id = $1 WHERE id = $2 RETURNING id, nombre_completo, usuario_id`,
-      [usuario_id || null, id]
+      `UPDATE inquilinos SET usuario_id = $1 WHERE admin_id = $2 AND id = $3 RETURNING id, nombre_completo, usuario_id`,
+      [usuario_id || null, req.user!.id, id]
     );
 
     res.json({ success: true, data: result.rows[0] });
@@ -278,15 +285,15 @@ export async function vincularUsuario(req: AuthRequest, res: Response, next: Nex
 export async function deleteInquilino(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     const { id } = req.params;
-    const anterior = await pool.query(`SELECT * FROM inquilinos WHERE id = $1`, [id]);
+    const anterior = await pool.query(`SELECT * FROM inquilinos WHERE admin_id = $1 AND id = $2`, [req.user!.id, id]);
     if (!anterior.rows[0]) throw new AppError('Inquilino no encontrado', 404);
 
-    await pool.query(`DELETE FROM inquilinos WHERE id = $1`, [id]);
+    await pool.query(`DELETE FROM inquilinos WHERE admin_id = $1 AND id = $2`, [req.user!.id, id]);
 
     // Liberar el departamento
     await pool.query(
-      `UPDATE departamentos SET estado = 'disponible' WHERE numero = $1`,
-      [anterior.rows[0].depto_numero]
+      `UPDATE departamentos SET estado = 'disponible' WHERE admin_id = $1 AND numero = $2`,
+      [req.user!.id, anterior.rows[0].depto_numero]
     );
 
     if ((req as any).audit) {
@@ -303,13 +310,13 @@ export async function deleteInquilino(req: AuthRequest, res: Response, next: Nex
 export async function getContratoPdf(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     const { id } = req.params;
-    const result = await pool.query(`SELECT * FROM inquilinos WHERE id = $1`, [id]);
+    const result = await pool.query(`SELECT * FROM inquilinos WHERE admin_id = $1 AND id = $2`, [req.user!.id, id]);
     if (!result.rows[0]) throw new AppError('Inquilino no encontrado', 404);
     const inquilino = result.rows[0];
 
     const [configRes, deptoRes] = await Promise.all([
-      pool.query(`SELECT clave, valor FROM configuracion WHERE clave IN ('arrendador_nombre', 'arrendador_direccion')`),
-      pool.query(`SELECT inventario_base FROM departamentos WHERE numero = $1`, [inquilino.depto_numero]),
+      pool.query(`SELECT clave, valor FROM configuracion WHERE admin_id = $1 AND clave IN ('arrendador_nombre', 'arrendador_direccion')`, [req.user!.id]),
+      pool.query(`SELECT inventario_base FROM departamentos WHERE admin_id = $1 AND numero = $2`, [req.user!.id, inquilino.depto_numero]),
     ]);
 
     const config: Record<string, string> = {};
@@ -332,4 +339,3 @@ export async function getContratoPdf(req: AuthRequest, res: Response, next: Next
     next(err);
   }
 }
-

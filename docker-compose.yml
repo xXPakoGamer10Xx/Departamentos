@@ -22,8 +22,8 @@ services:
   # ─── Backend API ────────────────────────────────────────────────────────────
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
       target: production
     container_name: depas_backend
     restart: unless-stopped
@@ -56,9 +56,9 @@ services:
   # ─── Migraciones (se ejecuta una vez y termina) ──────────────────────────
   migrate:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
-      target: builder
+      context: .
+      dockerfile: backend/Dockerfile
+      target: backend-builder
     container_name: depas_migrate
     depends_on:
       db:
@@ -76,9 +76,9 @@ services:
   # ─── Seed (se ejecuta una vez y termina) ─────────────────────────────────
   seed:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
-      target: builder
+      context: .
+      dockerfile: backend/Dockerfile
+      target: backend-builder
     container_name: depas_seed
     depends_on:
       db:

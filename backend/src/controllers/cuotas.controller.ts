@@ -14,9 +14,9 @@ export async function getCuotas(req: AuthRequest, res: Response, next: NextFunct
   try {
     const { inquilino_id, estado } = req.query;
 
-    let where = 'WHERE 1=1';
-    const params: any[] = [];
-    let idx = 1;
+    let where = 'WHERE i.admin_id = $1';
+    const params: any[] = [req.user!.id];
+    let idx = 2;
 
     if (inquilino_id) {
       where += ` AND c.inquilino_id = $${idx++}`;
@@ -30,6 +30,7 @@ export async function getCuotas(req: AuthRequest, res: Response, next: NextFunct
     const result = await pool.query(
       `SELECT c.*, u.nombre_completo as creado_por_nombre
        FROM cuotas_extra c
+       JOIN inquilinos i ON i.id = c.inquilino_id
        LEFT JOIN usuarios u ON u.id = c.creado_por
        ${where}
        ORDER BY c.created_at DESC`,
@@ -55,10 +56,10 @@ export async function createCuota(req: AuthRequest, res: Response, next: NextFun
     }
 
     const inqCheck = await pool.query(
-      `SELECT id, usuario_id, depto_numero FROM inquilinos WHERE id = $1`,
-      [inquilino_id]
+      `SELECT id, usuario_id, depto_numero FROM inquilinos WHERE id = $1 AND admin_id = $2`,
+      [inquilino_id, req.user!.id]
     );
-    if (!inqCheck.rows[0]) throw new AppError('Inquilino no encontrado', 404);
+    if (!inqCheck.rows[0]) throw new AppError('Inquilino no encontrado o no autorizado', 403);
     const inquilino = inqCheck.rows[0];
 
     const periodo = getCurrentPeriodo();
@@ -90,8 +91,10 @@ export async function deleteCuota(req: AuthRequest, res: Response, next: NextFun
   try {
     const { id } = req.params;
     const result = await pool.query(
-      `DELETE FROM cuotas_extra WHERE id = $1 AND estado = 'pendiente' RETURNING id`,
-      [id]
+      `DELETE FROM cuotas_extra c
+       USING inquilinos i
+       WHERE c.id = $1 AND c.inquilino_id = i.id AND i.admin_id = $2 AND c.estado = 'pendiente' RETURNING c.id`,
+      [id, req.user!.id]
     );
     if (!result.rows[0]) throw new AppError('Cuota no encontrada o ya fue pagada', 404);
     res.json({ success: true });

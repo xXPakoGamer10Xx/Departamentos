@@ -167,48 +167,7 @@ async function seed() {
   try {
     await client.query('BEGIN');
 
-    // 1. Insertar departamentos
-    console.log('  📦 Insertando departamentos...');
-    for (const depto of departamentosData) {
-      await client.query(
-        `INSERT INTO departamentos (numero, estado, ubicacion, inventario_base)
-         VALUES ($1, $2, $3, $4)
-         ON CONFLICT (numero) DO NOTHING`,
-        [depto.numero, depto.estado, depto.ubicacion, JSON.stringify(depto.inventario_base)]
-      );
-    }
-
-    // 2. Insertar inquilinos
-    console.log('  👤 Insertando inquilinos desde el Excel...');
-    for (const inq of inquilinosData) {
-      await client.query(
-        `INSERT INTO inquilinos (
-          nombre_completo, depto_numero, renta, renta_letra, fecha_pago,
-          fecha_inicio, fecha_termino, fiador_nombre, tel_arrendatario,
-          fiador_telefono, observaciones, estado, inventario
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'[]')
-        ON CONFLICT DO NOTHING`,
-        [
-          inq.nombre_completo, inq.depto_numero, inq.renta, inq.renta_letra,
-          inq.fecha_pago, inq.fecha_inicio, inq.fecha_termino,
-          inq.fiador_nombre, inq.tel_arrendatario, inq.fiador_telefono,
-          inq.observaciones, inq.estado,
-        ]
-      );
-    }
-
-    // 3. Insertar configuración base
-    console.log('  ⚙️  Insertando configuración inicial...');
-    for (const cfg of configInicial) {
-      await client.query(
-        `INSERT INTO configuracion (clave, valor)
-         VALUES ($1, $2)
-         ON CONFLICT (clave) DO NOTHING`,
-        [cfg.clave, cfg.valor]
-      );
-    }
-
-    // 4. Crear usuario administrador por defecto
+    // 1. Crear usuario administrador por defecto
     console.log('  🔑 Creando administrador por defecto...');
     const adminPassword = await bcrypt.hash('Admin2024!', 12);
     await client.query(
@@ -217,6 +176,50 @@ async function seed() {
        ON CONFLICT (email) DO NOTHING`,
       [adminPassword]
     );
+
+    const adminRes = await client.query(`SELECT id FROM usuarios WHERE email = 'admin@departamentos.local'`);
+    const adminId = adminRes.rows[0].id;
+
+    // 2. Insertar departamentos
+    console.log('  📦 Insertando departamentos...');
+    for (const depto of departamentosData) {
+      await client.query(
+        `INSERT INTO departamentos (admin_id, numero, estado, ubicacion, inventario_base)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (admin_id, numero) DO NOTHING`,
+        [adminId, depto.numero, depto.estado, depto.ubicacion, JSON.stringify(depto.inventario_base)]
+      );
+    }
+
+    // 3. Insertar inquilinos
+    console.log('  👤 Insertando inquilinos desde el Excel...');
+    for (const inq of inquilinosData) {
+      await client.query(
+        `INSERT INTO inquilinos (
+          admin_id, nombre_completo, depto_numero, renta, renta_letra, fecha_pago,
+          fecha_inicio, fecha_termino, fiador_nombre, tel_arrendatario,
+          fiador_telefono, observaciones, estado, inventario
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'[]')
+        ON CONFLICT DO NOTHING`,
+        [
+          adminId, inq.nombre_completo, inq.depto_numero, inq.renta, inq.renta_letra,
+          inq.fecha_pago, inq.fecha_inicio, inq.fecha_termino,
+          inq.fiador_nombre, inq.tel_arrendatario, inq.fiador_telefono,
+          inq.observaciones, inq.estado,
+        ]
+      );
+    }
+
+    // 4. Insertar configuración base
+    console.log('  ⚙️  Insertando configuración inicial...');
+    for (const cfg of configInicial) {
+      await client.query(
+        `INSERT INTO configuracion (admin_id, clave, valor)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (admin_id, clave) DO NOTHING`,
+        [adminId, cfg.clave, cfg.valor]
+      );
+    }
 
     await client.query('COMMIT');
     console.log('✅ Seed completado exitosamente');

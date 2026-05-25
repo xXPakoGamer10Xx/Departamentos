@@ -17,20 +17,12 @@ export async function generarQr(req: AuthRequest, res: Response, next: NextFunct
     const { inquilino_id } = req.params;
     const periodo = getCurrentPeriodo();
 
-    // Si es inquilino, solo puede generar QR de su propio registro
-    if (req.user!.rol === 'inquilino') {
-      const own = await pool.query(
-        `SELECT id FROM inquilinos WHERE id = $1 AND usuario_id = $2 AND estado = 'activo'`,
-        [inquilino_id, req.user!.id]
-      );
-      if (!own.rows[0]) throw new AppError('No autorizado', 403);
-    }
-
+    let authCheck = req.user!.rol === 'inquilino' ? 'AND usuario_id = $2' : 'AND admin_id = $2';
     const inqRes = await pool.query(
-      `SELECT id, nombre_completo, depto_numero, renta, metodo_pago FROM inquilinos WHERE id = $1`,
-      [inquilino_id]
+      `SELECT id, nombre_completo, depto_numero, renta, metodo_pago FROM inquilinos WHERE id = $1 ${authCheck} AND estado = 'activo'`,
+      [inquilino_id, req.user!.id]
     );
-    if (!inqRes.rows[0]) throw new AppError('Inquilino no encontrado', 404);
+    if (!inqRes.rows[0]) throw new AppError('Inquilino no encontrado o no autorizado', 403);
     const inquilino = inqRes.rows[0];
 
     // Sumar cuotas extra pendientes al monto
@@ -115,7 +107,7 @@ export async function confirmarPago(req: AuthRequest, res: Response, next: NextF
     const { token } = req.params;
 
     const pagoRes = await pool.query(
-      `SELECT p.*, i.nombre_completo, i.depto_numero
+      `SELECT p.*, i.nombre_completo, i.depto_numero, i.admin_id
        FROM pagos p JOIN inquilinos i ON i.id = p.inquilino_id
        WHERE p.qr_token = $1`,
       [token]
@@ -149,9 +141,8 @@ export async function confirmarPago(req: AuthRequest, res: Response, next: NextF
       },
     });
 
-    // Notificar en tiempo real (SSE + push)
+    // Notificar en tiempo real (SSE + push) a Inquilino
     const pagoData = { ...updated.rows[0], nombre_completo: pago.nombre_completo, depto_numero: pago.depto_numero };
-    emitToAdmins('payment_confirmed', { pago: pagoData });
     pool.query(`SELECT usuario_id FROM inquilinos WHERE id = $1`, [pago.inquilino_id])
       .then(async inqRes => {
         const usuarioId = inqRes.rows[0]?.usuario_id;
@@ -160,8 +151,6 @@ export async function confirmarPago(req: AuthRequest, res: Response, next: NextF
           emitToUser(usuarioId, 'payment_confirmed', { pago: pagoData });
           tasks.push(createAndSendNotification(usuarioId, '✅ ¡Pago confirmado!', `Tu pago de ${pago.periodo} fue confirmado`, 'pago'));
         }
-        const adminTokens = await getAdminPushTokens();
-        tasks.push(sendPush(adminTokens, '💰 Pago confirmado', `Depto ${pago.depto_numero} — ${pago.nombre_completo}`));
         return Promise.all(tasks);
       }).catch(() => {});
   } catch (err) {
@@ -177,13 +166,9 @@ export async function subirComprobante(req: AuthRequest, res: Response, next: Ne
 
     if (!comprobante_url) throw new AppError('comprobante_url es requerido', 400);
 
-    if (req.user!.rol === 'inquilino') {
-      const own = await pool.query(
-        `SELECT id FROM inquilinos WHERE id = $1 AND usuario_id = $2 AND estado = 'activo'`,
-        [inquilino_id, req.user!.id]
-      );
-      if (!own.rows[0]) throw new AppError('No autorizado', 403);
-    }
+    let authCheck = req.user!.rol === 'inquilino' ? 'AND usuario_id = $2' : 'AND admin_id = $2';
+    const own = await pool.query(`SELECT id FROM inquilinos WHERE id = $1 ${authCheck}`, [inquilino_id, req.user!.id]);
+    if (!own.rows[0]) throw new AppError('No autorizado', 403);
 
     const periodo = getCurrentPeriodo();
     let pagoRes = await pool.query(
@@ -196,7 +181,6 @@ export async function subirComprobante(req: AuthRequest, res: Response, next: Ne
         `SELECT renta, metodo_pago FROM inquilinos WHERE id = $1`,
         [inquilino_id]
       );
-      if (!inqRes.rows[0]) throw new AppError('Inquilino no encontrado', 404);
       const cuotasRes = await pool.query(
         `SELECT COALESCE(SUM(monto), 0) as total_extra FROM cuotas_extra WHERE inquilino_id = $1 AND estado = 'pendiente'`,
         [inquilino_id]
@@ -218,15 +202,16 @@ export async function subirComprobante(req: AuthRequest, res: Response, next: Ne
 
     res.json({ success: true, data: updated.rows[0] });
 
+    // Notificar al admin de este inquilino
     const inqName = await pool.query(
-      `SELECT nombre_completo, depto_numero FROM inquilinos WHERE id = $1`,
+      `SELECT nombre_completo, depto_numero, admin_id FROM inquilinos WHERE id = $1`,
       [inquilino_id]
     );
     const inq = inqName.rows[0];
-    emitToAdmins('comprobante_subido', { pago: updated.rows[0], inquilino: inq });
-    getAdminPushTokens().then(tokens =>
-      sendPush(tokens, '📎 Comprobante recibido', `Depto ${inq?.depto_numero} — ${inq?.nombre_completo}`)
-    ).catch(() => {});
+    if (inq.admin_id) {
+       emitToUser(inq.admin_id, 'comprobante_subido', { pago: updated.rows[0], inquilino: inq });
+       createAndSendNotification(inq.admin_id, '📎 Comprobante recibido', `Depto ${inq.depto_numero} — ${inq.nombre_completo}`, 'pago');
+    }
   } catch (err) {
     next(err);
   }
@@ -238,12 +223,12 @@ export async function confirmarPagoAdmin(req: AuthRequest, res: Response, next: 
     const { pago_id } = req.params;
 
     const pagoRes = await pool.query(
-      `SELECT p.*, i.nombre_completo, i.depto_numero, i.usuario_id as inquilino_usuario_id
+      `SELECT p.*, i.nombre_completo, i.depto_numero, i.usuario_id as inquilino_usuario_id, i.admin_id
        FROM pagos p JOIN inquilinos i ON i.id = p.inquilino_id
-       WHERE p.id = $1`,
-      [pago_id]
+       WHERE p.id = $1 AND i.admin_id = $2`,
+      [pago_id, req.user!.id]
     );
-    if (!pagoRes.rows[0]) throw new AppError('Pago no encontrado', 404);
+    if (!pagoRes.rows[0]) throw new AppError('Pago no encontrado o no autorizado', 404);
     const pago = pagoRes.rows[0];
 
     if (pago.confirmado) {
@@ -269,14 +254,10 @@ export async function confirmarPagoAdmin(req: AuthRequest, res: Response, next: 
     };
     res.json({ success: true, data: pagoData });
 
-    emitToAdmins('payment_confirmed', { pago: pagoData });
     if (pago.inquilino_usuario_id) {
       emitToUser(pago.inquilino_usuario_id, 'payment_confirmed', { pago: pagoData });
       createAndSendNotification(pago.inquilino_usuario_id, '✅ ¡Pago confirmado!', `Tu pago de ${pago.periodo} fue confirmado`, 'pago').catch(() => {});
     }
-    getAdminPushTokens().then(tokens =>
-      sendPush(tokens, '💰 Pago confirmado', `Depto ${pago.depto_numero} — ${pago.nombre_completo}`)
-    ).catch(() => {});
   } catch (err) {
     next(err);
   }
@@ -287,13 +268,9 @@ export async function getHistorialPagos(req: AuthRequest, res: Response, next: N
   try {
     const { inquilino_id } = req.params;
 
-    if (req.user!.rol === 'inquilino') {
-      const own = await pool.query(
-        `SELECT id FROM inquilinos WHERE id = $1 AND usuario_id = $2 AND estado = 'activo'`,
-        [inquilino_id, req.user!.id]
-      );
-      if (!own.rows[0]) throw new AppError('No autorizado', 403);
-    }
+    let authCheck = req.user!.rol === 'inquilino' ? 'AND usuario_id = $2' : 'AND admin_id = $2';
+    const own = await pool.query(`SELECT id FROM inquilinos WHERE id = $1 ${authCheck}`, [inquilino_id, req.user!.id]);
+    if (!own.rows[0]) throw new AppError('No autorizado', 403);
 
     const result = await pool.query(
       `SELECT p.*, i.fecha_pago, i.nombre_completo, i.depto_numero
@@ -326,6 +303,10 @@ export async function getEstadoPago(req: AuthRequest, res: Response, next: NextF
   try {
     const { inquilino_id } = req.params;
     const periodo = getCurrentPeriodo();
+
+    let authCheck = req.user!.rol === 'inquilino' ? 'AND usuario_id = $2' : 'AND admin_id = $2';
+    const own = await pool.query(`SELECT id FROM inquilinos WHERE id = $1 ${authCheck}`, [inquilino_id, req.user!.id]);
+    if (!own.rows[0]) throw new AppError('No autorizado', 403);
 
     const [pagoResult, cuotasResult] = await Promise.all([
       pool.query(`SELECT * FROM pagos WHERE inquilino_id = $1 AND periodo = $2`, [inquilino_id, periodo]),

@@ -22,7 +22,7 @@ export async function getTickets(req: AuthRequest, res: Response, next: NextFunc
       if (mes) {
         // Historial: todos los tickets del mes indicado (YYYY-MM)
         const [anio, mesNum] = mes.split('-');
-        query = `
+        let sql = `
           SELECT t.*,
             i.nombre_completo as inquilino_nombre,
             i.depto_numero,
@@ -30,14 +30,19 @@ export async function getTickets(req: AuthRequest, res: Response, next: NextFunc
           FROM tickets t
           JOIN inquilinos i ON i.id = t.inquilino_id
           LEFT JOIN usuarios u ON u.id = t.atendido_por
-          WHERE DATE_PART('year', t.created_at) = $1
-            AND DATE_PART('month', t.created_at) = $2
-            ${estado ? "AND t.estado = $3" : ''}
-          ORDER BY t.created_at DESC
+          WHERE i.admin_id = $1
+            AND DATE_PART('year', t.created_at) = $2
+            AND DATE_PART('month', t.created_at) = $3
         `;
-        params = estado ? [anio, mesNum, estado] : [anio, mesNum];
+        params = [req.user!.id, anio, mesNum];
+        if (estado) {
+          sql += ` AND t.estado = $4`;
+          params.push(estado);
+        }
+        sql += ` ORDER BY t.created_at DESC`;
+        query = sql;
       } else {
-        query = `
+        let sql = `
           SELECT t.*,
             i.nombre_completo as inquilino_nombre,
             i.depto_numero,
@@ -45,12 +50,19 @@ export async function getTickets(req: AuthRequest, res: Response, next: NextFunc
           FROM tickets t
           JOIN inquilinos i ON i.id = t.inquilino_id
           LEFT JOIN usuarios u ON u.id = t.atendido_por
-          ${estado ? 'WHERE t.estado = $1' : ''}
+          WHERE i.admin_id = $1
+        `;
+        params = [req.user!.id];
+        if (estado) {
+          sql += ` AND t.estado = $2`;
+          params.push(estado);
+        }
+        sql += `
           ORDER BY
             CASE t.estado WHEN 'abierto' THEN 0 WHEN 'en_revision' THEN 1 ELSE 2 END,
             t.created_at DESC
         `;
-        params = estado ? [estado] : [];
+        query = sql;
       }
     } else {
       // Inquilino: buscar su depto vinculado
@@ -95,6 +107,12 @@ export async function createTicket(req: AuthRequest, res: Response, next: NextFu
       );
       if (!inqRes.rows[0]) throw new AppError('Tu cuenta no está vinculada a ningún departamento', 403);
       inqId = inqRes.rows[0].id;
+    } else {
+      const inqRes = await pool.query(
+        `SELECT id FROM inquilinos WHERE id = $1 AND admin_id = $2`,
+        [inqId, req.user!.id]
+      );
+      if (!inqRes.rows[0]) throw new AppError('Inquilino no encontrado o no autorizado', 403);
     }
 
     if (!inqId) throw new AppError('inquilino_id es requerido', 400);
@@ -110,14 +128,15 @@ export async function createTicket(req: AuthRequest, res: Response, next: NextFu
 
     // Notificar al admin en tiempo real (SSE + push)
     pool.query(
-      `SELECT t.*, i.nombre_completo as inquilino_nombre, i.depto_numero
+      `SELECT t.*, i.nombre_completo as inquilino_nombre, i.depto_numero, i.admin_id
        FROM tickets t JOIN inquilinos i ON i.id = t.inquilino_id WHERE t.id = $1`,
       [ticket.id]
     ).then(async enriched => {
       const full = enriched.rows[0];
-      emitToAdmins('ticket_new', { ticket: full });
-      const tokens = await getAdminPushTokens();
-      return sendPush(tokens, '🔔 Nuevo ticket', `${full.titulo} — Depto ${full.depto_numero}`);
+      if (full.admin_id) {
+         emitToUser(full.admin_id, 'ticket_new', { ticket: full });
+         createAndSendNotification(full.admin_id, '🔔 Nuevo ticket', `${full.titulo} — Depto ${full.depto_numero}`, 'ticket');
+      }
     }).catch(() => {});
   } catch (err) {
     next(err);
@@ -130,8 +149,11 @@ export async function updateTicket(req: AuthRequest, res: Response, next: NextFu
     const { id } = req.params;
     const { estado, nota_admin } = req.body;
 
-    const check = await pool.query(`SELECT id FROM tickets WHERE id = $1`, [id]);
-    if (!check.rows[0]) throw new AppError('Ticket no encontrado', 404);
+    const check = await pool.query(
+      `SELECT t.id FROM tickets t JOIN inquilinos i ON i.id = t.inquilino_id WHERE t.id = $1 AND i.admin_id = $2`, 
+      [id, req.user!.id]
+    );
+    if (!check.rows[0]) throw new AppError('Ticket no encontrado o no autorizado', 404);
 
     const result = await pool.query(
       `UPDATE tickets SET
@@ -147,7 +169,7 @@ export async function updateTicket(req: AuthRequest, res: Response, next: NextFu
     res.json({ success: true, data: updated });
 
     // Notificar al inquilino en tiempo real (SSE + push) y actualizar lista del admin
-    emitToAdmins('ticket_updated', { ticket: updated });
+    emitToUser(req.user!.id, 'ticket_updated', { ticket: updated });
     pool.query(
       `SELECT i.usuario_id FROM inquilinos i
        JOIN tickets t ON t.inquilino_id = i.id WHERE t.id = $1`, [id]
@@ -155,7 +177,6 @@ export async function updateTicket(req: AuthRequest, res: Response, next: NextFu
       const usuarioId = inqRes.rows[0]?.usuario_id;
       if (usuarioId) {
         emitToUser(usuarioId, 'ticket_updated', { ticket: updated });
-        const tokens = await getUserPushTokens(usuarioId);
         const label = estado === 'en_revision' ? 'en revisión' : estado === 'resuelto' ? 'resuelto' : 'actualizado';
         return createAndSendNotification(usuarioId, '📋 Ticket actualizado', `Tu reporte fue marcado como ${label}`, 'ticket');
       }
@@ -171,8 +192,11 @@ export async function deleteTicket(req: AuthRequest, res: Response, next: NextFu
     const { id } = req.params;
 
     if (req.user!.rol === 'admin') {
-      const result = await pool.query(`DELETE FROM tickets WHERE id = $1 RETURNING id`, [id]);
-      if (!result.rows[0]) throw new AppError('Ticket no encontrado', 404);
+      const result = await pool.query(
+        `DELETE FROM tickets t USING inquilinos i WHERE t.id = $1 AND t.inquilino_id = i.id AND i.admin_id = $2 RETURNING t.id`, 
+        [id, req.user!.id]
+      );
+      if (!result.rows[0]) throw new AppError('Ticket no encontrado o no autorizado', 404);
       res.json({ success: true });
       return;
     }

@@ -23,6 +23,8 @@ export default function RegisterScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
+  const [rol, setRol] = useState<'inquilino' | 'admin'>('inquilino');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -34,30 +36,42 @@ export default function RegisterScreen() {
   const handleRegister = async () => {
     const emailTrim = email.trim();
     const nombreTrim = nombre.trim();
+    const inviteTrim = inviteCode.trim();
+
     if (!nombreTrim) { setError('Ingresa tu nombre completo'); return; }
     if (!emailTrim || !emailTrim.includes('@')) { setError('Ingresa un correo electrónico válido'); return; }
     if (password.length < 8) { setError('La contraseña debe tener al menos 8 caracteres'); return; }
     if (password !== confirmPassword) { setError('Las contraseñas no coinciden'); return; }
+    if (rol === 'inquilino' && !inviteTrim) { setError('Se requiere código de invitación para inquilinos'); return; }
 
     setError('');
     setLoading(true);
     try {
-      const res = await api.register({
+      const payload: any = {
         email: emailTrim,
         password,
         nombre_completo: nombreTrim,
-        rol: 'inquilino',
-      });
+        rol,
+      };
+      if (rol === 'inquilino') {
+        payload.invite_code = inviteTrim;
+      }
+
+      const res = await api.register(payload);
       if (res.data?.token) {
         api.setToken(res.data.token);
         if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
           localStorage.setItem(TOKEN_KEY, res.data.token);
           localStorage.setItem(USER_KEY, JSON.stringify(res.data.user));
         }
-        router.replace('/(inquilino)' as any);
+        if (rol === 'admin') {
+          router.replace('/(admin)' as any);
+        } else {
+          router.replace('/(inquilino)' as any);
+        }
       }
     } catch (e: any) {
-      setError(e.message || 'No se pudo crear la cuenta. Intenta de nuevo.');
+      setError(e.response?.data?.message || e.message || 'No se pudo crear la cuenta. Intenta de nuevo.');
     } finally {
       setLoading(false);
     }
@@ -98,6 +112,21 @@ export default function RegisterScreen() {
             </LinearGradient>
 
             <View style={styles.form}>
+              <View style={styles.tabsRow}>
+                <TouchableOpacity
+                  style={[styles.tab, rol === 'inquilino' && styles.tabActive]}
+                  onPress={() => setRol('inquilino')}
+                >
+                  <Text style={[styles.tabText, rol === 'inquilino' && styles.tabTextActive, { color: rol === 'inquilino' ? theme.primary : theme.textSecondary }]}>Inquilino</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.tab, rol === 'admin' && styles.tabActive]}
+                  onPress={() => setRol('admin')}
+                >
+                  <Text style={[styles.tabText, rol === 'admin' && styles.tabTextActive, { color: rol === 'admin' ? theme.primary : theme.textSecondary }]}>Administrador</Text>
+                </TouchableOpacity>
+              </View>
+
               <Input
                 label="Nombre completo"
                 icon="person-outline"
@@ -117,6 +146,19 @@ export default function RegisterScreen() {
                 autoCapitalize="none"
                 returnKeyType="next"
               />
+              
+              {rol === 'inquilino' && (
+                <Input
+                  label="Código de Invitación"
+                  icon="key-outline"
+                  placeholder="Ej. d5f4-3d2b..."
+                  value={inviteCode}
+                  onChangeText={t => { setError(''); setInviteCode(t); }}
+                  autoCapitalize="none"
+                  returnKeyType="next"
+                />
+              )}
+
               <Input
                 label="Contraseña"
                 icon="lock-closed-outline"
@@ -164,7 +206,7 @@ export default function RegisterScreen() {
           </GlassCard>
 
           <Text style={[styles.footer, { color: theme.textMuted }]}>
-            Sistema privado — solo usuarios autorizados
+            NethRent
           </Text>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -192,6 +234,34 @@ const styles = StyleSheet.create({
   cardTopTitle: { fontSize: 22, fontWeight: '800', color: '#fff', letterSpacing: -0.5 },
   cardTopSub: { fontSize: 13, color: 'rgba(255,255,255,0.75)', fontWeight: '500' },
   form: { padding: 24, gap: 4 },
+  tabsRow: {
+    flexDirection: 'row',
+    marginBottom: 16,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    borderRadius: 12,
+    padding: 4,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  tabActive: {
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  tabTextActive: {
+    fontWeight: '700',
+  },
   errorBox: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     padding: 12, borderRadius: 12, borderWidth: 1, marginBottom: 4,

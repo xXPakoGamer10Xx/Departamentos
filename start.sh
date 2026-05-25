@@ -58,9 +58,8 @@ JWT_EXPIRES_IN=7d
 BACKUP_DIR=/app/backups
 BACKUP_CRON="0 4 * * *"
 
-# Arrendador (configurable desde la app)
-ARRENDADOR_NOMBRE=Alba Eunice Armijo Ogazon
-ARRENDADOR_DIRECCION=Callejón Zaragoza s/n, San Juan Chiautla, C.P. 56030
+# Configuración Inicial
+ARRENDADOR_NOMBRE=Admin
 EOF
 
   echo "✅ Archivo .env generado con credenciales seguras automáticamente"
@@ -76,8 +75,7 @@ else
   echo ""
 fi
 
-# Leer solo las variables necesarias del .env de forma segura (sin ejecutar el archivo)
-# Esto evita problemas con valores como BACKUP_CRON=0 4 * * * que bash interpreta como comandos
+# Leer variables esenciales de manera segura sin hacer 'source'
 DB_USER=$(grep -E '^DB_USER=' .env | cut -d'=' -f2 | tr -d '"' | tr -d "'")
 DB_NAME=$(grep -E '^DB_NAME=' .env | cut -d'=' -f2 | tr -d '"' | tr -d "'")
 DB_USER="${DB_USER:-depas_user}"
@@ -92,14 +90,14 @@ echo ""
 echo "🧹 Limpiando contenedores anteriores si existen..."
 docker compose down --remove-orphans 2>/dev/null || true
 
-# ─── Construir imagen del backend ───────────────────────────────────────────
+# ─── Construir imágenes ─────────────────────────────────────────────────────
 echo ""
-echo "🔨 Construyendo imagen del backend..."
-docker compose build backend
+echo "🔨 Construyendo aplicación (Frontend y Backend)..."
+docker compose build backend migrate seed
 
 # ─── Levantar servicios ─────────────────────────────────────────────────────
 echo ""
-echo "🚀 Levantando servicios (PostgreSQL + Backend)..."
+echo "🚀 Levantando servicios (PostgreSQL + NethRent)..."
 docker compose up -d db backend
 
 # ─── Esperar a que PostgreSQL esté completamente listo ──────────────────────
@@ -126,7 +124,7 @@ echo "🔄 Ejecutando migraciones de base de datos..."
 docker compose --profile tools run --rm migrate
 echo "✅ Migraciones completadas"
 
-# ─── Ejecutar seed (solo si es la primera vez — usa ON CONFLICT DO NOTHING) ─
+# ─── Ejecutar seed (solo si es la primera vez) ──────────────────────────────
 echo ""
 echo "🌱 Ejecutando seed de datos iniciales..."
 docker compose --profile tools run --rm seed
@@ -134,7 +132,7 @@ echo "✅ Seed completado"
 
 # ─── Verificar que el backend responde ──────────────────────────────────────
 echo ""
-echo "🔍 Verificando que el backend responde..."
+echo "🔍 Verificando que el sistema responde..."
 HEALTH_RETRIES=15
 HEALTH_COUNT=0
 until curl -sf http://localhost:3001/health &> /dev/null; do
@@ -149,7 +147,7 @@ until curl -sf http://localhost:3001/health &> /dev/null; do
 done
 
 if curl -sf http://localhost:3001/health &> /dev/null; then
-  echo "✅ Backend respondiendo correctamente"
+  echo "✅ Sistema respondiendo correctamente"
 fi
 
 # ─── Resumen final ──────────────────────────────────────────────────────────
@@ -158,18 +156,13 @@ echo "╔═══════════════════════�
 echo "║        ✅  Sistema en producción listo        ║"
 echo "╚══════════════════════════════════════════════╝"
 echo ""
-echo "   📡 API:    http://localhost:3001"
-echo "   💓 Health: http://localhost:3001/health"
+echo "   🌍 Web App: http://localhost:3001"
+echo "   📡 API:     http://localhost:3001/api"
 echo ""
 echo "📋 Credenciales de acceso a la app:"
-echo "   Admin Email:      admin@departamentos.local"
-echo "   Admin Contraseña: Admin2024!"
-echo "   ⚠️  Cambia la contraseña al primer inicio de sesión"
+echo "   (Crea tu cuenta de Administrador directamente en el registro)"
 echo ""
 echo "Comandos útiles:"
-echo "  Ver logs del backend:   docker compose logs -f backend"
-echo "  Ver logs de la DB:      docker compose logs -f db"
+echo "  Ver logs:               docker compose logs -f backend"
 echo "  Detener todo:           docker compose down"
 echo "  Reiniciar backend:      docker compose restart backend"
-echo "  Backup manual:          docker compose exec backend node dist/config/backup.js"
-echo "  Abrir shell en backend: docker compose exec backend sh"

@@ -2,6 +2,9 @@ import 'dotenv/config';
 import { pool } from '../config/database';
 
 const SQL_CREATE_TABLES = `
+-- Wipe existing tables for SaaS rewrite
+DROP TABLE IF EXISTS usuarios, departamentos, inquilinos, pagos, contratos, auditoria, backups, configuracion, tickets, cuotas_extra CASCADE;
+
 -- Extensiones
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "unaccent";
@@ -24,21 +27,24 @@ CREATE TABLE IF NOT EXISTS usuarios (
 -- Tabla de departamentos
 CREATE TABLE IF NOT EXISTS departamentos (
   id          SERIAL PRIMARY KEY,
-  numero      INTEGER UNIQUE NOT NULL,
+  admin_id    UUID NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+  numero      INTEGER NOT NULL,
   descripcion TEXT,
   estado      VARCHAR(20) NOT NULL DEFAULT 'disponible'
                 CHECK (estado IN ('disponible', 'ocupado', 'mantenimiento')),
   inventario_base JSONB NOT NULL DEFAULT '[]',
   ubicacion   VARCHAR(500) NOT NULL DEFAULT 'Callejón Zaragoza s/n, San Juan Chiautla, C.P. 56030',
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(admin_id, numero)
 );
 
 -- Tabla de inquilinos
 CREATE TABLE IF NOT EXISTS inquilinos (
   id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  admin_id          UUID NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
   nombre_completo   VARCHAR(255) NOT NULL,
-  depto_numero      INTEGER NOT NULL REFERENCES departamentos(numero),
+  depto_numero      INTEGER NOT NULL,
   renta             NUMERIC(10,2) NOT NULL,
   renta_letra       VARCHAR(255) NOT NULL,
   fecha_pago        VARCHAR(100) NOT NULL,
@@ -52,6 +58,8 @@ CREATE TABLE IF NOT EXISTS inquilinos (
   estado            VARCHAR(20) NOT NULL DEFAULT 'activo'
                       CHECK (estado IN ('activo', 'inactivo', 'vencido')),
   usuario_id        UUID REFERENCES usuarios(id) ON DELETE SET NULL,
+  email_invitacion  VARCHAR(255),
+  invitation_token  UUID UNIQUE,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -108,11 +116,13 @@ CREATE TABLE IF NOT EXISTS backups (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Tabla de configuración global
+-- Tabla de configuración global (por admin)
 CREATE TABLE IF NOT EXISTS configuracion (
-  clave   VARCHAR(100) PRIMARY KEY,
+  admin_id UUID NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+  clave   VARCHAR(100) NOT NULL,
   valor   TEXT NOT NULL,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (admin_id, clave)
 );
 
 -- Tabla de tickets (reportes de problemas)

@@ -94,16 +94,20 @@ export async function register(req: Request, res: Response, next: NextFunction):
 
     const userRol: 'admin' | 'inquilino' = rol === 'admin' ? 'admin' : 'inquilino';
 
-    if (userRol === 'admin') {
+    if (userRol === 'inquilino') {
       if (!invite_code) {
-        throw new AppError('Se requiere un código de invitación para crear una cuenta de administrador', 403);
+        throw new AppError('Se requiere un código de invitación válido para inquilinos', 403);
       }
-      const cfgResult = await pool.query(
-        `SELECT valor FROM configuracion WHERE clave = 'admin_invite_code'`
+      const tokenResult = await pool.query(
+        `SELECT id, email_invitacion FROM inquilinos WHERE invitation_token = $1 AND usuario_id IS NULL`,
+        [invite_code]
       );
-      const storedCode = cfgResult.rows[0]?.valor;
-      if (!storedCode || invite_code !== storedCode) {
-        throw new AppError('Código de invitación inválido', 403);
+      if (tokenResult.rows.length === 0) {
+        throw new AppError('Código de invitación inválido o ya utilizado', 403);
+      }
+      const inquilinoRec = tokenResult.rows[0];
+      if (inquilinoRec.email_invitacion && inquilinoRec.email_invitacion.toLowerCase() !== email.toLowerCase().trim()) {
+        throw new AppError(`El correo debe coincidir con la invitación original`, 403);
       }
     }
 
@@ -124,6 +128,15 @@ export async function register(req: Request, res: Response, next: NextFunction):
     );
 
     const user = result.rows[0];
+
+    // Si es inquilino, ligarlo al registro y limpiar el token
+    if (userRol === 'inquilino') {
+      await pool.query(
+        `UPDATE inquilinos SET usuario_id = $1, invitation_token = NULL WHERE invitation_token = $2`,
+        [user.id, invite_code]
+      );
+    }
+
     const token = jwt.sign(
       { id: user.id, email: user.email, rol: user.rol, nombre_completo: user.nombre_completo },
       process.env.JWT_SECRET!,

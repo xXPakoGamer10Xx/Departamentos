@@ -61,6 +61,16 @@ app.use('/api/notificaciones', notificacionesRouter);
 // Error handler global (debe ir al final)
 app.use(errorHandler);
 
+import path from 'path';
+import fs from 'fs';
+const publicPath = path.join(__dirname, '../public');
+if (fs.existsSync(publicPath)) {
+  app.use(express.static(publicPath));
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(publicPath, 'index.html'));
+  });
+}
+
 // Arranque del servidor
 async function bootstrap() {
   try {

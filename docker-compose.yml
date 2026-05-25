@@ -11,8 +11,8 @@ services:
       TZ: America/Mexico_City
     volumes:
       - pgdata:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+    # Puerto NO expuesto al host — el backend se conecta vía red Docker interna (db:5432)
+    # Exponer 5432 en producción no es necesario y causa conflictos si el host ya tiene PostgreSQL
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-depas_user} -d ${DB_NAME:-departamentos}"]
       interval: 10s

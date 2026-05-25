@@ -87,6 +87,11 @@ DB_NAME="${DB_NAME:-departamentos}"
 mkdir -p backups
 echo "✅ Directorio de backups listo"
 
+# ─── Limpiar contenedores viejos si existen ─────────────────────────────────
+echo ""
+echo "🧹 Limpiando contenedores anteriores si existen..."
+docker compose down --remove-orphans 2>/dev/null || true
+
 # ─── Construir imagen del backend ───────────────────────────────────────────
 echo ""
 echo "🔨 Construyendo imagen del backend..."

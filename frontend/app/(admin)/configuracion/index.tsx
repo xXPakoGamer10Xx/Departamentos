@@ -112,7 +112,7 @@ export default function ConfiguracionScreen() {
         setNotifPref(false);
         return;
       }
-      new Notification('Admin Depas', { body: 'Notificaciones activadas ✓', icon: '/favicon.ico' });
+      new Notification('NethRent', { body: 'Notificaciones activadas ✓', icon: '/favicon.ico' });
     }
     setNotifEnabled(val);
     setNotifPref(val);
@@ -428,7 +428,7 @@ export default function ConfiguracionScreen() {
           <Text style={[styles.logoutText, { color: theme.danger }]}>Cerrar Sesión</Text>
         </TouchableOpacity>
 
-        <Text style={[styles.version, { color: theme.textSecondary }]}>Admin Depas v1.0</Text>
+        <Text style={[styles.version, { color: theme.textSecondary }]}>NethRent v1.0</Text>
       </ScrollView>
 
       {/* Modal editar config */}

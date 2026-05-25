@@ -126,7 +126,7 @@ export default function ContractPreviewScreen() {
                 <Ionicons name="home" size={20} color="#fff" />
               </View>
               <View>
-                <Text style={styles.pageLogoLabel}>ADMIN DEPAS</Text>
+                <Text style={styles.pageLogoLabel}>NETHRENT</Text>
                 <Text style={styles.pageLogoSub}>Arrendamiento</Text>
               </View>
             </View>

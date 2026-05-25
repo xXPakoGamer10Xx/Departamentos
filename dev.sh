@@ -5,7 +5,7 @@
 export PATH="$HOME/.local/bin:$PATH"
 
 echo "╔══════════════════════════════════════════╗"
-echo "║  🏠 Admin Depas — Entorno de Desarrollo  ║"
+echo "║  🏠 NethRent — Entorno de Desarrollo     ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
 

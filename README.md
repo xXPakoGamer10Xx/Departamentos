@@ -1,4 +1,4 @@
-# 🏠 Admin Depas — Sistema de Gestión Inteligente de Arrendamientos
+# 🏠 NethRent — Sistema de Gestión Inteligente de Arrendamientos
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
@@ -8,7 +8,7 @@
 [![Expo](https://img.shields.io/badge/Expo-000020?style=for-the-badge&logo=expo&logoColor=white)](https://expo.dev/)
 [![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
 
-**Admin Depas** es una solución integral y moderna diseñada para la administración y automatización de departamentos en alquiler, cobro de rentas, gestión de contratos, control de incidencias (tickets) y comunicación fluida entre el arrendador y los inquilinos. 
+**NethRent** es una solución integral y moderna diseñada para la administración y automatización de departamentos en alquiler, cobro de rentas, gestión de contratos, control de incidencias (tickets) y comunicación fluida entre el arrendador y los inquilinos. 
 
 El sistema está optimizado para funcionar tanto en dispositivos móviles (Android/iOS) como en navegadores web de escritorio, ofreciendo una experiencia responsiva, fluida y en tiempo real.
 

@@ -94,7 +94,7 @@ export default function RegisterScreen() {
                 <Ionicons name="person-add" size={26} color="#fff" />
               </View>
               <Text style={styles.cardTopTitle}>Crear cuenta</Text>
-              <Text style={styles.cardTopSub}>Admin Depas</Text>
+              <Text style={styles.cardTopSub}>NethRent</Text>
             </LinearGradient>
 
             <View style={styles.form}>

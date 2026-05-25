@@ -99,7 +99,7 @@ export default function LoginScreen() {
               <View style={styles.logoWrap}>
                 <Ionicons name="home" size={28} color="#fff" />
               </View>
-              <Text style={styles.cardTopTitle}>Admin Depas</Text>
+              <Text style={styles.cardTopTitle}>NethRent</Text>
               <Text style={styles.cardTopSub}>Gestión de arrendamientos</Text>
             </LinearGradient>
 
@@ -146,13 +146,6 @@ export default function LoginScreen() {
                 style={{ marginTop: Theme.spacing.sm }}
               />
 
-              <View style={[styles.hintBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(15,23,42,0.04)', borderColor: theme.border }]}>
-                <Ionicons name="information-circle-outline" size={14} color={theme.textMuted} />
-                <Text style={[styles.hintText, { color: theme.textMuted }]}>
-                  admin@departamentos.local · Admin2024!
-                </Text>
-              </View>
-
               <TouchableOpacity onPress={() => router.push('/(auth)/register' as any)} style={styles.registerLink}>
                 <Text style={[styles.registerLinkText, { color: theme.textSecondary }]}>
                   ¿No tienes cuenta?{' '}
@@ -161,10 +154,6 @@ export default function LoginScreen() {
               </TouchableOpacity>
             </View>
           </GlassCard>
-
-          <Text style={[styles.footer, { color: theme.textMuted }]}>
-            Sistema privado — solo usuarios autorizados
-          </Text>
         </ScrollView>
       </KeyboardAvoidingView>
     </View>

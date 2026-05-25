@@ -6,7 +6,7 @@
 set -e
 
 echo "╔══════════════════════════════════════════════╗"
-echo "║  🏠 Admin Depas — Iniciar en Producción      ║"
+echo "║  🏠 NethRent — Iniciar en Producción         ║"
 echo "╚══════════════════════════════════════════════╝"
 echo ""
 

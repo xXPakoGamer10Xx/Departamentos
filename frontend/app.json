@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "Admin Depas",
-    "slug": "admin-depas",
-    "scheme": "admindepas",
+    "name": "NethRent",
+    "slug": "nethrent",
+    "scheme": "nethrent",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -15,11 +15,11 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.admindepas.app",
+      "bundleIdentifier": "com.nethrent.app",
       "statusBarStyle": "auto"
     },
     "android": {
-      "package": "com.admindepas.app",
+      "package": "com.nethrent.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#007AFF"

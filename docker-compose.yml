@@ -1,0 +1,98 @@
+services:
+  # ─── Base de datos PostgreSQL ───────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    container_name: depas_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-departamentos}
+      POSTGRES_USER: ${DB_USER:-depas_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-depas_secret_2024}
+      TZ: America/Mexico_City
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-depas_user} -d ${DB_NAME:-departamentos}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Backend API ────────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: production
+    container_name: depas_backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      TZ: America/Mexico_City
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-departamentos}
+      DB_USER: ${DB_USER:-depas_user}
+      DB_PASSWORD: ${DB_PASSWORD:-depas_secret_2024}
+      JWT_SECRET: ${JWT_SECRET:-cambia_este_secreto_en_produccion}
+      JWT_EXPIRES_IN: 7d
+      BACKUP_DIR: /app/backups
+      BACKUP_CRON: "0 4 * * *"
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./backups:/app/backups
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ─── Migraciones (se ejecuta una vez y termina) ──────────────────────────
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: builder
+    container_name: depas_migrate
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-departamentos}
+      DB_USER: ${DB_USER:-depas_user}
+      DB_PASSWORD: ${DB_PASSWORD:-depas_secret_2024}
+    command: ["npx", "ts-node", "src/config/migrate.ts"]
+    profiles:
+      - tools
+
+  # ─── Seed (se ejecuta una vez y termina) ─────────────────────────────────
+  seed:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: builder
+    container_name: depas_seed
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-departamentos}
+      DB_USER: ${DB_USER:-depas_user}
+      DB_PASSWORD: ${DB_PASSWORD:-depas_secret_2024}
+    command: ["npx", "ts-node", "src/config/seed.ts"]
+    profiles:
+      - tools
+
+volumes:
+  pgdata:
+    driver: local

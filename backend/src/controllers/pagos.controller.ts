@@ -1,0 +1,354 @@
+import { Response, NextFunction } from 'express';
+import { pool } from '../config/database';
+import { AppError } from '../middleware/error.middleware';
+import { AuthRequest } from '../middleware/auth.middleware';
+import { v4 as uuidv4 } from 'uuid';
+import { sendPush, getUserPushTokens, getAdminPushTokens } from '../services/push.service';
+import { emitToUser, emitToAdmins } from '../services/sse.service';
+
+function getCurrentPeriodo(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+// POST /api/pagos/generar-qr/:inquilino_id
+export async function generarQr(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { inquilino_id } = req.params;
+    const periodo = getCurrentPeriodo();
+
+    // Si es inquilino, solo puede generar QR de su propio registro
+    if (req.user!.rol === 'inquilino') {
+      const own = await pool.query(
+        `SELECT id FROM inquilinos WHERE id = $1 AND usuario_id = $2 AND estado = 'activo'`,
+        [inquilino_id, req.user!.id]
+      );
+      if (!own.rows[0]) throw new AppError('No autorizado', 403);
+    }
+
+    const inqRes = await pool.query(
+      `SELECT id, nombre_completo, depto_numero, renta, metodo_pago FROM inquilinos WHERE id = $1`,
+      [inquilino_id]
+    );
+    if (!inqRes.rows[0]) throw new AppError('Inquilino no encontrado', 404);
+    const inquilino = inqRes.rows[0];
+
+    // Sumar cuotas extra pendientes al monto
+    const cuotasRes = await pool.query(
+      `SELECT COALESCE(SUM(monto), 0) as total_extra,
+              json_agg(json_build_object('id', id, 'concepto', concepto, 'monto', monto)) FILTER (WHERE id IS NOT NULL) as cuotas
+       FROM cuotas_extra WHERE inquilino_id = $1 AND estado = 'pendiente'`,
+      [inquilino_id]
+    );
+    const totalExtra = parseFloat(cuotasRes.rows[0].total_extra);
+    const cuotasDetalle = cuotasRes.rows[0].cuotas || [];
+    const montoTotal = parseFloat(inquilino.renta) + totalExtra;
+
+    let pagoRes = await pool.query(
+      `SELECT * FROM pagos WHERE inquilino_id = $1 AND periodo = $2`,
+      [inquilino_id, periodo]
+    );
+
+    if (!pagoRes.rows[0]) {
+      const token = uuidv4();
+      pagoRes = await pool.query(
+        `INSERT INTO pagos (inquilino_id, periodo, monto, metodo, qr_token)
+         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+        [inquilino_id, periodo, montoTotal, inquilino.metodo_pago || 'efectivo', token]
+      );
+    } else if (!pagoRes.rows[0].qr_token) {
+      const token = uuidv4();
+      pagoRes = await pool.query(
+        `UPDATE pagos SET qr_token = $1, monto = $2 WHERE id = $3 RETURNING *`,
+        [token, montoTotal, pagoRes.rows[0].id]
+      );
+    } else {
+      // Refresh monto in case cuotas changed
+      pagoRes = await pool.query(
+        `UPDATE pagos SET monto = $1 WHERE id = $2 AND confirmado = false RETURNING *`,
+        [montoTotal, pagoRes.rows[0].id]
+      );
+      if (!pagoRes.rows[0]) {
+        pagoRes = await pool.query(`SELECT * FROM pagos WHERE inquilino_id = $1 AND periodo = $2`, [inquilino_id, periodo]);
+      }
+    }
+
+    const pago = pagoRes.rows[0];
+    res.json({
+      success: true,
+      data: {
+        ...pago,
+        renta_base: parseFloat(inquilino.renta),
+        total_extra: totalExtra,
+        cuotas: cuotasDetalle,
+        inquilino: {
+          nombre_completo: inquilino.nombre_completo,
+          depto_numero: inquilino.depto_numero,
+        },
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// GET /api/pagos/info/:token  (sin auth – para la página de confirmación QR)
+export async function getPagoByToken(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { token } = req.params;
+    const result = await pool.query(
+      `SELECT p.*, i.nombre_completo, i.depto_numero, i.renta
+       FROM pagos p JOIN inquilinos i ON i.id = p.inquilino_id
+       WHERE p.qr_token = $1`,
+      [token]
+    );
+    if (!result.rows[0]) throw new AppError('QR inválido o expirado', 404);
+    res.json({ success: true, data: result.rows[0] });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// POST /api/pagos/confirmar/:token  (sin auth – se confirma desde QR scan)
+export async function confirmarPago(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { token } = req.params;
+
+    const pagoRes = await pool.query(
+      `SELECT p.*, i.nombre_completo, i.depto_numero
+       FROM pagos p JOIN inquilinos i ON i.id = p.inquilino_id
+       WHERE p.qr_token = $1`,
+      [token]
+    );
+    if (!pagoRes.rows[0]) throw new AppError('QR inválido o expirado', 404);
+
+    const pago = pagoRes.rows[0];
+    if (pago.confirmado) {
+      res.json({ success: true, data: pago, yaConfirmado: true });
+      return;
+    }
+
+    const updated = await pool.query(
+      `UPDATE pagos SET confirmado = true, confirmado_en = NOW() WHERE qr_token = $1 RETURNING *`,
+      [token]
+    );
+
+    // Marcar cuotas extra pendientes como pagadas
+    await pool.query(
+      `UPDATE cuotas_extra SET estado = 'pagado', pagado_en = NOW()
+       WHERE inquilino_id = $1 AND estado = 'pendiente'`,
+      [pago.inquilino_id]
+    );
+
+    res.json({
+      success: true,
+      data: {
+        ...updated.rows[0],
+        nombre_completo: pago.nombre_completo,
+        depto_numero: pago.depto_numero,
+      },
+    });
+
+    // Notificar en tiempo real (SSE + push)
+    const pagoData = { ...updated.rows[0], nombre_completo: pago.nombre_completo, depto_numero: pago.depto_numero };
+    emitToAdmins('payment_confirmed', { pago: pagoData });
+    pool.query(`SELECT usuario_id FROM inquilinos WHERE id = $1`, [pago.inquilino_id])
+      .then(async inqRes => {
+        const usuarioId = inqRes.rows[0]?.usuario_id;
+        const tasks: Promise<any>[] = [];
+        if (usuarioId) {
+          emitToUser(usuarioId, 'payment_confirmed', { pago: pagoData });
+          const tokens = await getUserPushTokens(usuarioId);
+          tasks.push(sendPush(tokens, '✅ ¡Pago confirmado!', `Tu pago de ${pago.periodo} fue confirmado`));
+        }
+        const adminTokens = await getAdminPushTokens();
+        tasks.push(sendPush(adminTokens, '💰 Pago confirmado', `Depto ${pago.depto_numero} — ${pago.nombre_completo}`));
+        return Promise.all(tasks);
+      }).catch(() => {});
+  } catch (err) {
+    next(err);
+  }
+}
+
+// POST /api/pagos/comprobante/:inquilino_id  — inquilino sube imagen de comprobante
+export async function subirComprobante(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { inquilino_id } = req.params;
+    const { comprobante_url } = req.body;
+
+    if (!comprobante_url) throw new AppError('comprobante_url es requerido', 400);
+
+    if (req.user!.rol === 'inquilino') {
+      const own = await pool.query(
+        `SELECT id FROM inquilinos WHERE id = $1 AND usuario_id = $2 AND estado = 'activo'`,
+        [inquilino_id, req.user!.id]
+      );
+      if (!own.rows[0]) throw new AppError('No autorizado', 403);
+    }
+
+    const periodo = getCurrentPeriodo();
+    let pagoRes = await pool.query(
+      `SELECT * FROM pagos WHERE inquilino_id = $1 AND periodo = $2`,
+      [inquilino_id, periodo]
+    );
+
+    if (!pagoRes.rows[0]) {
+      const inqRes = await pool.query(
+        `SELECT renta, metodo_pago FROM inquilinos WHERE id = $1`,
+        [inquilino_id]
+      );
+      if (!inqRes.rows[0]) throw new AppError('Inquilino no encontrado', 404);
+      const cuotasRes = await pool.query(
+        `SELECT COALESCE(SUM(monto), 0) as total_extra FROM cuotas_extra WHERE inquilino_id = $1 AND estado = 'pendiente'`,
+        [inquilino_id]
+      );
+      const montoTotal = parseFloat(inqRes.rows[0].renta) + parseFloat(cuotasRes.rows[0].total_extra);
+      pagoRes = await pool.query(
+        `INSERT INTO pagos (inquilino_id, periodo, monto, metodo) VALUES ($1, $2, $3, $4) RETURNING *`,
+        [inquilino_id, periodo, montoTotal, 'transferencia']
+      );
+    }
+
+    const updated = await pool.query(
+      `UPDATE pagos SET comprobante_url = $1, comprobante_subido_en = NOW()
+       WHERE id = $2 AND confirmado = false RETURNING *`,
+      [comprobante_url, pagoRes.rows[0].id]
+    );
+
+    if (!updated.rows[0]) throw new AppError('Pago ya confirmado o no encontrado', 400);
+
+    res.json({ success: true, data: updated.rows[0] });
+
+    const inqName = await pool.query(
+      `SELECT nombre_completo, depto_numero FROM inquilinos WHERE id = $1`,
+      [inquilino_id]
+    );
+    const inq = inqName.rows[0];
+    emitToAdmins('comprobante_subido', { pago: updated.rows[0], inquilino: inq });
+    getAdminPushTokens().then(tokens =>
+      sendPush(tokens, '📎 Comprobante recibido', `Depto ${inq?.depto_numero} — ${inq?.nombre_completo}`)
+    ).catch(() => {});
+  } catch (err) {
+    next(err);
+  }
+}
+
+// POST /api/pagos/confirmar-admin/:pago_id  — admin confirma pago de transferencia
+export async function confirmarPagoAdmin(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { pago_id } = req.params;
+
+    const pagoRes = await pool.query(
+      `SELECT p.*, i.nombre_completo, i.depto_numero, i.usuario_id as inquilino_usuario_id
+       FROM pagos p JOIN inquilinos i ON i.id = p.inquilino_id
+       WHERE p.id = $1`,
+      [pago_id]
+    );
+    if (!pagoRes.rows[0]) throw new AppError('Pago no encontrado', 404);
+    const pago = pagoRes.rows[0];
+
+    if (pago.confirmado) {
+      res.json({ success: true, data: pago, yaConfirmado: true });
+      return;
+    }
+
+    const updated = await pool.query(
+      `UPDATE pagos SET confirmado = true, confirmado_en = NOW() WHERE id = $1 RETURNING *`,
+      [pago_id]
+    );
+
+    await pool.query(
+      `UPDATE cuotas_extra SET estado = 'pagado', pagado_en = NOW()
+       WHERE inquilino_id = $1 AND estado = 'pendiente'`,
+      [pago.inquilino_id]
+    );
+
+    const pagoData = {
+      ...updated.rows[0],
+      nombre_completo: pago.nombre_completo,
+      depto_numero: pago.depto_numero,
+    };
+    res.json({ success: true, data: pagoData });
+
+    emitToAdmins('payment_confirmed', { pago: pagoData });
+    if (pago.inquilino_usuario_id) {
+      emitToUser(pago.inquilino_usuario_id, 'payment_confirmed', { pago: pagoData });
+      getUserPushTokens(pago.inquilino_usuario_id).then(tokens =>
+        sendPush(tokens, '✅ ¡Pago confirmado!', `Tu pago de ${pago.periodo} fue confirmado`)
+      ).catch(() => {});
+    }
+    getAdminPushTokens().then(tokens =>
+      sendPush(tokens, '💰 Pago confirmado', `Depto ${pago.depto_numero} — ${pago.nombre_completo}`)
+    ).catch(() => {});
+  } catch (err) {
+    next(err);
+  }
+}
+
+// GET /api/pagos/historial/:inquilino_id
+export async function getHistorialPagos(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { inquilino_id } = req.params;
+
+    if (req.user!.rol === 'inquilino') {
+      const own = await pool.query(
+        `SELECT id FROM inquilinos WHERE id = $1 AND usuario_id = $2 AND estado = 'activo'`,
+        [inquilino_id, req.user!.id]
+      );
+      if (!own.rows[0]) throw new AppError('No autorizado', 403);
+    }
+
+    const result = await pool.query(
+      `SELECT p.*, i.fecha_pago, i.nombre_completo, i.depto_numero
+       FROM pagos p JOIN inquilinos i ON i.id = p.inquilino_id
+       WHERE p.inquilino_id = $1
+       ORDER BY p.periodo DESC`,
+      [inquilino_id]
+    );
+
+    const pagos = result.rows.map(p => {
+      let a_tiempo: boolean | null = null;
+      if (p.confirmado && p.confirmado_en && p.fecha_pago) {
+        const confirmadoDate = new Date(p.confirmado_en);
+        const [anio, mes] = p.periodo.split('-').map(Number);
+        const diaPago = parseInt(p.fecha_pago, 10);
+        const fechaLimite = new Date(anio, mes - 1, diaPago, 23, 59, 59);
+        a_tiempo = confirmadoDate <= fechaLimite;
+      }
+      return { ...p, a_tiempo };
+    });
+
+    res.json({ success: true, data: pagos });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// GET /api/pagos/estado/:inquilino_id
+export async function getEstadoPago(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { inquilino_id } = req.params;
+    const periodo = getCurrentPeriodo();
+
+    const [pagoResult, cuotasResult] = await Promise.all([
+      pool.query(`SELECT * FROM pagos WHERE inquilino_id = $1 AND periodo = $2`, [inquilino_id, periodo]),
+      pool.query(
+        `SELECT id, concepto, monto, estado, created_at FROM cuotas_extra
+         WHERE inquilino_id = $1 AND estado = 'pendiente' ORDER BY created_at`,
+        [inquilino_id]
+      ),
+    ]);
+
+    const totalExtra = cuotasResult.rows.reduce((sum, c) => sum + parseFloat(c.monto), 0);
+
+    res.json({
+      success: true,
+      data: pagoResult.rows[0] || null,
+      cuotas: cuotasResult.rows,
+      total_extra: totalExtra,
+      periodo,
+    });
+  } catch (err) {
+    next(err);
+  }
+}

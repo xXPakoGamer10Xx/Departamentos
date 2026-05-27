@@ -42,7 +42,8 @@ export default function LoginScreen() {
           localStorage.setItem(TOKEN_KEY, res.data.token);
           localStorage.setItem(USER_KEY, JSON.stringify(res.data.user));
         }
-        const dest = res.data.user.rol === 'inquilino' ? '/(inquilino)' : '/(admin)';
+        const rol = res.data.user.rol;
+        const dest = rol === 'inquilino' ? '/(inquilino)' : rol === 'cobrador' ? '/(cobrador)/scan' : '/(admin)';
         router.replace(dest as any);
       } else {
         setError('Respuesta inesperada del servidor');

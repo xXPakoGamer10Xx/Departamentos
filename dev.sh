@@ -1,6 +1,6 @@
 #!/bin/bash
-# dev.sh - Script para entorno de DESARROLLO (sin Docker, todo local)
-# Requiere: Node.js en ~/.local/bin, PostgreSQL corriendo localmente
+# dev.sh - Entorno de DESARROLLO local
+# Requiere: Node.js, Docker (solo para levantar PostgreSQL)
 
 export PATH="$HOME/.local/bin:$PATH"
 
@@ -9,82 +9,117 @@ echo "║  🏠 NethRent — Entorno de Desarrollo     ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
 
-# Verificar Node.js
+# ─── Verificar Node.js ──────────────────────────────────────────────────────
 if ! command -v node &> /dev/null; then
-  echo "❌ Node.js no encontrado. Asegúrate de tenerlo en ~/.local/bin"
+  echo "❌ Node.js no encontrado. Instálalo o agrégalo al PATH."
   exit 1
 fi
 echo "✅ Node.js $(node -v)"
 
-# Función para matar el árbol completo de procesos
+# ─── Detectar docker compose (v2 preferido sobre v1) ───────────────────────
+if docker compose version &> /dev/null 2>&1; then
+  DC="docker compose"
+elif command -v docker-compose &> /dev/null; then
+  DC="docker-compose"
+else
+  DC=""
+fi
+
+# ─── Limpieza al salir (guard contra doble ejecución) ──────────────────────
+_CLEANUP_DONE=0
 cleanup() {
+  [ "$_CLEANUP_DONE" = "1" ] && return
+  _CLEANUP_DONE=1
   echo ""
   echo "🛑 Deteniendo todos los procesos..."
-  # Matar todos los hijos directos del script
   jobs -p | xargs -r kill -TERM 2>/dev/null || true
-  # Matar procesos específicos por nombre (ts-node-dev y expo pueden quedar huérfanos)
   pkill -f "ts-node-dev.*src/app.ts" 2>/dev/null || true
   pkill -f "expo start" 2>/dev/null || true
-  pkill -f "react-native/cli" 2>/dev/null || true
-  # Esperar un momento para limpieza ordenada
   sleep 0.5
-  # Forzar kill de los que no respondieron
   jobs -p | xargs -r kill -KILL 2>/dev/null || true
   echo "✅ Procesos detenidos"
-  exit 0
 }
-trap cleanup SIGINT SIGTERM EXIT
+trap 'cleanup; exit 0' SIGINT SIGTERM
+trap 'cleanup' EXIT
 
-# Instalar dependencias de backend si es necesario
+# ─── Instalar dependencias si faltan ───────────────────────────────────────
 if [ ! -d "backend/node_modules" ]; then
   echo "📦 Instalando dependencias del backend..."
   (cd backend && npm install)
 fi
-
-# Instalar dependencias de frontend si es necesario
 if [ ! -d "frontend/node_modules" ]; then
   echo "📦 Instalando dependencias del frontend..."
   (cd frontend && npm install)
 fi
 
-# Asegurar que la base de datos esté corriendo (usando Docker Compose)
-echo "🐳 Iniciando base de datos PostgreSQL local..."
-if command -v docker-compose &> /dev/null; then
-  docker-compose up -d db
-  echo "⏳ Esperando a que PostgreSQL inicie..."
-  sleep 3
+# ─── Levantar PostgreSQL en Docker ─────────────────────────────────────────
+if [ -n "$DC" ]; then
+  echo "🐳 Iniciando base de datos PostgreSQL..."
+  $DC -f docker-compose.yml -f docker-compose.dev.yml up -d db
+
+  echo "⏳ Esperando a que PostgreSQL esté listo..."
+  RETRIES=30
+  COUNT=0
+  until docker exec depas_db pg_isready -U "depas_user" -d "departamentos" &>/dev/null 2>&1; do
+    COUNT=$((COUNT + 1))
+    if [ "$COUNT" -ge "$RETRIES" ]; then
+      echo ""
+      echo "❌ PostgreSQL no respondió. Revisa: docker logs depas_db"
+      exit 1
+    fi
+    printf "   ... esperando (%d/%d)\r" "$COUNT" "$RETRIES"
+    sleep 1
+  done
+  echo "✅ PostgreSQL listo                    "
 else
-  echo "⚠️ docker-compose no encontrado. Asegúrate de tener PostgreSQL corriendo."
+  echo "⚠️  Docker no encontrado. Asegúrate de tener PostgreSQL corriendo en localhost:5432"
 fi
 
-# Ejecutar migraciones si la DB está lista
-echo ""
-echo "🔄 Ejecutando migraciones de base de datos..."
-if (cd backend && node -e "require('./dist/config/migrate.js')" 2>/dev/null) || \
-   (cd backend && npx ts-node src/config/migrate.ts 2>/dev/null); then
-  echo "✅ Migraciones completadas"
-else
-  echo "⚠️  Las migraciones fallaron (¿está PostgreSQL corriendo?)"
-fi
+# ─── Detectar IP de la red local ───────────────────────────────────────────
+LAN_IP=$(ipconfig getifaddr en0 2>/dev/null \
+  || ipconfig getifaddr en1 2>/dev/null \
+  || hostname -I 2>/dev/null | awk '{print $1}' \
+  || echo "TU_IP_LOCAL")
+
+CURRENT_ENV=$(grep 'EXPO_PUBLIC_API_URL' frontend/.env.local 2>/dev/null | cut -d'=' -f2 || echo "")
 
 echo ""
 echo "🚀 Iniciando servicios en modo desarrollo..."
 echo "   Backend:  http://localhost:3001"
 echo "   Frontend: http://localhost:8081"
 echo ""
+if [ "$CURRENT_ENV" != "http://${LAN_IP}:3001/api" ]; then
+  echo "   ⚠️  IP local detectada: ${LAN_IP}"
+  echo "      Verifica que frontend/.env.local tenga:"
+  echo "      EXPO_PUBLIC_API_URL=http://${LAN_IP}:3001/api"
+  echo ""
+fi
 echo "   Presiona Ctrl+C para detener ambos servicios"
 echo ""
 
-# Iniciar Backend en background y guardar PID
+# ─── Iniciar Backend ───────────────────────────────────────────────────────
+# Las migraciones seguras (ALTER TABLE IF NOT EXISTS) se ejecutan
+# automáticamente dentro del backend al arrancar (database.ts STARTUP_MIGRATIONS)
 (cd backend && npm run dev) &
 BACKEND_PID=$!
 
-# Esperar un momento para que el backend arranque
-sleep 3
+# Esperar a que el backend responda en /health
+echo "⏳ Esperando que el backend arranque..."
+RETRIES=30
+COUNT=0
+until curl -sf http://localhost:3001/health &>/dev/null 2>&1; do
+  COUNT=$((COUNT + 1))
+  if [ "$COUNT" -ge "$RETRIES" ]; then
+    echo "⚠️  Backend tardó más de lo esperado — iniciando Expo de todos modos..."
+    break
+  fi
+  sleep 1
+done
+[ "$COUNT" -lt "$RETRIES" ] && echo "✅ Backend listo (http://localhost:3001)"
 
-# Iniciar Frontend en background también (así Ctrl+C dispara el trap correctamente)
+# ─── Iniciar Frontend (Expo) ───────────────────────────────────────────────
 (cd frontend && npm start) &
 FRONTEND_PID=$!
 
-# Esperar ambos procesos — si alguno muere, el trap limpia el otro
+# Esperar ambos procesos
 wait $BACKEND_PID $FRONTEND_PID

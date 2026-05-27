@@ -7,7 +7,7 @@ import { Colors } from '../../../constants/Colors';
 import { Theme } from '../../../constants/Theme';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import api from '../../../services/api';
 
 export default function DepartamentoDetailScreen() {
@@ -24,6 +24,8 @@ export default function DepartamentoDetailScreen() {
   const [inventario, setInventario] = useState<string[]>([]);
   const [nuevoItem, setNuevoItem] = useState('');
   const [guardando, setGuardando] = useState(false);
+  const [cambiandoEstado, setCambiandoEstado] = useState(false);
+  const inputRef = useRef<TextInput>(null);
 
   useEffect(() => {
     api.getDepartamentoByNumero(Number(numero))
@@ -41,6 +43,8 @@ export default function DepartamentoDetailScreen() {
     if (!item) return;
     setInventario(prev => [...prev, item]);
     setNuevoItem('');
+    // Mantener el foco para seguir agregando sin tocar la pantalla
+    setTimeout(() => inputRef.current?.focus(), 50);
   };
 
   const eliminarItem = (idx: number) => {
@@ -57,6 +61,33 @@ export default function DepartamentoDetailScreen() {
     } finally {
       setGuardando(false);
     }
+  };
+
+  const toggleMantenimiento = async () => {
+    if (!depto || depto.estado === 'ocupado') return;
+    const nuevoEstado = depto.estado === 'mantenimiento' ? 'disponible' : 'mantenimiento';
+    const etiqueta = nuevoEstado === 'mantenimiento' ? 'en mantenimiento' : 'disponible';
+    Alert.alert(
+      'Cambiar estado',
+      `¿Poner el Departamento ${depto.numero} como ${etiqueta}?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Confirmar',
+          onPress: async () => {
+            try {
+              setCambiandoEstado(true);
+              const res = await api.updateDepartamento(Number(numero), { estado: nuevoEstado });
+              setDepto((prev: any) => ({ ...prev, estado: res.data.estado }));
+            } catch (e: any) {
+              Alert.alert('Error', e.message || 'No se pudo cambiar el estado');
+            } finally {
+              setCambiandoEstado(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   if (loading) {
@@ -118,10 +149,39 @@ export default function DepartamentoDetailScreen() {
       </View>
 
       <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
-        <View style={[styles.badge, { backgroundColor: color + '20' }]}>
-          <Text style={[styles.badgeText, { color }]}>
-            {depto.estado.charAt(0).toUpperCase() + depto.estado.slice(1)}
-          </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <View style={[styles.badge, { backgroundColor: color + '20' }]}>
+            <Text style={[styles.badgeText, { color }]}>
+              {depto.estado === 'disponible' ? 'Disponible'
+                : depto.estado === 'ocupado' ? 'Ocupado'
+                : 'En mantenimiento'}
+            </Text>
+          </View>
+          {/* Toggle mantenimiento — solo si no está ocupado */}
+          {depto.estado !== 'ocupado' && (
+            <TouchableOpacity
+              onPress={toggleMantenimiento}
+              disabled={cambiandoEstado}
+              style={[
+                styles.mantenimientoBtn,
+                {
+                  backgroundColor: depto.estado === 'mantenimiento'
+                    ? theme.successLight
+                    : theme.warningLight,
+                  opacity: cambiandoEstado ? 0.6 : 1,
+                },
+              ]}
+            >
+              <Ionicons
+                name={depto.estado === 'mantenimiento' ? 'checkmark-circle-outline' : 'construct-outline'}
+                size={15}
+                color={depto.estado === 'mantenimiento' ? theme.success : theme.warning}
+              />
+              <Text style={[styles.mantenimientoBtnText, { color: depto.estado === 'mantenimiento' ? theme.success : theme.warning }]}>
+                {cambiandoEstado ? 'Cambiando…' : depto.estado === 'mantenimiento' ? 'Marcar disponible' : 'Poner en mantenimiento'}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
         {depto.descripcion ? (
           <Text style={[styles.desc, { color: theme.textSecondary }]}>{depto.descripcion}</Text>
@@ -160,13 +220,15 @@ export default function DepartamentoDetailScreen() {
 
         <View style={styles.addRow}>
           <TextInput
+            ref={inputRef}
             style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.background }]}
             placeholder="Agregar artículo..."
             placeholderTextColor={theme.textSecondary}
             value={nuevoItem}
             onChangeText={setNuevoItem}
             onSubmitEditing={agregarItem}
-            returnKeyType="done"
+            returnKeyType="next"
+            blurOnSubmit={false}
           />
           <TouchableOpacity
             style={[styles.addBtn, { backgroundColor: theme.primary }]}
@@ -240,4 +302,13 @@ const styles = StyleSheet.create({
   saveBtnText: { color: '#fff', fontWeight: '600', fontSize: 15 },
   historialRow: { paddingVertical: 6, borderBottomWidth: 0.5, borderBottomColor: '#E2E8F0' },
   historialNombre: { fontSize: 14, fontWeight: '500' },
+  mantenimientoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
+  },
+  mantenimientoBtnText: { fontSize: 13, fontWeight: '700' },
 });

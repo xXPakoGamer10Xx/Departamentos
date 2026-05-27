@@ -6,7 +6,7 @@ export interface AuthRequest extends Request {
   user?: {
     id: string;
     email: string;
-    rol: 'admin' | 'inquilino';
+    rol: 'admin' | 'inquilino' | 'cobrador';
     nombre_completo: string;
   };
 }
@@ -33,5 +33,23 @@ export function adminOnly(req: AuthRequest, _res: Response, next: NextFunction):
   if (req.user?.rol !== 'admin') {
     return next(new AppError('Acceso restringido a administradores', 403));
   }
+  next();
+}
+
+export function cobradorOrAdmin(req: AuthRequest, _res: Response, next: NextFunction): void {
+  if (req.user?.rol !== 'admin' && req.user?.rol !== 'cobrador') {
+    return next(new AppError('Acceso restringido a administradores y cobradores', 403));
+  }
+  next();
+}
+
+export function softAuth(req: AuthRequest, _res: Response, next: NextFunction): void {
+  const authHeader = req.headers.authorization;
+  const queryToken = req.query?.token as string | undefined;
+  const raw = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : queryToken;
+  if (!raw) return next();
+  try {
+    req.user = jwt.verify(raw, process.env.JWT_SECRET!) as any;
+  } catch { /* token inválido, continuar anónimo */ }
   next();
 }

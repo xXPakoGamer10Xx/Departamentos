@@ -1,7 +1,7 @@
 #!/bin/bash
-# start.sh - Script para entorno de PRODUCCIÓN en tu VPS (con Docker)
-# Requiere: docker y docker compose instalados en el VPS
-# Este script se encarga de TODA la configuración automáticamente.
+# start.sh - Producción en VPS con Docker
+# Uso:  ./start.sh           → arranque normal (preserva datos)
+#       ./start.sh --reset   → borrar todo y empezar desde cero
 
 set -e
 
@@ -9,6 +9,15 @@ echo "╔═══════════════════════�
 echo "║  🏠 NethRent — Iniciar en Producción         ║"
 echo "╚══════════════════════════════════════════════╝"
 echo ""
+
+FORCE_RESET=0
+if [ "$1" = "--reset" ]; then
+  FORCE_RESET=1
+  echo "⚠️  MODO RESET: Se borrarán TODOS los datos y se recreará la base de datos."
+  echo "   Presiona Ctrl+C en los próximos 5 segundos para cancelar..."
+  sleep 5
+  echo ""
+fi
 
 # ─── Verificar docker ───────────────────────────────────────────────────────
 if ! command -v docker &> /dev/null; then
@@ -18,7 +27,6 @@ if ! command -v docker &> /dev/null; then
 fi
 echo "✅ Docker $(docker --version | cut -d' ' -f3 | tr -d ',')"
 
-# Verificar docker compose (v2)
 if ! docker compose version &> /dev/null; then
   echo "❌ Docker Compose v2 no está disponible."
   echo "   Asegúrate de tener Docker Engine >= 20.10"
@@ -27,11 +35,10 @@ fi
 echo "✅ Docker Compose $(docker compose version --short)"
 echo ""
 
-# ─── Generar .env automáticamente si no existe ─────────────────────────────
+# ─── Generar .env si no existe ─────────────────────────────────────────────
 if [ ! -f ".env" ]; then
   echo "⚙️  Archivo .env no encontrado. Generando configuración automática..."
 
-  # Generar secretos seguros automáticamente
   JWT_SECRET=$(openssl rand -hex 48 2>/dev/null || cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 64 | head -n 1)
   DB_PASSWORD=$(openssl rand -hex 16 2>/dev/null || cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 24 | head -n 1)
 
@@ -62,20 +69,16 @@ BACKUP_CRON="0 4 * * *"
 ARRENDADOR_NOMBRE=Admin
 EOF
 
-  echo "✅ Archivo .env generado con credenciales seguras automáticamente"
-  echo ""
-  echo "   🔑 JWT_SECRET  → (64 caracteres aleatorios)"
+  echo "✅ Archivo .env generado"
   echo "   🔑 DB_PASSWORD → ${DB_PASSWORD}"
-  echo ""
   echo "   ℹ️  Guarda estas credenciales en un lugar seguro."
-  echo "   ℹ️  El archivo .env está en la raíz del proyecto."
   echo ""
 else
   echo "✅ Archivo .env encontrado"
   echo ""
 fi
 
-# Leer variables esenciales de manera segura sin hacer 'source'
+# Leer variables esenciales sin hacer 'source'
 DB_USER=$(grep -E '^DB_USER=' .env | cut -d'=' -f2 | tr -d '"' | tr -d "'")
 DB_NAME=$(grep -E '^DB_NAME=' .env | cut -d'=' -f2 | tr -d '"' | tr -d "'")
 DB_USER="${DB_USER:-depas_user}"
@@ -85,60 +88,79 @@ DB_NAME="${DB_NAME:-departamentos}"
 mkdir -p backups
 echo "✅ Directorio de backups listo"
 
-# ─── Limpiar contenedores viejos si existen ─────────────────────────────────
+# ─── Limpiar contenedores anteriores ────────────────────────────────────────
 echo ""
-echo "🧹 Limpiando contenedores anteriores si existen..."
+echo "🧹 Limpiando contenedores anteriores..."
 docker compose down --remove-orphans 2>/dev/null || true
 
-# ─── Construir imágenes ─────────────────────────────────────────────────────
+# ─── Levantar base de datos ─────────────────────────────────────────────────
 echo ""
-echo "🔨 Construyendo aplicación (Frontend y Backend)..."
-docker compose build backend migrate seed
+echo "🚀 Levantando base de datos..."
+docker compose up -d db
 
-# ─── Levantar servicios ─────────────────────────────────────────────────────
 echo ""
-echo "🚀 Levantando servicios (PostgreSQL + NethRent)..."
-docker compose up -d db backend
-
-# ─── Esperar a que PostgreSQL esté completamente listo ──────────────────────
-echo ""
-echo "⏳ Esperando que PostgreSQL esté completamente listo..."
+echo "⏳ Esperando que PostgreSQL esté listo..."
 RETRIES=30
 COUNT=0
-until docker compose exec -T db pg_isready -U "${DB_USER:-depas_user}" -d "${DB_NAME:-departamentos}" &> /dev/null; do
+until docker compose exec -T db pg_isready -U "${DB_USER}" -d "${DB_NAME}" &>/dev/null; do
   COUNT=$((COUNT + 1))
   if [ "$COUNT" -ge "$RETRIES" ]; then
     echo ""
-    echo "❌ La base de datos no respondió después de $RETRIES intentos."
-    echo "   Revisa los logs: docker compose logs db"
+    echo "❌ La base de datos no respondió. Revisa: docker compose logs db"
     exit 1
   fi
   printf "   ... esperando (%d/%d)\r" "$COUNT" "$RETRIES"
-  sleep 3
+  sleep 2
 done
 echo "✅ PostgreSQL listo                    "
 
-# ─── Ejecutar migraciones ───────────────────────────────────────────────────
-echo ""
-echo "🔄 Ejecutando migraciones de base de datos..."
-docker compose --profile tools run --rm migrate
-echo "✅ Migraciones completadas"
+# ─── Detectar si es el primer despliegue ────────────────────────────────────
+TABLE_EXISTS=$(docker compose exec -T db psql -U "${DB_USER}" -d "${DB_NAME}" -tAc \
+  "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='inquilinos'" \
+  2>/dev/null | tr -d '[:space:]' || echo "0")
 
-# ─── Ejecutar seed (solo si es la primera vez) ──────────────────────────────
-echo ""
-echo "🌱 Ejecutando seed de datos iniciales..."
-docker compose --profile tools run --rm seed
-echo "✅ Seed completado"
+if [ "$FORCE_RESET" = "1" ] || [ "${TABLE_EXISTS:-0}" = "0" ]; then
+  if [ "$FORCE_RESET" = "1" ]; then
+    echo ""
+    echo "🔄 Reset forzado — ejecutando migraciones completas..."
+  else
+    echo ""
+    echo "🔄 Primer despliegue — creando esquema de base de datos..."
+  fi
 
-# ─── Verificar que el backend responde ──────────────────────────────────────
+  docker compose build migrate seed
+  docker compose --profile tools run --rm migrate
+  echo "✅ Esquema creado"
+
+  echo ""
+  echo "🌱 Creando datos iniciales..."
+  docker compose --profile tools run --rm seed
+  echo "✅ Datos iniciales creados"
+else
+  echo "✅ Base de datos ya inicializada — omitiendo migraciones"
+  echo "   (usa ./start.sh --reset para borrar todo y empezar de cero)"
+fi
+
+# ─── Construir y levantar backend ───────────────────────────────────────────
+echo ""
+echo "🔨 Construyendo backend..."
+docker compose build backend
+
+echo ""
+echo "🚀 Iniciando backend..."
+docker compose up -d backend
+
+# ─── Esperar a que el backend responda ──────────────────────────────────────
 echo ""
 echo "🔍 Verificando que el sistema responde..."
-HEALTH_RETRIES=15
+HEALTH_RETRIES=20
 HEALTH_COUNT=0
-until curl -sf http://localhost:3001/health &> /dev/null; do
+until wget -qO- http://localhost:3001/health &>/dev/null 2>&1 || \
+      curl -sf http://localhost:3001/health &>/dev/null 2>&1; do
   HEALTH_COUNT=$((HEALTH_COUNT + 1))
   if [ "$HEALTH_COUNT" -ge "$HEALTH_RETRIES" ]; then
-    echo "⚠️  El backend aún no responde en /health. Revisa los logs:"
+    echo ""
+    echo "⚠️  El backend aún no responde. Revisa los logs:"
     echo "   docker compose logs backend"
     break
   fi
@@ -146,7 +168,8 @@ until curl -sf http://localhost:3001/health &> /dev/null; do
   sleep 2
 done
 
-if curl -sf http://localhost:3001/health &> /dev/null; then
+if wget -qO- http://localhost:3001/health &>/dev/null 2>&1 || \
+   curl -sf http://localhost:3001/health &>/dev/null 2>&1; then
   echo "✅ Sistema respondiendo correctamente"
 fi
 
@@ -159,10 +182,8 @@ echo ""
 echo "   🌍 Web App: http://localhost:3001"
 echo "   📡 API:     http://localhost:3001/api"
 echo ""
-echo "📋 Credenciales de acceso a la app:"
-echo "   (Crea tu cuenta de Administrador directamente en el registro)"
-echo ""
 echo "Comandos útiles:"
-echo "  Ver logs:               docker compose logs -f backend"
-echo "  Detener todo:           docker compose down"
-echo "  Reiniciar backend:      docker compose restart backend"
+echo "  Ver logs:          docker compose logs -f backend"
+echo "  Detener todo:      docker compose down"
+echo "  Reiniciar backend: docker compose restart backend"
+echo "  Reset completo:    ./start.sh --reset"

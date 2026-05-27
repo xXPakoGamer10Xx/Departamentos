@@ -4,9 +4,9 @@ import { pool } from '../config/database';
 import { toTitleCase } from '../utils/formatters';
 
 // Datos del Excel: BASE DE DATOS DEPAS TEX.xlsx
-const departamentosData = Array.from({ length: 9 }, (_, i) => ({
+const departamentosData = Array.from({ length: 12 }, (_, i) => ({
   numero: i + 1,
-  estado: 'ocupado',
+  estado: 'disponible',
   ubicacion: 'Callejón Zaragoza s/n, San Juan Chiautla, C.P. 56030',
   inventario_base: [
     'Llaves',

@@ -67,7 +67,7 @@ export async function updateDepartamento(req: AuthRequest, res: Response, next: 
       [
         estado ?? d.estado,
         descripcion ?? d.descripcion,
-        inventario_base !== undefined ? JSON.stringify(inventario_base) : d.inventario_base,
+        JSON.stringify(inventario_base !== undefined ? inventario_base : d.inventario_base),
         req.user!.id,
         Number(numero),
       ]
@@ -135,7 +135,8 @@ export async function getDepartamentosStats(req: AuthRequest, res: Response, nex
         COUNT(*) FILTER (WHERE estado = 'mantenimiento') AS mantenimiento,
         COUNT(*) AS total,
         (SELECT COALESCE(SUM(renta), 0) FROM inquilinos WHERE admin_id = $1 AND estado = 'activo') AS ingresos_mensuales,
-        (SELECT COUNT(*) FROM inquilinos WHERE admin_id = $1 AND fecha_termino <= NOW() + INTERVAL '30 days' AND estado = 'activo') AS contratos_por_vencer
+        (SELECT COUNT(*) FROM inquilinos WHERE admin_id = $1 AND fecha_termino > NOW() AND fecha_termino <= NOW() + INTERVAL '30 days' AND estado = 'activo') AS contratos_por_vencer,
+        (SELECT COUNT(*) FROM inquilinos WHERE admin_id = $1 AND fecha_termino <= NOW() AND estado = 'activo') AS contratos_vencidos
       FROM departamentos WHERE admin_id = $1
     `, [req.user!.id]);
     res.json({ success: true, data: result.rows[0] });

@@ -5,6 +5,7 @@ import { AuthRequest } from '../middleware/auth.middleware';
 import { toTitleCase } from '../utils/formatters';
 import { PdfService } from '../services/PdfService';
 import { v4 as uuidv4 } from 'uuid';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // GET /api/inquilinos/mi-depto — para el inquilino autenticado
 export async function getMiDepto(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
@@ -288,7 +289,11 @@ export async function deleteInquilino(req: AuthRequest, res: Response, next: Nex
     const anterior = await pool.query(`SELECT * FROM inquilinos WHERE admin_id = $1 AND id = $2`, [req.user!.id, id]);
     if (!anterior.rows[0]) throw new AppError('Inquilino no encontrado', 404);
 
-    await pool.query(`DELETE FROM inquilinos WHERE admin_id = $1 AND id = $2`, [req.user!.id, id]);
+    // Soft delete: conservar historial, solo marcar como inactivo
+    await pool.query(
+      `UPDATE inquilinos SET estado = 'inactivo' WHERE admin_id = $1 AND id = $2`,
+      [req.user!.id, id]
+    );
 
     // Liberar el departamento
     await pool.query(
@@ -297,10 +302,60 @@ export async function deleteInquilino(req: AuthRequest, res: Response, next: Nex
     );
 
     if ((req as any).audit) {
-      await (req as any).audit(id, anterior.rows[0], null);
+      await (req as any).audit(id, anterior.rows[0], { ...anterior.rows[0], estado: 'inactivo' });
     }
 
-    res.json({ success: true, message: 'Inquilino eliminado correctamente' });
+    res.json({ success: true, message: 'Inquilino dado de baja correctamente' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// POST /api/inquilinos/extraer-ine
+export async function extraerIne(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { imagen_base64 } = req.body;
+    if (!imagen_base64) throw new AppError('imagen_base64 es requerida', 400);
+
+    const apiKey = process.env.GOOGLE_AI_API_KEY;
+    if (!apiKey) throw new AppError('GOOGLE_AI_API_KEY no configurada en el servidor', 500);
+
+    // Separar header del dato puro: "data:image/jpeg;base64,<data>"
+    const commaIndex = imagen_base64.indexOf(',');
+    const header = commaIndex > -1 ? imagen_base64.slice(0, commaIndex) : '';
+    const base64puro = commaIndex > -1 ? imagen_base64.slice(commaIndex + 1) : imagen_base64;
+    const mimeType = header.match(/:(.*?);/)?.[1] ?? 'image/jpeg';
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
+
+    const result = await model.generateContent([
+      { inlineData: { data: base64puro, mimeType } },
+      'Eres un extractor de datos de documentos de identidad mexicanos (INE/credencial de elector). ' +
+      'Analiza la imagen y extrae los campos indicados. ' +
+      'IMPORTANTE: responde SOLO con el objeto JSON, sin texto adicional, sin bloques de código, sin explicaciones.\n' +
+      'Formato exacto requerido:\n' +
+      '{"nombre_completo":"","domicilio":"","colonia":"","municipio":"","estado":"","cp":""}\n' +
+      'Si un campo no es legible déjalo como "".',
+    ]);
+
+    const rawText = result.response.text().trim();
+    console.log('[extraerIne] respuesta del modelo:', rawText.substring(0, 300));
+
+    // Extracción robusta: buscar el primer { y el último } en la respuesta
+    let datos: Record<string, string>;
+    try {
+      const firstBrace = rawText.indexOf('{');
+      const lastBrace  = rawText.lastIndexOf('}');
+      if (firstBrace === -1 || lastBrace === -1) throw new Error('no braces');
+      const jsonStr = rawText.slice(firstBrace, lastBrace + 1);
+      datos = JSON.parse(jsonStr);
+    } catch {
+      console.error('[extraerIne] texto recibido:', rawText);
+      throw new AppError('El modelo no devolvió JSON válido. Intenta con una imagen más clara o mejor iluminación.', 422);
+    }
+
+    res.json({ success: true, data: datos });
   } catch (err) {
     next(err);
   }
@@ -315,7 +370,11 @@ export async function getContratoPdf(req: AuthRequest, res: Response, next: Next
     const inquilino = result.rows[0];
 
     const [configRes, deptoRes] = await Promise.all([
-      pool.query(`SELECT clave, valor FROM configuracion WHERE admin_id = $1 AND clave IN ('arrendador_nombre', 'arrendador_direccion')`, [req.user!.id]),
+      pool.query(
+        `SELECT clave, valor FROM configuracion WHERE admin_id = $1
+         AND clave IN ('arrendador_nombre', 'arrendador_direccion', 'contrato_docx_template')`,
+        [req.user!.id]
+      ),
       pool.query(`SELECT inventario_base FROM departamentos WHERE admin_id = $1 AND numero = $2`, [req.user!.id, inquilino.depto_numero]),
     ]);
 
@@ -329,7 +388,11 @@ export async function getContratoPdf(req: AuthRequest, res: Response, next: Next
       inventario_base: deptoRes.rows[0]?.inventario_base || [],
     };
 
-    const pdfBuffer = await PdfService.generateContratoPdf(data);
+    // Usar plantilla personalizada si el admin la subió, sino la default
+    const customTemplate = config['contrato_docx_template'];
+    const pdfBuffer = customTemplate
+      ? await PdfService.generateFromDocxTemplate(customTemplate, data)
+      : await PdfService.generateContratoPdf(data);
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="contrato_${inquilino.depto_numero}_${inquilino.nombre_completo.replace(/\s+/g, '_')}.pdf"`);

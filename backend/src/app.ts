@@ -14,10 +14,12 @@ import { cuotasRouter } from './routes/cuotas.routes';
 import { pushRouter } from './routes/push.routes';
 import { eventsRouter } from './routes/events.routes';
 import { notificacionesRouter } from './routes/notificaciones.routes';
+import { inviteCodesRouter } from './routes/invite-codes.routes';
 import { errorHandler } from './middleware/error.middleware';
 import { requestLogger } from './middleware/logger.middleware';
 import { initDB } from './config/database';
 import { initBackupCron } from './config/backup';
+import { initScheduler } from './services/scheduler.service';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -57,6 +59,7 @@ app.use('/api/cuotas', cuotasRouter);
 app.use('/api/push', pushRouter);
 app.use('/api/events', eventsRouter);
 app.use('/api/notificaciones', notificacionesRouter);
+app.use('/api/invite-codes', inviteCodesRouter);
 
 // Error handler global (debe ir al final)
 app.use(errorHandler);
@@ -79,6 +82,8 @@ async function bootstrap() {
 
     initBackupCron();
     console.log('✅ Cron de backup configurado');
+
+    initScheduler();
 
     app.listen(PORT, () => {
       console.log(`🚀 Backend corriendo en http://localhost:${PORT}`);

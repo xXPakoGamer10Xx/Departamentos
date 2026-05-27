@@ -92,22 +92,46 @@ export async function register(req: Request, res: Response, next: NextFunction):
       throw new AppError('La contraseña debe tener al menos 8 caracteres', 400);
     }
 
-    const userRol: 'admin' | 'inquilino' = rol === 'admin' ? 'admin' : 'inquilino';
+    // Rol por defecto según el que viene en el body
+    let userRol: 'admin' | 'inquilino' | 'cobrador' = rol === 'admin' ? 'admin' : 'inquilino';
 
-    if (userRol === 'inquilino') {
+    // Variables para saber qué se debe hacer post-registro
+    let inquilinoIdToLink: string | null = null;
+    let codigoInvitacionId: string | null = null;
+
+    if (userRol !== 'admin') {
       if (!invite_code) {
-        throw new AppError('Se requiere un código de invitación válido para inquilinos', 403);
+        throw new AppError('Se requiere un código de invitación válido', 403);
       }
-      const tokenResult = await pool.query(
-        `SELECT id, email_invitacion FROM inquilinos WHERE invitation_token = $1 AND usuario_id IS NULL`,
+
+      // 1️⃣ Verificar código en la tabla codigos_invitacion (nuevo sistema)
+      const codigoResult = await pool.query(
+        `SELECT id, rol, expira_en FROM codigos_invitacion
+         WHERE codigo = $1 AND usado = false
+           AND (expira_en IS NULL OR expira_en > NOW())`,
         [invite_code]
       );
-      if (tokenResult.rows.length === 0) {
-        throw new AppError('Código de invitación inválido o ya utilizado', 403);
-      }
-      const inquilinoRec = tokenResult.rows[0];
-      if (inquilinoRec.email_invitacion && inquilinoRec.email_invitacion.toLowerCase() !== email.toLowerCase().trim()) {
-        throw new AppError(`El correo debe coincidir con la invitación original`, 403);
+
+      if (codigoResult.rows.length > 0) {
+        // Código del nuevo sistema → usar el rol que dice el código
+        const codigoRec = codigoResult.rows[0];
+        userRol = codigoRec.rol as 'inquilino' | 'cobrador';
+        codigoInvitacionId = codigoRec.id;
+      } else {
+        // 2️⃣ Fallback: verificar en invitation_token de inquilinos (sistema anterior)
+        const tokenResult = await pool.query(
+          `SELECT id, email_invitacion FROM inquilinos WHERE invitation_token = $1 AND usuario_id IS NULL`,
+          [invite_code]
+        );
+        if (tokenResult.rows.length === 0) {
+          throw new AppError('Código de invitación inválido, expirado o ya utilizado', 403);
+        }
+        const inquilinoRec = tokenResult.rows[0];
+        if (inquilinoRec.email_invitacion && inquilinoRec.email_invitacion.toLowerCase() !== email.toLowerCase().trim()) {
+          throw new AppError('El correo debe coincidir con la invitación original', 403);
+        }
+        userRol = 'inquilino';
+        inquilinoIdToLink = invite_code; // guardamos el token para el UPDATE posterior
       }
     }
 
@@ -129,11 +153,18 @@ export async function register(req: Request, res: Response, next: NextFunction):
 
     const user = result.rows[0];
 
-    // Si es inquilino, ligarlo al registro y limpiar el token
-    if (userRol === 'inquilino') {
+    // Acciones post-creación según la fuente del código
+    if (codigoInvitacionId) {
+      // Marcar el código de invitación como usado
+      await pool.query(
+        `UPDATE codigos_invitacion SET usado = true, usado_en = NOW(), usado_por = $1 WHERE id = $2`,
+        [user.id, codigoInvitacionId]
+      );
+    } else if (inquilinoIdToLink) {
+      // Sistema anterior: ligar usuario al inquilino
       await pool.query(
         `UPDATE inquilinos SET usuario_id = $1, invitation_token = NULL WHERE invitation_token = $2`,
-        [user.id, invite_code]
+        [user.id, inquilinoIdToLink]
       );
     }
 

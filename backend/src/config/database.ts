@@ -86,12 +86,22 @@ ALTER TABLE pagos ADD COLUMN IF NOT EXISTS comprobante_url TEXT;
 ALTER TABLE pagos ADD COLUMN IF NOT EXISTS comprobante_subido_en TIMESTAMPTZ;
 
 -- Asegurar columnas y constraints actualizados en inquilinos
+ALTER TABLE inquilinos ADD COLUMN IF NOT EXISTS deposito NUMERIC(10,2) NOT NULL DEFAULT 0;
 ALTER TABLE inquilinos ADD COLUMN IF NOT EXISTS metodo_pago VARCHAR(20) DEFAULT 'efectivo';
 ALTER TABLE inquilinos ADD COLUMN IF NOT EXISTS deposito_tipo VARCHAR(50) DEFAULT 'ninguno';
 ALTER TABLE inquilinos ADD COLUMN IF NOT EXISTS deposito_fechas JSONB DEFAULT '[]';
 ALTER TABLE inquilinos DROP CONSTRAINT IF EXISTS inquilinos_metodo_pago_check;
 ALTER TABLE inquilinos ADD CONSTRAINT inquilinos_metodo_pago_check
   CHECK (metodo_pago IS NULL OR metodo_pago IN ('efectivo', 'transferencia', 'ambos'));
+
+-- Columnas de auditoría de escaneo en pagos
+ALTER TABLE pagos ADD COLUMN IF NOT EXISTS escaneado_por UUID REFERENCES usuarios(id) ON DELETE SET NULL;
+ALTER TABLE pagos ADD COLUMN IF NOT EXISTS escaneado_en TIMESTAMPTZ;
+
+-- Rol cobrador en usuarios
+ALTER TABLE usuarios DROP CONSTRAINT IF EXISTS usuarios_rol_check;
+ALTER TABLE usuarios ADD CONSTRAINT usuarios_rol_check
+  CHECK (rol IN ('admin', 'inquilino', 'cobrador'));
 `;
 
 export async function initDB(): Promise<void> {

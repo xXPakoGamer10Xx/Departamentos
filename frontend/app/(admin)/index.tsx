@@ -44,6 +44,7 @@ export default function DashboardScreen() {
   const [stats, setStats] = useState<any>(null);
   const [proximosPagos, setProximosPagos] = useState<any[]>([]);
   const [proximosVencer, setProximosVencer] = useState<any[]>([]);
+  const [contratosVencidos, setContratosVencidos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -78,11 +79,20 @@ export default function DashboardScreen() {
           .filter(inq => {
             if (!inq.fecha_termino) return false;
             const diff = (new Date(inq.fecha_termino).getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24);
-            return diff >= 0 && diff <= 60;
+            return diff >= 0 && diff <= 30;
           })
           .sort((a, b) => new Date(a.fecha_termino).getTime() - new Date(b.fecha_termino).getTime())
-          .slice(0, 3);
+          .slice(0, 5);
         setProximosVencer(vencer);
+
+        const vencidos = inquilinos
+          .filter(inq => {
+            if (!inq.fecha_termino) return false;
+            return new Date(inq.fecha_termino).getTime() < hoy.getTime();
+          })
+          .sort((a, b) => new Date(b.fecha_termino).getTime() - new Date(a.fecha_termino).getTime())
+          .slice(0, 5);
+        setContratosVencidos(vencidos);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -138,6 +148,7 @@ export default function DashboardScreen() {
   const ingresos = Number(stats?.ingresos_mensuales || 0);
   const pctOcupacion = total > 0 ? Math.round((ocupados / total) * 100) : 0;
   const contratosVencer = Number(stats?.contratos_por_vencer ?? 0);
+  const contratosYaVencidos = Number(stats?.contratos_vencidos ?? 0);
 
   const paddingBottom = isDesktop ? 48 : insets.bottom + Theme.layout.dockHeight;
   const paddingTop = isDesktop ? 40 : insets.top + 24;
@@ -200,13 +211,26 @@ export default function DashboardScreen() {
           {/* Contratos */}
           <GlassCard style={styles.metricCard} padding={Theme.spacing.xl}>
             <View style={styles.metricTop}>
-              <View style={[styles.metricIcon, { backgroundColor: contratosVencer > 0 ? theme.warningLight : theme.successLight }]}>
-                <Ionicons name="document-text" size={20} color={contratosVencer > 0 ? theme.warning : theme.success} />
+              <View style={[styles.metricIcon, { backgroundColor: contratosYaVencidos > 0 ? theme.dangerLight : contratosVencer > 0 ? theme.warningLight : theme.successLight }]}>
+                <Ionicons name="document-text" size={20} color={contratosYaVencidos > 0 ? theme.danger : contratosVencer > 0 ? theme.warning : theme.success} />
               </View>
-              {contratosVencer > 0 && <Badge label="Alerta" variant="warning" size="sm" />}
+              {contratosYaVencidos > 0
+                ? <Badge label="Vencidos" variant="danger" size="sm" />
+                : contratosVencer > 0
+                  ? <Badge label="Alerta" variant="warning" size="sm" />
+                  : null
+              }
             </View>
             <Text style={[styles.metricValue, { color: theme.text }]}>{contratosVencer}</Text>
-            <Text style={[styles.metricLabel, { color: theme.textSecondary }]}>Contratos por vencer (30d)</Text>
+            <Text style={[styles.metricLabel, { color: theme.textSecondary }]}>Por vencer (30d)</Text>
+            {contratosYaVencidos > 0 && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 4 }}>
+                <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: theme.danger }} />
+                <Text style={{ fontSize: 12, color: theme.danger, fontWeight: '700' }}>
+                  {contratosYaVencidos} ya vencido{contratosYaVencidos > 1 ? 's' : ''}
+                </Text>
+              </View>
+            )}
           </GlassCard>
         </View>
 
@@ -245,51 +269,88 @@ export default function DashboardScreen() {
             )}
           </View>
 
-          {/* Contratos por Vencer */}
-          {proximosVencer.length > 0 && (
+          {/* Contratos por Vencer (próximos 30 días) */}
+          {(proximosVencer.length > 0 || contratosVencidos.length > 0) && (
             <View style={[isDesktop ? styles.desktopSide : undefined, !isDesktop ? { marginTop: Theme.spacing.xxl } : undefined]}>
-              <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <Text style={[styles.sectionTitle, { color: theme.text }]}>Contratos por Vencer</Text>
-                  <View style={[styles.sectionBadge, { backgroundColor: theme.dangerLight }]}>
-                    <Text style={[styles.sectionBadgeText, { color: theme.danger }]}>{proximosVencer.length}</Text>
+              {proximosVencer.length > 0 && (
+                <View style={styles.section}>
+                  <View style={styles.sectionHeader}>
+                    <Text style={[styles.sectionTitle, { color: theme.text }]}>Por vencer (30d)</Text>
+                    <View style={[styles.sectionBadge, { backgroundColor: theme.warningLight }]}>
+                      <Text style={[styles.sectionBadgeText, { color: theme.warning }]}>{proximosVencer.length}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.listStack}>
+                    {proximosVencer.map(inq => {
+                      const diasRestantes = Math.ceil((new Date(inq.fecha_termino).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                      const urgente = diasRestantes <= 7;
+                      return (
+                        <GlassCard key={inq.id} style={styles.listCard} borderRadius={Theme.borderRadius.lg} padding={0}>
+                          <View style={styles.listRow}>
+                            <View style={[styles.listAvatar, { backgroundColor: urgente ? theme.dangerLight : theme.warningLight }]}>
+                              <Text style={[styles.listAvatarText, { color: urgente ? theme.danger : theme.warning }]}>
+                                {getInitials(inq.nombre_completo)}
+                              </Text>
+                            </View>
+                            <View style={styles.listInfo}>
+                              <Text style={[styles.listName, { color: theme.text }]} numberOfLines={1}>{inq.nombre_completo}</Text>
+                              <Text style={[styles.listSub, { color: theme.textSecondary }]}>Depto {inq.depto_numero}</Text>
+                            </View>
+                            <View style={styles.listRight}>
+                              <Badge
+                                label={urgente ? `¡${diasRestantes}d!` : `${diasRestantes}d`}
+                                variant={urgente ? 'danger' : 'warning'}
+                                size="sm"
+                              />
+                            </View>
+                          </View>
+                        </GlassCard>
+                      );
+                    })}
                   </View>
                 </View>
-                <View style={styles.listStack}>
-                  {proximosVencer.map(inq => {
-                    const diasRestantes = Math.ceil((new Date(inq.fecha_termino).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-                    const urgente = diasRestantes <= 15;
-                    return (
-                      <GlassCard key={inq.id} style={styles.listCard} borderRadius={Theme.borderRadius.lg} padding={0}>
-                        <View style={styles.listRow}>
-                          <View style={[styles.listAvatar, { backgroundColor: urgente ? theme.dangerLight : theme.warningLight }]}>
-                            <Text style={[styles.listAvatarText, { color: urgente ? theme.danger : theme.warning }]}>
-                              {getInitials(inq.nombre_completo)}
-                            </Text>
+              )}
+
+              {/* Contratos ya vencidos */}
+              {contratosVencidos.length > 0 && (
+                <View style={[styles.section, proximosVencer.length > 0 && { marginTop: Theme.spacing.xl }]}>
+                  <View style={styles.sectionHeader}>
+                    <Text style={[styles.sectionTitle, { color: theme.text }]}>Contratos vencidos</Text>
+                    <View style={[styles.sectionBadge, { backgroundColor: theme.dangerLight }]}>
+                      <Text style={[styles.sectionBadgeText, { color: theme.danger }]}>{contratosVencidos.length}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.listStack}>
+                    {contratosVencidos.map(inq => {
+                      const diasVencido = Math.abs(Math.ceil((new Date(inq.fecha_termino).getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+                      return (
+                        <GlassCard key={inq.id} style={styles.listCard} borderRadius={Theme.borderRadius.lg} padding={0}>
+                          <View style={styles.listRow}>
+                            <View style={[styles.listAvatar, { backgroundColor: theme.dangerLight }]}>
+                              <Text style={[styles.listAvatarText, { color: theme.danger }]}>
+                                {getInitials(inq.nombre_completo)}
+                              </Text>
+                            </View>
+                            <View style={styles.listInfo}>
+                              <Text style={[styles.listName, { color: theme.text }]} numberOfLines={1}>{inq.nombre_completo}</Text>
+                              <Text style={[styles.listSub, { color: theme.textSecondary }]}>Depto {inq.depto_numero}</Text>
+                            </View>
+                            <View style={styles.listRight}>
+                              <Badge label={`-${diasVencido}d`} variant="danger" size="sm" />
+                            </View>
                           </View>
-                          <View style={styles.listInfo}>
-                            <Text style={[styles.listName, { color: theme.text }]} numberOfLines={1}>{inq.nombre_completo}</Text>
-                            <Text style={[styles.listSub, { color: theme.textSecondary }]}>Depto {inq.depto_numero}</Text>
-                          </View>
-                          <View style={styles.listRight}>
-                            <Badge
-                              label={urgente ? 'Urgente' : `${diasRestantes}d`}
-                              variant={urgente ? 'danger' : 'warning'}
-                              size="sm"
-                            />
-                          </View>
-                        </View>
-                      </GlassCard>
-                    );
-                  })}
+                        </GlassCard>
+                      );
+                    })}
+                  </View>
                 </View>
-              </View>
+              )}
             </View>
           )}
         </View>
 
         {/* Empty state */}
-        {proximosPagos.length === 0 && proximosVencer.length === 0 && (
+        {proximosPagos.length === 0 && proximosVencer.length === 0 && contratosVencidos.length === 0 && (
           <GlassCard style={styles.emptyCard} padding={Theme.spacing.xxxl}>
             <View style={styles.emptyContent}>
               <View style={[styles.emptyIconWrap, { backgroundColor: theme.successLight }]}>

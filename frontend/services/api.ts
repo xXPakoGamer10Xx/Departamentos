@@ -67,7 +67,8 @@ class ApiService {
 
     if (!response.ok) {
       // Token expirado o inválido → limpiar sesión y redirigir al login
-      if (response.status === 401) {
+      // (pero NO si estamos intentando hacer login — ese 401 es "credenciales incorrectas")
+      if (response.status === 401 && path !== '/auth/login') {
         this.clearSession();
         this.onUnauthorized?.();
       }
@@ -174,6 +175,15 @@ class ApiService {
   updateConfig = (data: object) =>
     this.request<void>('PUT', '/config', data);
 
+  uploadContratoTemplate = (docxBase64: string, nombre: string) =>
+    this.request<void>('PUT', '/config', {
+      contrato_docx_template: docxBase64,
+      contrato_docx_nombre: nombre,
+    });
+
+  deleteContratoTemplate = () =>
+    this.request<void>('DELETE', '/config/contrato-template');
+
   // Tickets
   getTickets = (params?: { estado?: string }) =>
     this.request<any[]>('GET', '/tickets', undefined, params as any);
@@ -215,6 +225,31 @@ class ApiService {
 
   confirmarPagoPorId = (pago_id: string) =>
     this.request<any>('POST', `/pagos/confirmar-admin/${pago_id}`);
+
+  rechazarPagoPorId = (pago_id: string, comentario?: string) =>
+    this.request<any>('POST', `/pagos/rechazar-admin/${pago_id}`, { comentario: comentario || '' });
+
+  getComprobantesPendientes = () =>
+    this.request<any[]>('GET', '/pagos/comprobantes-pendientes');
+
+  // Invite codes
+  generarCodigoInvitacion = (rol: string, expira_dias: number | null) =>
+    this.request<any>('POST', '/invite-codes', { rol, expira_dias });
+
+  getCodigosInvitacion = () =>
+    this.request<any[]>('GET', '/invite-codes');
+
+  revocarCodigoInvitacion = (id: string) =>
+    this.request<void>('DELETE', `/invite-codes/${id}`);
+
+  // INE OCR
+  extraerDatosINE = (imagen_base64: string) =>
+    this.request<{ nombre_completo: string; domicilio: string; colonia: string; municipio: string; estado: string; cp: string }>
+    ('POST', '/inquilinos/extraer-ine', { imagen_base64 });
+
+  // Cambiar rol de usuario
+  cambiarRolUsuario = (id: string, rol: string) =>
+    this.request<any>('PATCH', `/usuarios/${id}/rol`, { rol });
 
   getHistorialPagos = (inquilino_id: string) =>
     this.request<any[]>('GET', `/pagos/historial/${inquilino_id}`);

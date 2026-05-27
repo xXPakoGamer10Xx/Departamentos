@@ -120,9 +120,12 @@ export async function confirmarPago(req: AuthRequest, res: Response, next: NextF
       return;
     }
 
+    const scannerId: string | null = (req as any).user?.id || req.body?.scanner_id || null;
     const updated = await pool.query(
-      `UPDATE pagos SET confirmado = true, confirmado_en = NOW() WHERE qr_token = $1 RETURNING *`,
-      [token]
+      `UPDATE pagos SET confirmado = true, confirmado_en = NOW(),
+         escaneado_por = $2, escaneado_en = NOW()
+       WHERE qr_token = $1 RETURNING *`,
+      [token, scannerId]
     );
 
     // Marcar cuotas extra pendientes como pagadas
@@ -153,6 +156,54 @@ export async function confirmarPago(req: AuthRequest, res: Response, next: NextF
         }
         return Promise.all(tasks);
       }).catch(() => {});
+  } catch (err) {
+    next(err);
+  }
+}
+
+// POST /api/pagos/rechazar-admin/:pago_id  — admin rechaza comprobante enviado
+export async function rechazarPagoAdmin(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { pago_id } = req.params;
+    const { comentario } = req.body;
+
+    const pagoRes = await pool.query(
+      `SELECT p.*, i.nombre_completo, i.depto_numero, i.usuario_id as inquilino_usuario_id, i.admin_id
+       FROM pagos p JOIN inquilinos i ON i.id = p.inquilino_id
+       WHERE p.id = $1 AND i.admin_id = $2`,
+      [pago_id, req.user!.id]
+    );
+    if (!pagoRes.rows[0]) throw new AppError('Pago no encontrado o no autorizado', 404);
+    const pago = pagoRes.rows[0];
+
+    if (pago.confirmado) throw new AppError('El pago ya fue confirmado y no puede rechazarse', 400);
+
+    const updated = await pool.query(
+      `UPDATE pagos SET rechazado = true, rechazado_en = NOW(), comentario_admin = $2
+       WHERE id = $1 RETURNING *`,
+      [pago_id, comentario?.trim() || null]
+    );
+
+    const pagoData = {
+      ...updated.rows[0],
+      nombre_completo: pago.nombre_completo,
+      depto_numero: pago.depto_numero,
+    };
+    res.json({ success: true, data: pagoData });
+
+    // Notificar al inquilino
+    if (pago.inquilino_usuario_id) {
+      emitToUser(pago.inquilino_usuario_id, 'payment_rejected', { pago: pagoData });
+      const razon = comentario?.trim()
+        ? `Razón: ${comentario.trim()}`
+        : `Por favor envía un nuevo comprobante.`;
+      createAndSendNotification(
+        pago.inquilino_usuario_id,
+        '❌ Comprobante rechazado',
+        `Tu comprobante de ${pago.periodo} fue rechazado. ${razon}`,
+        'pago'
+      ).catch(() => {});
+    }
   } catch (err) {
     next(err);
   }
@@ -193,7 +244,8 @@ export async function subirComprobante(req: AuthRequest, res: Response, next: Ne
     }
 
     const updated = await pool.query(
-      `UPDATE pagos SET comprobante_url = $1, comprobante_subido_en = NOW()
+      `UPDATE pagos SET comprobante_url = $1, comprobante_subido_en = NOW(),
+         rechazado = false, rechazado_en = NULL, comentario_admin = NULL
        WHERE id = $2 AND confirmado = false RETURNING *`,
       [comprobante_url, pagoRes.rows[0].id]
     );
@@ -237,8 +289,10 @@ export async function confirmarPagoAdmin(req: AuthRequest, res: Response, next: 
     }
 
     const updated = await pool.query(
-      `UPDATE pagos SET confirmado = true, confirmado_en = NOW() WHERE id = $1 RETURNING *`,
-      [pago_id]
+      `UPDATE pagos SET confirmado = true, confirmado_en = NOW(),
+         escaneado_por = $2, escaneado_en = NOW()
+       WHERE id = $1 RETURNING *`,
+      [pago_id, req.user!.id]
     );
 
     await pool.query(
@@ -263,18 +317,53 @@ export async function confirmarPagoAdmin(req: AuthRequest, res: Response, next: 
   }
 }
 
+// GET /api/pagos/comprobantes-pendientes  — para cobrador y admin
+export async function getComprobantesPendientes(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const rol = req.user!.rol;
+
+    // Admin ve solo los suyos; cobrador ve todos (sin restricción de admin_id)
+    const whereAdmin = rol === 'admin' ? 'AND i.admin_id = $1' : '';
+    const params = rol === 'admin' ? [req.user!.id] : [];
+
+    const result = await pool.query(
+      `SELECT p.id, p.monto, p.periodo, p.comprobante_url, p.comprobante_subido_en,
+              i.nombre_completo, i.depto_numero, i.id AS inquilino_id
+       FROM pagos p
+       JOIN inquilinos i ON i.id = p.inquilino_id
+       WHERE p.comprobante_url IS NOT NULL
+         AND p.confirmado = false
+         AND p.rechazado = false
+         ${whereAdmin}
+       ORDER BY p.comprobante_subido_en DESC`,
+      params
+    );
+
+    res.json({ success: true, data: result.rows });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // GET /api/pagos/historial/:inquilino_id
 export async function getHistorialPagos(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     const { inquilino_id } = req.params;
 
-    let authCheck = req.user!.rol === 'inquilino' ? 'AND usuario_id = $2' : 'AND admin_id = $2';
-    const own = await pool.query(`SELECT id FROM inquilinos WHERE id = $1 ${authCheck}`, [inquilino_id, req.user!.id]);
+    const rol = req.user!.rol;
+    const authCheck = rol === 'inquilino' ? 'AND usuario_id = $2' : 'AND admin_id = $2';
+    const own = rol === 'cobrador'
+      ? await pool.query(`SELECT id FROM inquilinos WHERE id = $1`, [inquilino_id])
+      : await pool.query(`SELECT id FROM inquilinos WHERE id = $1 ${authCheck}`, [inquilino_id, req.user!.id]);
     if (!own.rows[0]) throw new AppError('No autorizado', 403);
 
     const result = await pool.query(
-      `SELECT p.*, i.fecha_pago, i.nombre_completo, i.depto_numero
-       FROM pagos p JOIN inquilinos i ON i.id = p.inquilino_id
+      `SELECT p.*,
+              i.fecha_pago, i.nombre_completo, i.depto_numero,
+              u.nombre_completo AS escaneado_por_nombre
+       FROM pagos p
+       JOIN inquilinos i ON i.id = p.inquilino_id
+       LEFT JOIN usuarios u ON u.id = p.escaneado_por
        WHERE p.inquilino_id = $1
        ORDER BY p.periodo DESC`,
       [inquilino_id]

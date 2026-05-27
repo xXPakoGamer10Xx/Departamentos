@@ -1,6 +1,6 @@
 import {
   StyleSheet, View, Text, ScrollView, TouchableOpacity,
-  useColorScheme, ActivityIndicator, Platform, useWindowDimensions,
+  useColorScheme, ActivityIndicator, Platform, useWindowDimensions, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../../../../constants/Colors';
@@ -9,6 +9,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Print from 'expo-print';
 import api from '../../../../services/api';
 
 export default function ContractPreviewScreen() {
@@ -33,12 +35,31 @@ export default function ContractPreviewScreen() {
   }, [id]);
 
   const handleAbrirPdf = async () => {
-    if (Platform.OS !== 'web') return;
     setOpening(true);
     try {
       const url = api.getContratoPdfUrl(id as string);
       const token = api.getToken();
-      window.open(`${url}?token=${encodeURIComponent(token || '')}`, '_blank');
+
+      if (Platform.OS === 'web') {
+        window.open(`${url}?token=${encodeURIComponent(token || '')}`, '_blank');
+        return;
+      }
+
+      // Android: descargar PDF y abrir diálogo de impresión nativo
+      const localUri = FileSystem.cacheDirectory + `contrato_${id}.pdf`;
+      const downloadResult = await FileSystem.downloadAsync(
+        `${url}?token=${encodeURIComponent(token || '')}`,
+        localUri
+      );
+
+      if (downloadResult.status !== 200) {
+        Alert.alert('Error', 'No se pudo descargar el contrato PDF');
+        return;
+      }
+
+      await Print.printAsync({ uri: localUri });
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'No se pudo imprimir el contrato');
     } finally {
       setOpening(false);
     }

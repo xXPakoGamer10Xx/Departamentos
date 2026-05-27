@@ -69,6 +69,7 @@ export default function RootLayout() {
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         <Stack.Screen name="(admin)" options={{ headerShown: false }} />
         <Stack.Screen name="(inquilino)" options={{ headerShown: false }} />
+        <Stack.Screen name="(cobrador)" options={{ headerShown: false }} />
         <Stack.Screen name="confirmar/[token]" options={{ headerShown: false }} />
         <Stack.Screen name="+not-found" />
       </Stack>

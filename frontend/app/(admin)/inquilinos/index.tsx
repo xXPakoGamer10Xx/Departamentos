@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   StyleSheet, View, Text, FlatList, TouchableOpacity,
   useColorScheme, Platform, useWindowDimensions, ActivityIndicator, Modal,
@@ -28,6 +28,8 @@ export default function InquilinosListScreen() {
   const [search, setSearch] = useState('');
   const [inquilinos, setInquilinos] = useState<Inquilino[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filtroEstado, setFiltroEstado] = useState<'activo' | 'inactivo'>('activo');
+  const filtroRef = useRef(filtroEstado);
   const [confirmItem, setConfirmItem] = useState<Inquilino | null>(null);
   const [eliminando, setEliminando] = useState(false);
   const [deleteError, setDeleteError] = useState('');
@@ -39,10 +41,10 @@ export default function InquilinosListScreen() {
   const isDesktop = width >= Theme.breakpoints.tablet;
   const insets = useSafeAreaInsets();
 
-  const cargar = async () => {
+  const cargar = async (estado: 'activo' | 'inactivo' = filtroRef.current) => {
     try {
       setLoading(true);
-      const res = await api.getInquilinos();
+      const res = await api.getInquilinos({ estado });
       setInquilinos(res.data || []);
     } catch {
       // error ya manejado por el API service
@@ -51,18 +53,23 @@ export default function InquilinosListScreen() {
     }
   };
 
-  useFocusEffect(useCallback(() => { cargar(); }, []));
+  useFocusEffect(useCallback(() => { cargar(filtroRef.current); }, []));
 
-  const confirmarEliminar = async () => {
+  useEffect(() => {
+    filtroRef.current = filtroEstado;
+    cargar(filtroEstado);
+  }, [filtroEstado]);
+
+  const confirmarDarDeBaja = async () => {
     if (!confirmItem) return;
     setDeleteError('');
     setEliminando(true);
     try {
       await api.deleteInquilino(String(confirmItem.id));
       setConfirmItem(null);
-      cargar();
+      cargar(filtroRef.current);
     } catch (e: any) {
-      setDeleteError(e.message || 'No se pudo eliminar el inquilino');
+      setDeleteError(e.message || 'No se pudo dar de baja al inquilino');
     } finally {
       setEliminando(false);
     }
@@ -73,7 +80,6 @@ export default function InquilinosListScreen() {
     String(i.depto_numero).includes(search)
   );
 
-  const activos = inquilinos.filter(i => i.estado === 'activo').length;
   const paddingBottom = isDesktop ? 40 : insets.bottom + Theme.layout.dockHeight;
 
   if (loading) {
@@ -102,15 +108,43 @@ export default function InquilinosListScreen() {
           <View>
             <Text style={[styles.title, { color: theme.text }]}>Inquilinos</Text>
             <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-              {activos} {activos === 1 ? 'activo' : 'activos'} de {inquilinos.length} total
+              {inquilinos.length} {filtroEstado === 'activo'
+                ? (inquilinos.length === 1 ? 'activo' : 'activos')
+                : (inquilinos.length === 1 ? 'archivado' : 'archivados')}
             </Text>
           </View>
+          {filtroEstado === 'activo' && (
+            <TouchableOpacity
+              style={[styles.addButton, { backgroundColor: theme.primary, shadowColor: theme.primary }]}
+              onPress={() => router.push('/(admin)/inquilinos/nuevo')}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="add" size={22} color="#fff" />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Tabs Activos / Archivados */}
+        <View style={styles.tabRow}>
           <TouchableOpacity
-            style={[styles.addButton, { backgroundColor: theme.primary, shadowColor: theme.primary }]}
-            onPress={() => router.push('/(admin)/inquilinos/nuevo')}
+            style={[styles.tab, filtroEstado === 'activo' && { backgroundColor: theme.primary }]}
+            onPress={() => setFiltroEstado('activo')}
             activeOpacity={0.8}
           >
-            <Ionicons name="add" size={22} color="#fff" />
+            <Ionicons name="people" size={14} color={filtroEstado === 'activo' ? '#fff' : theme.textSecondary} />
+            <Text style={[styles.tabText, { color: filtroEstado === 'activo' ? '#fff' : theme.textSecondary }]}>
+              Activos
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, filtroEstado === 'inactivo' && { backgroundColor: theme.primary }]}
+            onPress={() => setFiltroEstado('inactivo')}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="archive" size={14} color={filtroEstado === 'inactivo' ? '#fff' : theme.textSecondary} />
+            <Text style={[styles.tabText, { color: filtroEstado === 'inactivo' ? '#fff' : theme.textSecondary }]}>
+              Archivados
+            </Text>
           </TouchableOpacity>
         </View>
 
@@ -142,10 +176,14 @@ export default function InquilinosListScreen() {
                 <Ionicons name="people-outline" size={32} color={theme.textMuted} />
               </View>
               <Text style={[styles.emptyTitle, { color: theme.text }]}>
-                {search ? 'Sin resultados' : 'No hay inquilinos'}
+                {search ? 'Sin resultados' : filtroEstado === 'inactivo' ? 'Sin archivados' : 'No hay inquilinos'}
               </Text>
               <Text style={[styles.emptySub, { color: theme.textSecondary }]}>
-                {search ? `No se encontró "${search}"` : 'Agrega el primer inquilino con el botón +'}
+                {search
+                  ? `No se encontró "${search}"`
+                  : filtroEstado === 'inactivo'
+                    ? 'Aquí aparecerán los inquilinos dados de baja'
+                    : 'Agrega el primer inquilino con el botón +'}
               </Text>
             </View>
           </GlassCard>
@@ -193,39 +231,55 @@ export default function InquilinosListScreen() {
 
               {/* Acciones */}
               <View style={[styles.actions, { borderLeftColor: theme.border }]}>
-                <TouchableOpacity
-                  style={styles.actionBtn}
-                  onPress={() => router.push({ pathname: '/(admin)/inquilinos/nuevo', params: { editId: item.id } } as any)}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="pencil-outline" size={17} color={theme.primary} />
-                </TouchableOpacity>
-                <View style={[styles.actionDivider, { backgroundColor: theme.border }]} />
-                <TouchableOpacity
-                  style={styles.actionBtn}
-                  onPress={() => { setDeleteError(''); setConfirmItem(item); }}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="trash-outline" size={17} color={theme.danger} />
-                </TouchableOpacity>
+                {filtroEstado === 'activo' ? (
+                  <>
+                    <TouchableOpacity
+                      style={styles.actionBtn}
+                      onPress={() => router.push({ pathname: '/(admin)/inquilinos/nuevo', params: { editId: item.id } } as any)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="pencil-outline" size={17} color={theme.primary} />
+                    </TouchableOpacity>
+                    <View style={[styles.actionDivider, { backgroundColor: theme.border }]} />
+                    <TouchableOpacity
+                      style={styles.actionBtn}
+                      onPress={() => { setDeleteError(''); setConfirmItem(item); }}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="person-remove-outline" size={17} color={theme.danger} />
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.actionBtn, styles.nuevoContratoBtn]}
+                    onPress={() => router.push({ pathname: '/(admin)/inquilinos/nuevo', params: { fromId: item.id } } as any)}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="add-circle-outline" size={15} color={theme.primary} />
+                    <Text style={[styles.nuevoContratoBtnText, { color: theme.primary }]}>Nuevo{'\n'}contrato</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
           </GlassCard>
         )}
       />
 
-      {/* Modal confirmación eliminar */}
+      {/* Modal confirmación dar de baja */}
       <Modal visible={!!confirmItem} transparent animationType="fade" onRequestClose={() => setConfirmItem(null)}>
         <View style={styles.modalOverlay}>
           <GlassCard style={styles.confirmBox} borderRadius={Theme.borderRadius.xxl} variant="elevated">
             <View style={[styles.confirmIconWrap, { backgroundColor: theme.dangerLight }]}>
-              <Ionicons name="trash" size={26} color={theme.danger} />
+              <Ionicons name="person-remove" size={26} color={theme.danger} />
             </View>
-            <Text style={[styles.confirmTitle, { color: theme.text }]}>Eliminar Inquilino</Text>
+            <Text style={[styles.confirmTitle, { color: theme.text }]}>Dar de Baja</Text>
             <Text style={[styles.confirmMsg, { color: theme.textSecondary }]}>
-              ¿Seguro que deseas eliminar a{'\n'}
+              ¿Dar de baja a{'\n'}
               <Text style={{ color: theme.text, fontWeight: '700' }}>{confirmItem?.nombre_completo}</Text>?{'\n'}
-              El Departamento {confirmItem?.depto_numero} quedará disponible.
+              El Depto {confirmItem?.depto_numero} quedará disponible.
+            </Text>
+            <Text style={[styles.confirmNote, { color: theme.textSecondary }]}>
+              Sus datos se guardarán en el historial y podrás generar un nuevo contrato en el futuro.
             </Text>
 
             {deleteError ? (
@@ -244,10 +298,10 @@ export default function InquilinosListScreen() {
                 style={{ flex: 1 }}
               />
               <Button
-                title="Eliminar"
+                title="Dar de baja"
                 variant="danger"
                 loading={eliminando}
-                onPress={confirmarEliminar}
+                onPress={confirmarDarDeBaja}
                 style={{ flex: 1 }}
               />
             </View>
@@ -339,6 +393,22 @@ const styles = StyleSheet.create({
   cardDepto: { fontSize: 12, fontWeight: '500' },
   rentaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
   cardRenta: { fontSize: 14, fontWeight: '800' },
+  tabRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  tab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  tabText: { fontSize: 13, fontWeight: '600' },
   actions: {
     flexDirection: 'column',
     borderLeftWidth: StyleSheet.hairlineWidth,
@@ -347,6 +417,8 @@ const styles = StyleSheet.create({
   },
   actionBtn: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   actionDivider: { height: StyleSheet.hairlineWidth },
+  nuevoContratoBtn: { flexDirection: 'column', gap: 2, paddingHorizontal: 4 },
+  nuevoContratoBtnText: { fontSize: 10, fontWeight: '700', textAlign: 'center', lineHeight: 13 },
   // Empty
   emptyCard: {},
   emptyContent: { alignItems: 'center', gap: 12 },
@@ -383,6 +455,7 @@ const styles = StyleSheet.create({
   },
   confirmTitle: { fontSize: 20, fontWeight: '800', letterSpacing: -0.3 },
   confirmMsg: { fontSize: 15, textAlign: 'center', lineHeight: 22 },
+  confirmNote: { fontSize: 12, textAlign: 'center', lineHeight: 18, opacity: 0.7, marginTop: -6 },
   confirmActions: { flexDirection: 'row', gap: 12, width: '100%' },
   errorBox: {
     flexDirection: 'row',

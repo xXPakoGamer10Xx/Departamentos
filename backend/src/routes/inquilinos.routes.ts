@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   getMiDepto, getInquilinos, getInquilinoById, getContratoPdf,
   createInquilino, updateInquilino, deleteInquilino, vincularUsuario,
+  extraerIne,
 } from '../controllers/inquilinos.controller';
 import { authMiddleware, adminOnly } from '../middleware/auth.middleware';
 import { auditLog } from '../middleware/audit.middleware';
@@ -12,6 +13,7 @@ inquilinosRouter.use(authMiddleware);
 
 // Must be before /:id to avoid being treated as an ID
 inquilinosRouter.get('/mi-depto', getMiDepto);
+inquilinosRouter.post('/extraer-ine', adminOnly, extraerIne);
 
 inquilinosRouter.get('/', getInquilinos);
 inquilinosRouter.get('/:id', getInquilinoById);

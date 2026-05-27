@@ -81,6 +81,20 @@ export default function ConfiguracionScreen() {
   const [admins, setAdmins] = useState<any[]>([]);
   const [loadingAdmins, setLoadingAdmins] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [busquedaUsuario, setBusquedaUsuario] = useState('');
+  const [cambiandoRolId, setCambiandoRolId] = useState<string | null>(null);
+  const [rolModalUser, setRolModalUser] = useState<any | null>(null);
+
+  // Códigos de invitación
+  const [showCodigos, setShowCodigos] = useState(false);
+  const [codigos, setCodigos] = useState<any[]>([]);
+  const [loadingCodigos, setLoadingCodigos] = useState(false);
+  const [showGenerarCodigo, setShowGenerarCodigo] = useState(false);
+  const [generandoCodigo, setGenerandoCodigo] = useState(false);
+  const [codigoGenerado, setCodigoGenerado] = useState<any | null>(null);
+  const [rolCodigo, setRolCodigo] = useState<'inquilino' | 'cobrador'>('inquilino');
+  const [expiraDias, setExpiraDias] = useState<number | null>(7);
+  const [codigoCopiado, setCodigoCopiado] = useState(false);
 
   // Vincular modal
   const [vincularModal, setVincularModal] = useState<{ userId: string; userName: string } | null>(null);
@@ -88,12 +102,17 @@ export default function ConfiguracionScreen() {
   const [loadingInquilinos, setLoadingInquilinos] = useState(false);
   const [vinculando, setVinculando] = useState(false);
 
+  // Plantilla de contrato DOCX
+  const [showPlantilla, setShowPlantilla] = useState(false);
+  const [subiendoPlantilla, setSubiendoPlantilla] = useState(false);
+  const [borrandoPlantilla, setBorrandoPlantilla] = useState(false);
+
   // Nuevo usuario form
   const [showNuevoUsuario, setShowNuevoUsuario] = useState(false);
   const [nuNombre, setNuNombre] = useState('');
   const [nuEmail, setNuEmail] = useState('');
   const [nuPassword, setNuPassword] = useState('');
-  const [nuRol, setNuRol] = useState<'admin' | 'inquilino'>('admin');
+  const [nuRol, setNuRol] = useState<'admin' | 'cobrador' | 'inquilino'>('admin');
   const [creandoUsuario, setCreandoUsuario] = useState(false);
   const [nuError, setNuError] = useState('');
 
@@ -211,6 +230,149 @@ export default function ConfiguracionScreen() {
       setAdmins(prev => prev.map(a => a.id === id ? { ...a, activo: res.data?.activo } : a));
     } catch { /* ignore */ }
     finally { setTogglingId(null); }
+  };
+
+  const cambiarRolUsuario = async (id: string, nuevoRol: string) => {
+    setCambiandoRolId(id);
+    try {
+      const res = await api.cambiarRolUsuario(id, nuevoRol);
+      setAdmins(prev => prev.map(a => a.id === id ? { ...a, rol: res.data?.rol } : a));
+    } catch { /* ignore */ }
+    finally { setCambiandoRolId(null); setRolModalUser(null); }
+  };
+
+  const openCodigos = async () => {
+    setShowCodigos(true);
+    setLoadingCodigos(true);
+    setCodigoGenerado(null);
+    try {
+      const res = await api.getCodigosInvitacion();
+      setCodigos(res.data || []);
+    } catch { setCodigos([]); }
+    finally { setLoadingCodigos(false); }
+  };
+
+  const generarCodigo = async () => {
+    setGenerandoCodigo(true);
+    try {
+      const res = await api.generarCodigoInvitacion(rolCodigo, expiraDias);
+      setCodigoGenerado(res.data);
+      setCodigos(prev => [res.data, ...prev]);
+    } catch (e: any) {
+      // Mostrar error si ocurre
+    } finally { setGenerandoCodigo(false); }
+  };
+
+  const copiarCodigo = async (codigo: string) => {
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard) {
+        await navigator.clipboard.writeText(codigo);
+      }
+      setCodigoCopiado(true);
+      setTimeout(() => setCodigoCopiado(false), 2000);
+    } catch { /* ignore */ }
+  };
+
+  const compartirCodigo = async (codigo: string) => {
+    try {
+      const { Share } = await import('react-native');
+      await Share.share({
+        message: `Tu código de invitación para NethRent: ${codigo}`,
+        title: 'Código de Invitación NethRent',
+      });
+    } catch { /* ignore */ }
+  };
+
+  const revocarCodigo = async (id: string) => {
+    try {
+      await api.revocarCodigoInvitacion(id);
+      setCodigos(prev => prev.filter(c => c.id !== id));
+    } catch { /* ignore */ }
+  };
+
+  const subirPlantilla = async () => {
+    try {
+      let docxBase64: string | null = null;
+      let nombre = 'plantilla.docx';
+
+      if (Platform.OS === 'web') {
+        const result = await new Promise<{ base64: string; name: string } | null>((resolve) => {
+          const input = document.createElement('input');
+          input.type = 'file';
+          input.accept = '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+          input.onchange = (e: any) => {
+            const file = e.target.files?.[0];
+            if (!file) return resolve(null);
+            const reader = new FileReader();
+            reader.onload = (ev) => resolve({ base64: ev.target?.result as string, name: file.name });
+            reader.readAsDataURL(file);
+          };
+          input.click();
+        });
+        if (!result) return;
+        docxBase64 = result.base64;
+        nombre = result.name;
+      } else {
+        const DocumentPicker = await import('expo-document-picker');
+        const picked = await DocumentPicker.getDocumentAsync({
+          type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          copyToCacheDirectory: true,
+        });
+        if (picked.canceled || !picked.assets?.[0]) return;
+        const asset = picked.assets[0];
+        nombre = asset.name || 'plantilla.docx';
+        const FileSystem = await import('expo-file-system');
+        const b64 = await FileSystem.readAsStringAsync(asset.uri, {
+          encoding: 'base64' as any,
+        });
+        docxBase64 = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${b64}`;
+      }
+
+      if (!docxBase64) return;
+      setSubiendoPlantilla(true);
+      try {
+        await api.uploadContratoTemplate(docxBase64, nombre);
+        setConfig(prev => ({
+          ...prev,
+          contrato_docx_nombre: nombre,
+          contrato_docx_template: 'ok', // solo como flag visual
+        }));
+      } catch (e: any) {
+        if (Platform.OS === 'web') {
+          window.alert('Error al subir: ' + (e.message || 'Intenta de nuevo'));
+        }
+      } finally {
+        setSubiendoPlantilla(false);
+      }
+    } catch { setSubiendoPlantilla(false); }
+  };
+
+  const eliminarPlantilla = async () => {
+    const { Alert } = await import('react-native');
+    Alert.alert(
+      'Eliminar plantilla',
+      '¿Seguro? Se usará la plantilla por defecto del sistema.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            setBorrandoPlantilla(true);
+            try {
+              await api.deleteContratoTemplate();
+              setConfig(prev => {
+                const next = { ...prev };
+                delete next['contrato_docx_template'];
+                delete next['contrato_docx_nombre'];
+                return next;
+              });
+            } catch { /* ignore */ }
+            finally { setBorrandoPlantilla(false); }
+          },
+        },
+      ]
+    );
   };
 
   const abrirNuevoUsuario = () => {
@@ -350,6 +512,18 @@ export default function ConfiguracionScreen() {
               onPress={() => router.push('/(admin)/contratos' as any)}
             />
             <SettingRow
+              icon="document-attach"
+              iconColor="#7C3AED"
+              title="Plantilla de Contrato"
+              subtitle={
+                loadingConfig ? 'Cargando…'
+                : config['contrato_docx_template']
+                  ? `✓ ${config['contrato_docx_nombre'] || 'Personalizada'}`
+                  : 'Usando plantilla por defecto'
+              }
+              onPress={() => setShowPlantilla(true)}
+            />
+            <SettingRow
               icon="qr-code"
               iconColor="#6366F1"
               title="URL de la App"
@@ -389,6 +563,13 @@ export default function ConfiguracionScreen() {
           {/* Registro de administradores */}
           <GlassCard style={styles.section} borderRadius={Theme.borderRadius.xl} padding={0}>
             <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>Registro de Usuarios</Text>
+            <SettingRow
+              icon="ticket"
+              iconColor="#8B5CF6"
+              title="Códigos de Invitación"
+              subtitle="Genera códigos para invitar inquilinos o cobradores"
+              onPress={openCodigos}
+            />
             <SettingRow
               icon="key"
               iconColor={theme.warning}
@@ -575,64 +756,92 @@ export default function ConfiguracionScreen() {
             </View>
 
             <View style={styles.sheetBody}>
+              {/* Buscador */}
+              <View style={[styles.searchRow, { backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)', borderColor: theme.border }]}>
+                <Ionicons name="search-outline" size={16} color={theme.textSecondary} />
+                <TextInput
+                  style={[styles.searchInput, { color: theme.text }]}
+                  value={busquedaUsuario}
+                  onChangeText={setBusquedaUsuario}
+                  placeholder="Buscar por nombre o correo…"
+                  placeholderTextColor={theme.textSecondary}
+                  autoCapitalize="none"
+                />
+                {busquedaUsuario.length > 0 && (
+                  <TouchableOpacity onPress={() => setBusquedaUsuario('')}>
+                    <Ionicons name="close-circle" size={16} color={theme.textSecondary} />
+                  </TouchableOpacity>
+                )}
+              </View>
+
               {loadingAdmins ? (
                 <ActivityIndicator size="small" color={theme.primary} style={{ marginTop: 20 }} />
               ) : admins.length === 0 ? (
                 <Text style={[styles.emptyText, { color: theme.textSecondary }]}>Sin usuarios registrados</Text>
               ) : (
-                <ScrollView showsVerticalScrollIndicator={false}>
-                  {admins.map((a) => {
-                    const ini = (a.nombre_completo || 'A').split(' ').slice(0, 2).map((w: string) => w[0]).join('').toUpperCase();
-                    const isToggling = togglingId === a.id;
-                    const rolColor = a.rol === 'admin' ? theme.primary : '#FF9500';
-                    return (
-                      <View key={a.id} style={[styles.adminItem, { borderBottomColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }]}>
-                        <View style={[styles.adminAvatar, { backgroundColor: rolColor }]}>
-                          <Text style={styles.adminAvatarText}>{ini}</Text>
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <View style={styles.adminNameRow}>
-                            <Text style={[styles.adminName, { color: theme.text }]} numberOfLines={1}>{a.nombre_completo}</Text>
-                            <View style={[styles.rolBadge, { backgroundColor: rolColor + '20' }]}>
-                              <Text style={[styles.rolBadgeText, { color: rolColor }]}>{a.rol.toUpperCase()}</Text>
-                            </View>
+                <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 460 }}>
+                  {admins
+                    .filter(a => {
+                      const q = busquedaUsuario.toLowerCase();
+                      if (!q) return true;
+                      return (a.nombre_completo || '').toLowerCase().includes(q) || (a.email || '').toLowerCase().includes(q);
+                    })
+                    .map((a) => {
+                      const ini = (a.nombre_completo || 'A').split(' ').slice(0, 2).map((w: string) => w[0]).join('').toUpperCase();
+                      const isToggling = togglingId === a.id;
+                      const rolColor = a.rol === 'admin' ? theme.primary : a.rol === 'cobrador' ? '#10B981' : '#FF9500';
+                      const rolLabel = a.rol === 'admin' ? 'ADMIN' : a.rol === 'cobrador' ? 'COBRADOR' : 'INQUILINO';
+                      return (
+                        <View key={a.id} style={[styles.adminItem, { borderBottomColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }]}>
+                          <View style={[styles.adminAvatar, { backgroundColor: rolColor }]}>
+                            <Text style={styles.adminAvatarText}>{ini}</Text>
                           </View>
-                          <Text style={[styles.adminEmail, { color: theme.textSecondary }]}>{a.email}</Text>
-                        </View>
-                        <View style={{ gap: 6 }}>
-                          {a.rol === 'inquilino' && (
+                          <View style={{ flex: 1 }}>
+                            <View style={styles.adminNameRow}>
+                              <Text style={[styles.adminName, { color: theme.text }]} numberOfLines={1}>{a.nombre_completo}</Text>
+                              <TouchableOpacity
+                                style={[styles.rolBadge, { backgroundColor: rolColor + '25' }]}
+                                onPress={() => setRolModalUser(a)}
+                              >
+                                <Text style={[styles.rolBadgeText, { color: rolColor }]}>{rolLabel} ▾</Text>
+                              </TouchableOpacity>
+                            </View>
+                            <Text style={[styles.adminEmail, { color: theme.textSecondary }]}>{a.email}</Text>
+                          </View>
+                          <View style={{ gap: 6 }}>
+                            {a.rol === 'inquilino' && (
+                              <TouchableOpacity
+                                style={[styles.toggleBtn, { backgroundColor: theme.primary + '20' }]}
+                                onPress={() => openVincular(a.id, a.nombre_completo)}
+                              >
+                                <Ionicons name="link-outline" size={16} color={theme.primary} />
+                                <Text style={[styles.toggleBtnText, { color: theme.primary }]}>Vincular</Text>
+                              </TouchableOpacity>
+                            )}
                             <TouchableOpacity
-                              style={[styles.toggleBtn, { backgroundColor: theme.primary + '20' }]}
-                              onPress={() => openVincular(a.id, a.nombre_completo)}
+                              style={[
+                                styles.toggleBtn,
+                                { backgroundColor: a.activo ? theme.success + '20' : theme.danger + '20' }
+                              ]}
+                              onPress={() => toggleAdmin(a.id)}
+                              disabled={isToggling}
                             >
-                              <Ionicons name="link-outline" size={16} color={theme.primary} />
-                              <Text style={[styles.toggleBtnText, { color: theme.primary }]}>Vincular</Text>
+                              {isToggling
+                                ? <ActivityIndicator size="small" color={a.activo ? theme.success : theme.danger} />
+                                : <Ionicons
+                                    name={a.activo ? 'checkmark-circle' : 'close-circle'}
+                                    size={18}
+                                    color={a.activo ? theme.success : theme.danger}
+                                  />
+                              }
+                              <Text style={[styles.toggleBtnText, { color: a.activo ? theme.success : theme.danger }]}>
+                                {a.activo ? 'Activo' : 'Inactivo'}
+                              </Text>
                             </TouchableOpacity>
-                          )}
-                          <TouchableOpacity
-                            style={[
-                              styles.toggleBtn,
-                              { backgroundColor: a.activo ? theme.success + '20' : theme.danger + '20' }
-                            ]}
-                            onPress={() => toggleAdmin(a.id)}
-                            disabled={isToggling}
-                          >
-                            {isToggling
-                              ? <ActivityIndicator size="small" color={a.activo ? theme.success : theme.danger} />
-                              : <Ionicons
-                                  name={a.activo ? 'checkmark-circle' : 'close-circle'}
-                                  size={18}
-                                  color={a.activo ? theme.success : theme.danger}
-                                />
-                            }
-                            <Text style={[styles.toggleBtnText, { color: a.activo ? theme.success : theme.danger }]}>
-                              {a.activo ? 'Activo' : 'Inactivo'}
-                            </Text>
-                          </TouchableOpacity>
+                          </View>
                         </View>
-                      </View>
-                    );
-                  })}
+                      );
+                    })}
                 </ScrollView>
               )}
             </View>
@@ -691,6 +900,265 @@ export default function ConfiguracionScreen() {
         </View>
       </Modal>
 
+      {/* Modal cambiar rol */}
+      <Modal visible={!!rolModalUser} transparent animationType="fade" onRequestClose={() => setRolModalUser(null)}>
+        <View style={styles.modalOverlay}>
+          <GlassCard style={[styles.modalBox, { maxWidth: 340 }]} borderRadius={Theme.borderRadius.xl} padding={24}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Cambiar rol</Text>
+            <Text style={[{ color: theme.textSecondary, fontSize: 13, marginBottom: 16 }]}>
+              {rolModalUser?.nombre_completo}
+            </Text>
+            {(['admin', 'cobrador', 'inquilino'] as const).map(r => {
+              const color = r === 'admin' ? theme.primary : r === 'cobrador' ? '#10B981' : '#FF9500';
+              const icons = { admin: 'shield-checkmark', cobrador: 'cash', inquilino: 'person' } as const;
+              const labels = { admin: 'Administrador', cobrador: 'Cobrador', inquilino: 'Inquilino' };
+              const isCurrent = rolModalUser?.rol === r;
+              const isSelf = rolModalUser?.id === getStoredUser()?.id;
+              return (
+                <TouchableOpacity
+                  key={r}
+                  style={[styles.rolOption, {
+                    marginBottom: 8,
+                    backgroundColor: isCurrent ? color + '20' : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'),
+                    borderColor: isCurrent ? color : theme.border,
+                    opacity: (isSelf || cambiandoRolId === rolModalUser?.id) ? 0.5 : 1,
+                  }]}
+                  onPress={() => !isCurrent && !isSelf && cambiarRolUsuario(rolModalUser!.id, r)}
+                  disabled={isCurrent || !!isSelf || !!cambiandoRolId}
+                >
+                  <Ionicons name={icons[r]} size={16} color={isCurrent ? color : theme.textSecondary} />
+                  <Text style={[styles.rolOptionText, { color: isCurrent ? color : theme.text }]}>{labels[r]}</Text>
+                  {isCurrent && <Ionicons name="checkmark" size={14} color={color} style={{ marginLeft: 'auto' as any }} />}
+                </TouchableOpacity>
+              );
+            })}
+            <TouchableOpacity
+              style={[styles.modalBtn, { borderWidth: 1, borderColor: theme.border, marginTop: 4 }]}
+              onPress={() => setRolModalUser(null)}
+            >
+              <Text style={{ color: theme.text, fontWeight: '600' }}>Cancelar</Text>
+            </TouchableOpacity>
+          </GlassCard>
+        </View>
+      </Modal>
+
+      {/* Modal códigos de invitación */}
+      <Modal visible={showCodigos} transparent animationType="fade" onRequestClose={() => setShowCodigos(false)}>
+        <View style={styles.modalOverlay}>
+          <GlassCard style={[styles.modalBox, { maxHeight: '85%' }]} borderRadius={Theme.borderRadius.xl} padding={0}>
+            <View style={[styles.sheetHeader, { borderBottomColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}>
+              <Text style={[styles.sheetTitle, { color: theme.text }]}>Códigos de Invitación</Text>
+              <View style={styles.sheetHeaderActions}>
+                <TouchableOpacity
+                  style={[styles.addUserBtn, { backgroundColor: '#8B5CF6' }]}
+                  onPress={() => { setCodigoGenerado(null); setRolCodigo('inquilino'); setExpiraDias(7); setShowGenerarCodigo(true); }}
+                >
+                  <Ionicons name="add" size={16} color="#fff" />
+                  <Text style={styles.addUserBtnText}>Generar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setShowCodigos(false)}>
+                  <Ionicons name="close" size={22} color={theme.textSecondary} />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.sheetBody}>
+              {loadingCodigos ? (
+                <ActivityIndicator size="small" color="#8B5CF6" style={{ marginTop: 20 }} />
+              ) : codigos.length === 0 ? (
+                <Text style={[styles.emptyText, { color: theme.textSecondary }]}>Sin códigos generados aún</Text>
+              ) : (
+                <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 420 }}>
+                  {codigos.map(c => {
+                    const rolColor = c.rol === 'cobrador' ? '#10B981' : '#FF9500';
+                    const vencido = c.expira_en && new Date(c.expira_en) < new Date();
+                    const diasRestantes = c.expira_en
+                      ? Math.ceil((new Date(c.expira_en).getTime() - Date.now()) / 86400000)
+                      : null;
+                    return (
+                      <View key={c.id} style={[styles.backupItem, { borderBottomColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)', opacity: (c.usado || vencido) ? 0.5 : 1 }]}>
+                        <View style={{ flex: 1 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <Text style={[{ fontSize: 16, fontWeight: '800', fontVariant: ['tabular-nums'], letterSpacing: 1, color: theme.text }]}>
+                              {c.codigo}
+                            </Text>
+                            <View style={[styles.rolBadge, { backgroundColor: rolColor + '20' }]}>
+                              <Text style={[styles.rolBadgeText, { color: rolColor }]}>{c.rol.toUpperCase()}</Text>
+                            </View>
+                            {c.usado && (
+                              <View style={[styles.rolBadge, { backgroundColor: theme.success + '20' }]}>
+                                <Text style={[styles.rolBadgeText, { color: theme.success }]}>USADO</Text>
+                              </View>
+                            )}
+                            {!c.usado && vencido && (
+                              <View style={[styles.rolBadge, { backgroundColor: theme.danger + '20' }]}>
+                                <Text style={[styles.rolBadgeText, { color: theme.danger }]}>EXPIRADO</Text>
+                              </View>
+                            )}
+                          </View>
+                          <Text style={[styles.backupMeta, { color: theme.textSecondary }]}>
+                            {c.usado
+                              ? `Usado por ${c.usado_por_nombre || 'usuario'}`
+                              : c.expira_en
+                                ? vencido ? 'Expirado' : `Vence en ${diasRestantes}d`
+                                : 'Sin vencimiento'}
+                          </Text>
+                        </View>
+                        {!c.usado && !vencido && (
+                          <View style={{ flexDirection: 'row', gap: 6 }}>
+                            <TouchableOpacity
+                              style={[styles.toggleBtn, { backgroundColor: '#8B5CF620' }]}
+                              onPress={() => copiarCodigo(c.codigo)}
+                            >
+                              <Ionicons name="copy-outline" size={14} color="#8B5CF6" />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={[styles.toggleBtn, { backgroundColor: theme.danger + '20' }]}
+                              onPress={() => revocarCodigo(c.id)}
+                            >
+                              <Ionicons name="trash-outline" size={14} color={theme.danger} />
+                            </TouchableOpacity>
+                          </View>
+                        )}
+                      </View>
+                    );
+                  })}
+                </ScrollView>
+              )}
+            </View>
+          </GlassCard>
+        </View>
+      </Modal>
+
+      {/* Modal generar nuevo código */}
+      <Modal visible={showGenerarCodigo} transparent animationType="fade" onRequestClose={() => setShowGenerarCodigo(false)}>
+        <View style={styles.modalOverlay}>
+          <GlassCard style={styles.modalBox} borderRadius={Theme.borderRadius.xl} padding={24}>
+            {codigoGenerado ? (
+              // ── Vista del código generado ──
+              <>
+                <Text style={[styles.modalTitle, { color: theme.text, textAlign: 'center' }]}>¡Código generado!</Text>
+                <View style={[{
+                  alignItems: 'center', backgroundColor: isDark ? 'rgba(139,92,246,0.15)' : 'rgba(139,92,246,0.08)',
+                  borderRadius: 16, padding: 24, marginBottom: 20, borderWidth: 1, borderColor: '#8B5CF640',
+                }]}>
+                  <Text style={{ fontSize: 32, fontWeight: '900', letterSpacing: 4, color: '#8B5CF6', fontVariant: ['tabular-nums'] }}>
+                    {codigoGenerado.codigo}
+                  </Text>
+                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                    <View style={[styles.rolBadge, { backgroundColor: (codigoGenerado.rol === 'cobrador' ? '#10B981' : '#FF9500') + '25' }]}>
+                      <Text style={[styles.rolBadgeText, { color: codigoGenerado.rol === 'cobrador' ? '#10B981' : '#FF9500' }]}>
+                        {codigoGenerado.rol.toUpperCase()}
+                      </Text>
+                    </View>
+                    <View style={[styles.rolBadge, { backgroundColor: theme.primary + '20' }]}>
+                      <Text style={[styles.rolBadgeText, { color: theme.primary }]}>
+                        {codigoGenerado.expira_en
+                          ? `Vence ${new Date(codigoGenerado.expira_en).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}`
+                          : 'Sin vencimiento'}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+                <View style={styles.modalActions}>
+                  <TouchableOpacity
+                    style={[styles.modalBtn, { borderWidth: 1, borderColor: '#8B5CF660', backgroundColor: isDark ? 'rgba(139,92,246,0.12)' : 'rgba(139,92,246,0.08)' }]}
+                    onPress={() => copiarCodigo(codigoGenerado.codigo)}
+                  >
+                    <Ionicons name={codigoCopiado ? 'checkmark' : 'copy-outline'} size={16} color="#8B5CF6" />
+                    <Text style={{ color: '#8B5CF6', fontWeight: '700' }}>{codigoCopiado ? '¡Copiado!' : 'Copiar'}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.modalBtn, { backgroundColor: '#8B5CF6' }]}
+                    onPress={() => compartirCodigo(codigoGenerado.codigo)}
+                  >
+                    <Ionicons name="share-outline" size={16} color="#fff" />
+                    <Text style={{ color: '#fff', fontWeight: '700' }}>Compartir</Text>
+                  </TouchableOpacity>
+                </View>
+                <TouchableOpacity
+                  style={[{ alignItems: 'center', marginTop: 12 }]}
+                  onPress={() => setShowGenerarCodigo(false)}
+                >
+                  <Text style={{ color: theme.textSecondary, fontSize: 13 }}>Cerrar</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              // ── Formulario de configuración ──
+              <>
+                <Text style={[styles.modalTitle, { color: theme.text }]}>Nuevo Código de Invitación</Text>
+
+                <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>Rol del invitado</Text>
+                <View style={[styles.rolSelector, { marginBottom: 16 }]}>
+                  {(['inquilino', 'cobrador'] as const).map(r => {
+                    const color = r === 'cobrador' ? '#10B981' : '#FF9500';
+                    return (
+                      <TouchableOpacity
+                        key={r}
+                        style={[styles.rolOption, {
+                          backgroundColor: rolCodigo === r ? color + '20' : (isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'),
+                          borderColor: rolCodigo === r ? color : theme.border,
+                        }]}
+                        onPress={() => setRolCodigo(r)}
+                      >
+                        <Ionicons name={r === 'cobrador' ? 'cash' : 'person'} size={16} color={rolCodigo === r ? color : theme.textSecondary} />
+                        <Text style={[styles.rolOptionText, { color: rolCodigo === r ? color : theme.textSecondary }]}>
+                          {r === 'cobrador' ? 'Cobrador' : 'Inquilino'}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>Vigencia</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
+                  {[
+                    { label: '1 día', dias: 1 },
+                    { label: '7 días', dias: 7 },
+                    { label: '1 mes', dias: 30 },
+                    { label: 'Indefinido', dias: null },
+                  ].map(opt => (
+                    <TouchableOpacity
+                      key={String(opt.dias)}
+                      style={[{
+                        paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, borderWidth: 1,
+                        backgroundColor: expiraDias === opt.dias ? '#8B5CF620' : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'),
+                        borderColor: expiraDias === opt.dias ? '#8B5CF6' : theme.border,
+                      }]}
+                      onPress={() => setExpiraDias(opt.dias)}
+                    >
+                      <Text style={{ color: expiraDias === opt.dias ? '#8B5CF6' : theme.text, fontWeight: '600', fontSize: 13 }}>
+                        {opt.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <View style={styles.modalActions}>
+                  <TouchableOpacity
+                    style={[styles.modalBtn, { borderWidth: 1, borderColor: theme.border }]}
+                    onPress={() => setShowGenerarCodigo(false)}
+                    disabled={generandoCodigo}
+                  >
+                    <Text style={{ color: theme.text, fontWeight: '600' }}>Cancelar</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.modalBtn, { backgroundColor: '#8B5CF6', opacity: generandoCodigo ? 0.7 : 1 }]}
+                    onPress={generarCodigo}
+                    disabled={generandoCodigo}
+                  >
+                    {generandoCodigo
+                      ? <ActivityIndicator size="small" color="#fff" />
+                      : <Text style={{ color: '#fff', fontWeight: '700' }}>Generar Código</Text>
+                    }
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </GlassCard>
+        </View>
+      </Modal>
+
       {/* Modal nuevo usuario */}
       <Modal visible={showNuevoUsuario} transparent animationType="fade" onRequestClose={() => setShowNuevoUsuario(false)}>
         <View style={styles.modalOverlay}>
@@ -729,30 +1197,26 @@ export default function ConfiguracionScreen() {
             />
 
             <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>Rol</Text>
-            <View style={styles.rolSelector}>
-              {(['admin', 'inquilino'] as const).map(r => (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+              {([
+                { r: 'admin',    label: 'Administrador', icon: 'shield-checkmark', color: theme.primary },
+                { r: 'cobrador', label: 'Cobrador',       icon: 'cash',             color: '#10B981' },
+                { r: 'inquilino',label: 'Inquilino',      icon: 'person',           color: '#FF9500' },
+              ] as const).map(({ r, label, icon, color }) => (
                 <TouchableOpacity
                   key={r}
                   style={[
-                    styles.rolOption,
+                    styles.rolOption, { flex: 0, paddingHorizontal: 12 },
                     {
-                      backgroundColor: nuRol === r
-                        ? (r === 'admin' ? theme.primary : '#FF9500')
-                        : (isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'),
-                      borderColor: nuRol === r
-                        ? (r === 'admin' ? theme.primary : '#FF9500')
-                        : theme.border,
+                      backgroundColor: nuRol === r ? color + '20' : (isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'),
+                      borderColor: nuRol === r ? color : theme.border,
                     }
                   ]}
                   onPress={() => setNuRol(r)}
                 >
-                  <Ionicons
-                    name={r === 'admin' ? 'shield-checkmark' : 'person'}
-                    size={16}
-                    color={nuRol === r ? '#fff' : theme.textSecondary}
-                  />
-                  <Text style={[styles.rolOptionText, { color: nuRol === r ? '#fff' : theme.textSecondary }]}>
-                    {r === 'admin' ? 'Administrador' : 'Inquilino'}
+                  <Ionicons name={icon} size={15} color={nuRol === r ? color : theme.textSecondary} />
+                  <Text style={[styles.rolOptionText, { color: nuRol === r ? color : theme.textSecondary }]}>
+                    {label}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -783,6 +1247,109 @@ export default function ConfiguracionScreen() {
                   : <Text style={{ color: '#fff', fontWeight: '700' }}>Crear Usuario</Text>
                 }
               </TouchableOpacity>
+            </View>
+          </GlassCard>
+        </View>
+      </Modal>
+
+      {/* ── Modal: Plantilla de Contrato DOCX ─────────────────────────── */}
+      <Modal visible={showPlantilla} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <GlassCard style={styles.modalBox} padding={0}>
+            <View style={[styles.sheetHeader, { borderBottomColor: theme.border }]}>
+              <Text style={[styles.sheetTitle, { color: theme.text }]}>Plantilla de Contrato</Text>
+              <TouchableOpacity onPress={() => setShowPlantilla(false)}>
+                <Ionicons name="close" size={24} color={theme.text} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.sheetBody}>
+              {/* Estado actual */}
+              <View style={[styles.plantillaBanner, {
+                backgroundColor: config['contrato_docx_template']
+                  ? '#7C3AED' + '15' : theme.card,
+                borderColor: config['contrato_docx_template']
+                  ? '#7C3AED' + '40' : theme.border,
+              }]}>
+                <Ionicons
+                  name={config['contrato_docx_template'] ? 'document-attach' : 'document-outline'}
+                  size={28}
+                  color={config['contrato_docx_template'] ? '#7C3AED' : theme.textSecondary}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.plantillaBannerTitle, { color: theme.text }]}>
+                    {config['contrato_docx_template']
+                      ? config['contrato_docx_nombre'] || 'Plantilla personalizada'
+                      : 'Plantilla por defecto'}
+                  </Text>
+                  <Text style={[styles.plantillaBannerSub, { color: theme.textSecondary }]}>
+                    {config['contrato_docx_template']
+                      ? 'Se usará tu plantilla Word al generar contratos'
+                      : 'Sube tu propio contrato Word (.docx) con variables'}
+                  </Text>
+                </View>
+                {config['contrato_docx_template'] && (
+                  <TouchableOpacity
+                    style={[styles.plantillaDeleteBtn, { borderColor: theme.danger + '40' }]}
+                    onPress={() => { setShowPlantilla(false); eliminarPlantilla(); }}
+                    disabled={borrandoPlantilla}
+                  >
+                    {borrandoPlantilla
+                      ? <ActivityIndicator size="small" color={theme.danger} />
+                      : <Ionicons name="trash-outline" size={18} color={theme.danger} />}
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* Botón subir */}
+              <TouchableOpacity
+                style={[styles.primaryBtn, { backgroundColor: '#7C3AED', opacity: subiendoPlantilla ? 0.7 : 1 }]}
+                onPress={() => { setShowPlantilla(false); subirPlantilla(); }}
+                disabled={subiendoPlantilla}
+              >
+                {subiendoPlantilla
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <>
+                      <Ionicons name="cloud-upload-outline" size={18} color="#fff" />
+                      <Text style={styles.primaryBtnText}>
+                        {config['contrato_docx_template'] ? 'Reemplazar plantilla' : 'Subir plantilla (.docx)'}
+                      </Text>
+                    </>}
+              </TouchableOpacity>
+
+              {/* Variables disponibles */}
+              <Text style={[styles.inputLabel, { color: theme.textSecondary, marginTop: 8 }]}>
+                Variables disponibles en tu plantilla Word:
+              </Text>
+              <View style={styles.varsGrid}>
+                {[
+                  '{{nombre_completo}}', '{{depto_numero}}',
+                  '{{renta}}',           '{{renta_letra}}',
+                  '{{deposito}}',        '{{fecha_inicio}}',
+                  '{{fecha_termino}}',   '{{fecha_pago}}',
+                  '{{tel_arrendatario}}','{{fiador_nombre}}',
+                  '{{fiador_telefono}}', '{{metodo_pago}}',
+                  '{{arrendador_nombre}}','{{arrendador_direccion}}',
+                  '{{observaciones}}',   '{{inventario}}',
+                ].map(v => (
+                  <TouchableOpacity
+                    key={v}
+                    style={[styles.varChip, { backgroundColor: '#7C3AED' + '12', borderColor: '#7C3AED' + '30' }]}
+                    onPress={async () => {
+                      try {
+                        if (typeof navigator !== 'undefined' && navigator.clipboard) {
+                          await navigator.clipboard.writeText(v);
+                        }
+                      } catch { /* ignore */ }
+                    }}
+                  >
+                    <Text style={[styles.varChipText, { color: '#7C3AED' }]}>{v}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={[{ fontSize: 11, color: theme.textSecondary, marginTop: 4 }]}>
+                Toca una variable para copiarla. Pégala en tu Word exactamente así.
+              </Text>
             </View>
           </GlassCard>
         </View>
@@ -904,4 +1471,25 @@ const styles = StyleSheet.create({
   },
   rolOptionText: { fontSize: 13, fontWeight: '600' },
   emptyText: { textAlign: 'center', fontSize: 14, marginTop: 20, opacity: 0.7 },
+  searchRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 12,
+  },
+  searchInput: { flex: 1, fontSize: 14, padding: 0 },
+  // Plantilla DOCX
+  plantillaBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    padding: 14, borderRadius: 14, borderWidth: 1, marginBottom: 16,
+  },
+  plantillaBannerTitle: { fontSize: 14, fontWeight: '700' },
+  plantillaBannerSub: { fontSize: 12, marginTop: 2 },
+  plantillaDeleteBtn: {
+    padding: 8, borderRadius: 10, borderWidth: 1,
+  },
+  varsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
+  varChip: {
+    paddingHorizontal: 8, paddingVertical: 5,
+    borderRadius: 8, borderWidth: 1,
+  },
+  varChipText: { fontSize: 10, fontWeight: '700', fontFamily: Platform.OS === 'web' ? 'monospace' : 'Courier' },
 });

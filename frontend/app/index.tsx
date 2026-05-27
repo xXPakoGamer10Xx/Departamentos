@@ -10,7 +10,9 @@ function getInitialRoute(): string {
     if (!token) return '/(auth)/login';
     try {
       const user = JSON.parse(localStorage.getItem(USER_KEY) || 'null');
-      return user?.rol === 'inquilino' ? '/(inquilino)' : '/(admin)';
+      if (user?.rol === 'inquilino') return '/(inquilino)';
+      if (user?.rol === 'cobrador') return '/(cobrador)/scan';
+      return '/(admin)';
     } catch {
       return '/(admin)';
     }

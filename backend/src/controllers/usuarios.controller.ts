@@ -63,6 +63,32 @@ export async function toggleUsuario(req: AuthRequest, res: Response, next: NextF
   }
 }
 
+// PATCH /api/usuarios/:id/rol — Admin cambia el rol de un usuario
+export async function cambiarRol(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { id } = req.params;
+    const { rol } = req.body;
+
+    if (!['admin', 'cobrador', 'inquilino'].includes(rol)) {
+      throw new AppError('Rol inválido. Usa "admin", "cobrador" o "inquilino"', 400);
+    }
+    if (id === req.user!.id) {
+      throw new AppError('No puedes cambiar tu propio rol', 400);
+    }
+
+    const result = await pool.query(
+      `UPDATE usuarios SET rol = $1 WHERE id = $2
+       RETURNING id, email, nombre_completo, rol, activo`,
+      [rol, id]
+    );
+    if (!result.rows[0]) throw new AppError('Usuario no encontrado', 404);
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // PATCH /api/usuarios/perfil — Actualizar propio perfil
 export async function updatePerfil(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {

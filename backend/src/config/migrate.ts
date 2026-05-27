@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
   password_hash VARCHAR(255) NOT NULL,
   nombre_completo VARCHAR(255) NOT NULL,
   rol         VARCHAR(20) NOT NULL DEFAULT 'inquilino'
-                CHECK (rol IN ('admin', 'inquilino')),
+                CHECK (rol IN ('admin', 'inquilino', 'cobrador')),
   avatar_url  VARCHAR(500),
   activo      BOOLEAN NOT NULL DEFAULT TRUE,
   ultimo_acceso TIMESTAMPTZ,
@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS inquilinos (
   nombre_completo   VARCHAR(255) NOT NULL,
   depto_numero      INTEGER NOT NULL,
   renta             NUMERIC(10,2) NOT NULL,
+  deposito          NUMERIC(10,2) NOT NULL DEFAULT 0,
   renta_letra       VARCHAR(255) NOT NULL,
   fecha_pago        VARCHAR(100) NOT NULL,
   fecha_inicio      DATE NOT NULL,
@@ -60,6 +61,10 @@ CREATE TABLE IF NOT EXISTS inquilinos (
   usuario_id        UUID REFERENCES usuarios(id) ON DELETE SET NULL,
   email_invitacion  VARCHAR(255),
   invitation_token  UUID UNIQUE,
+  deposito_tipo     VARCHAR(50) DEFAULT 'ninguno',
+  deposito_fechas   JSONB DEFAULT '[]',
+  metodo_pago       VARCHAR(20) DEFAULT 'efectivo'
+                      CHECK (metodo_pago IS NULL OR metodo_pago IN ('efectivo', 'transferencia', 'ambos')),
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -74,6 +79,13 @@ CREATE TABLE IF NOT EXISTS pagos (
   qr_token      UUID UNIQUE,
   confirmado    BOOLEAN NOT NULL DEFAULT FALSE,
   confirmado_en TIMESTAMPTZ,
+  escaneado_por UUID REFERENCES usuarios(id) ON DELETE SET NULL,
+  escaneado_en  TIMESTAMPTZ,
+  comprobante_url       VARCHAR(500),
+  comprobante_subido_en TIMESTAMPTZ,
+  rechazado             BOOLEAN NOT NULL DEFAULT FALSE,
+  rechazado_en          TIMESTAMPTZ,
+  comentario_admin      TEXT,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE(inquilino_id, periodo)
@@ -154,7 +166,22 @@ CREATE TABLE IF NOT EXISTS cuotas_extra (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Tabla de códigos de invitación con expiración
+CREATE TABLE IF NOT EXISTS codigos_invitacion (
+  id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  admin_id   UUID NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+  codigo     VARCHAR(10) NOT NULL UNIQUE,
+  rol        VARCHAR(20) NOT NULL DEFAULT 'inquilino'
+             CHECK (rol IN ('inquilino', 'cobrador')),
+  expira_en  TIMESTAMPTZ NULL,
+  usado      BOOLEAN NOT NULL DEFAULT FALSE,
+  usado_en   TIMESTAMPTZ,
+  usado_por  UUID REFERENCES usuarios(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- Índices para mejorar búsquedas
+CREATE INDEX IF NOT EXISTS idx_codigos_invitacion_codigo ON codigos_invitacion(codigo);
 CREATE INDEX IF NOT EXISTS idx_inquilinos_estado ON inquilinos(estado);
 CREATE INDEX IF NOT EXISTS idx_inquilinos_depto ON inquilinos(depto_numero);
 CREATE INDEX IF NOT EXISTS idx_auditoria_usuario ON auditoria(usuario_id);

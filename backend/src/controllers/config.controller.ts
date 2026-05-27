@@ -43,6 +43,7 @@ export async function updateConfig(req: AuthRequest, res: Response, next: NextFu
       'arrendador_nombre', 'arrendador_direccion',
       'banco_nombre', 'banco_clabe', 'banco_titular',
       'admin_invite_code', 'app_url',
+      'contrato_docx_template', 'contrato_docx_nombre',
     ];
 
     for (const [clave, valor] of Object.entries(updates)) {
@@ -54,6 +55,20 @@ export async function updateConfig(req: AuthRequest, res: Response, next: NextFu
       );
     }
     res.json({ success: true, message: 'Configuración actualizada' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// DELETE /api/config/contrato-template
+export async function deleteContratoTemplate(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    if (req.user!.rol !== 'admin') throw new AppError('No autorizado', 403);
+    await pool.query(
+      `DELETE FROM configuracion WHERE admin_id = $1 AND clave IN ('contrato_docx_template', 'contrato_docx_nombre')`,
+      [req.user!.id]
+    );
+    res.json({ success: true, message: 'Plantilla eliminada — se usará la plantilla por defecto' });
   } catch (err) {
     next(err);
   }

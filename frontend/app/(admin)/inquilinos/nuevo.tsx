@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet, View, Text, TextInput, ScrollView, TouchableOpacity,
   useColorScheme, KeyboardAvoidingView, Platform, ActivityIndicator,
@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../../../constants/Colors';
 import { Theme } from '../../../constants/Theme';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { api } from '../../../services/api';
 import { numberToWords } from '../../../utils/numberToWords';
 import { GlassCard } from '../../../components/ui/GlassCard';
@@ -135,7 +135,7 @@ const normalizeFechaPago = (value: string) => {
 
 export default function NuevoInquilinoScreen() {
   const router = useRouter();
-  const { editId } = useLocalSearchParams<{ editId?: string }>();
+  const { editId, fromId } = useLocalSearchParams<{ editId?: string; fromId?: string }>();
   const isEdit = !!editId;
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
@@ -172,8 +172,29 @@ export default function NuevoInquilinoScreen() {
 
   const [metodo_pago, setMetodoPago] = useState<'efectivo' | 'transferencia' | 'ambos'>('efectivo');
   const [depositoTipo, setDepositoTipo] = useState<'ninguno' | 'quincenas' | 'personalizado'>('ninguno');
+
+  // INE OCR
+  const [extrayendoINE, setExtrayendoINE] = useState(false);
   const [depositoFechas, setDepositoFechas] = useState<number[]>([]);
-  const [depositoFechasText, setDepositoFechasText] = useState('');
+  const [depositoManuallyEdited, setDepositoManuallyEdited] = useState(false);
+
+  const resetForm = () => {
+    const today = new Date();
+    const { dateString: todayString, day } = formatDateParts(today);
+    const { dateString: nextYearString } = formatDateParts(addOneYear(today));
+    setFormData({
+      nombre: '', depto: '', telArrendatario: '',
+      renta: '', rentaLetra: '', deposito: '',
+      fechaPago: buildFechaPago(day),
+      fechaInicio: todayString,
+      fechaTermino: nextYearString,
+      fiador: '', telFiador: '', observaciones: '',
+    });
+    setMetodoPago('efectivo');
+    setDepositoTipo('ninguno');
+    setDepositoFechas([]);
+    setDepositoManuallyEdited(false);
+  };
 
   useEffect(() => {
     loadDeptos();
@@ -182,14 +203,12 @@ export default function NuevoInquilinoScreen() {
         const d = r.data;
         const fechaInicio = d.fecha_inicio ? String(d.fecha_inicio).substring(0, 10) : '';
         const fechaTermino = d.fecha_termino ? String(d.fecha_termino).substring(0, 10) : '';
-        setMetodoPago(d.metodo_pago || 'efectivo'); // acepta 'efectivo' | 'transferencia' | 'ambos'
+        setMetodoPago(d.metodo_pago || 'efectivo');
         const tipo = d.deposito_tipo || 'ninguno';
         const fechas: number[] = Array.isArray(d.deposito_fechas) ? d.deposito_fechas : [];
         setDepositoTipo(tipo);
         setDepositoFechas(fechas);
-        if (tipo === 'personalizado' && fechas.length > 0) {
-          setDepositoFechasText(fechas.join(', '));
-        }
+        setDepositoManuallyEdited(true);
         setFormData({
           nombre: d.nombre_completo || '',
           depto: String(d.depto_numero || ''),
@@ -205,8 +224,29 @@ export default function NuevoInquilinoScreen() {
           observaciones: d.observaciones || '',
         });
       }).catch(() => Alert.alert('Error', 'No se pudo cargar el inquilino'));
+    } else if (fromId) {
+      // Pre-llenar datos personales desde inquilino archivado (nuevo contrato)
+      api.getInquilinoById(fromId).then(r => {
+        const d = r.data;
+        resetForm();
+        setFormData(prev => ({
+          ...prev,
+          nombre: d.nombre_completo || '',
+          telArrendatario: d.tel_arrendatario || '',
+          renta: String(d.renta || ''),
+          rentaLetra: d.renta_letra || '',
+          fiador: d.fiador_nombre || '',
+          telFiador: d.fiador_telefono || '',
+        }));
+        setMetodoPago(d.metodo_pago || 'efectivo');
+      }).catch(() => {});
+    } else {
+      resetForm();
     }
-  }, [editId]);
+  }, [editId, fromId]);
+
+  // isEdit en deps para evitar stale closure cuando la pantalla se reutiliza
+  useFocusEffect(useCallback(() => { loadDeptos(); }, [isEdit]));
 
   const [showDatePicker, setShowDatePicker] = useState<'inicio' | 'termino' | null>(null);
 
@@ -251,6 +291,76 @@ export default function NuevoInquilinoScreen() {
     }
   };
 
+  const escanearINE = async () => {
+    try {
+      let imagen_base64: string | null = null;
+
+      if (Platform.OS === 'web') {
+        // Web: abrir cámara directamente (capture=environment = cámara trasera en móvil)
+        imagen_base64 = await new Promise<string | null>((resolve) => {
+          const input = document.createElement('input');
+          input.type = 'file';
+          input.accept = 'image/*';
+          input.setAttribute('capture', 'environment'); // cámara trasera
+          input.onchange = (e: any) => {
+            const file = e.target.files?.[0];
+            if (!file) return resolve(null);
+            const reader = new FileReader();
+            reader.onload = (ev) => resolve(ev.target?.result as string);
+            reader.readAsDataURL(file);
+          };
+          input.click();
+        });
+      } else {
+        // Móvil nativo: cámara directa
+        const ImagePicker = await import('expo-image-picker');
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permiso requerido', 'Necesitas permitir el acceso a la cámara para escanear el INE.');
+          return;
+        }
+        const result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ['images'],
+          quality: 0.85,
+          base64: true,
+          allowsEditing: true,   // recorte opcional para centrar el INE
+          aspect: [16, 10],      // relación de aspecto similar a una credencial
+        });
+        if (!result.canceled && result.assets?.[0]?.base64) {
+          imagen_base64 = `data:image/jpeg;base64,${result.assets[0].base64}`;
+        }
+      }
+
+      if (!imagen_base64) return;
+
+      setExtrayendoINE(true);
+      try {
+        const res = await api.extraerDatosINE(imagen_base64);
+        const d = res.data;
+        if (d) {
+          setFormData(prev => ({
+            ...prev,
+            nombre: d.nombre_completo || prev.nombre,
+            observaciones: prev.observaciones || [
+              d.domicilio, d.colonia, d.municipio, d.estado, d.cp
+            ].filter(Boolean).join(', '),
+          }));
+        }
+        Alert.alert(
+          '✅ Datos extraídos',
+          'Se pre-llenó el formulario con los datos del INE. Revisa y edita si es necesario.',
+          [{ text: 'Entendido' }]
+        );
+      } catch (e: any) {
+        Alert.alert('Error al analizar INE', e.message || 'No se pudo leer el INE. Intenta con una imagen más clara.');
+      } finally {
+        setExtrayendoINE(false);
+      }
+    } catch (e) {
+      setExtrayendoINE(false);
+    }
+  };
+
   const buildDepositoObs = (tipo: string, fechas: number[]): string => {
     if (tipo === 'ninguno') return '';
     if (tipo === 'quincenas') {
@@ -280,21 +390,15 @@ export default function NuevoInquilinoScreen() {
     }
   };
 
-  const handleDepositoFechasText = (text: string) => {
-    setDepositoFechasText(text);
-    const nums = text.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n >= 1 && n <= 31);
-    setDepositoFechas(nums);
-    setFormData(prev => ({ ...prev, observaciones: buildDepositoObs('personalizado', nums) }));
-  };
-
   const handleRentaChange = (text: string) => {
     const cleaned = text.replace(/[^0-9]/g, '');
     const num = parseInt(cleaned, 10);
-    setFormData({
-      ...formData,
+    setFormData(prev => ({
+      ...prev,
       renta: cleaned,
-      rentaLetra: !isNaN(num) ? numberToWords(num) : ''
-    });
+      rentaLetra: !isNaN(num) ? numberToWords(num) : '',
+      deposito: depositoManuallyEdited ? prev.deposito : cleaned,
+    }));
   };
 
   const handleSave = async () => {
@@ -332,23 +436,46 @@ export default function NuevoInquilinoScreen() {
   };
 
   return (
-    <KeyboardAvoidingView 
-      style={{ flex: 1 }} 
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior="height"
     >
       <ScrollView
         style={[styles.container, { backgroundColor: theme.background }]}
-        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: 160 }}
         keyboardShouldPersistTaps="handled"
       >
         <View style={[styles.header, !isDesktop && { paddingTop: insets.top + 20 }]}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={theme.text} />
           </TouchableOpacity>
-          <Text style={[styles.title, { color: theme.text }]}>{isEdit ? 'Editar Inquilino' : 'Nuevo Inquilino'}</Text>
+          <Text style={[styles.title, { color: theme.text }]}>
+            {isEdit ? 'Editar Inquilino' : fromId ? 'Nuevo Contrato' : 'Nuevo Inquilino'}
+          </Text>
         </View>
 
         <View style={styles.form}>
+          {/* Botón Escanear INE */}
+          {!isEdit && (
+            <TouchableOpacity
+              style={[styles.ineBtn, { backgroundColor: '#7C3AED', opacity: extrayendoINE ? 0.7 : 1 }]}
+              onPress={escanearINE}
+              disabled={extrayendoINE}
+            >
+              {extrayendoINE ? (
+                <>
+                  <ActivityIndicator color="#fff" size="small" />
+                  <Text style={styles.ineBtnText}>Analizando INE…</Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="scan-outline" size={20} color="#fff" />
+                  <Text style={styles.ineBtnText}>📷 Escanear INE para auto-llenar</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+
           <Text style={[styles.sectionTitle, { color: theme.text }]}>Datos Personales</Text>
           <InputGroup 
             label="Nombre Completo" 
@@ -407,13 +534,14 @@ export default function NuevoInquilinoScreen() {
               />
             </View>
             <View style={{ flex: 1, marginLeft: 8 }}>
-              <InputGroup 
-                label="Depósito" 
+              <InputGroup
+                label="Depósito"
                 isRequired
-                value={formData.deposito} 
+                value={formData.deposito}
                 onChange={(text: string) => {
+                  setDepositoManuallyEdited(true);
                   const cleaned = text.replace(/[^0-9]/g, '');
-                  setFormData({...formData, deposito: cleaned});
+                  setFormData(prev => ({...prev, deposito: cleaned}));
                 }}
                 placeholder="3500"
                 keyboardType="numeric"
@@ -435,15 +563,32 @@ export default function NuevoInquilinoScreen() {
 
           <View style={styles.row}>
             <View style={{ flex: 1, marginRight: 8 }}>
-              <InputGroup 
-                label="Día de Pago" 
-                value={formData.fechaPago} 
-                onChange={(text: string) => setFormData({...formData, fechaPago: text})}
-                placeholder="Ej. 15 de cada mes"
-                icon="calendar-outline"
-                theme={theme}
-                maxLength={20}
-              />
+              <View style={styles.inputGroup}>
+                <View style={styles.labelRow}>
+                  <Text style={[styles.label, { color: theme.textSecondary }]}>Día de Pago</Text>
+                </View>
+                <View style={[styles.inputContainer, { borderColor: theme.border, backgroundColor: theme.card }]}>
+                  <Ionicons name="calendar-outline" size={20} color={theme.icon} style={styles.inputIcon} />
+                  <TextInput
+                    style={[styles.input, { color: theme.text, flex: 0, width: 32, textAlign: 'center' }]}
+                    value={formData.fechaPago.match(/^(\d{1,2})/)?.[1] || ''}
+                    onChangeText={(text) => {
+                      const num = text.replace(/[^0-9]/g, '').slice(0, 2);
+                      const n = parseInt(num, 10);
+                      if (num && n > 31) return;
+                      setFormData(prev => ({
+                        ...prev,
+                        fechaPago: num ? buildFechaPago(num.padStart(2, '0')) : '',
+                      }));
+                    }}
+                    keyboardType="numeric"
+                    maxLength={2}
+                    placeholder="15"
+                    placeholderTextColor={theme.textSecondary + '80'}
+                  />
+                  <Text style={[styles.inputText, { color: theme.textSecondary, flex: 1, paddingLeft: 4 }]}>de cada mes</Text>
+                </View>
+              </View>
             </View>
             <View style={{ flex: 1, marginLeft: 8 }}>
               <InputGroup
@@ -599,16 +744,43 @@ export default function NuevoInquilinoScreen() {
               ))}
             </View>
             {depositoTipo === 'personalizado' && (
-              <View style={[styles.inputContainer, { borderColor: theme.border, backgroundColor: theme.card, marginTop: 8 }]}>
-                <Ionicons name="calendar-number-outline" size={20} color={theme.icon} style={styles.inputIcon} />
-                <TextInput
-                  style={[styles.input, { color: theme.text }]}
-                  placeholder="Días separados por coma: 10, 20"
-                  placeholderTextColor={theme.textSecondary + '80'}
-                  value={depositoFechasText}
-                  onChangeText={handleDepositoFechasText}
-                  keyboardType={Platform.OS === 'web' ? 'default' : 'number-pad'}
-                />
+              <View style={styles.dayGridContainer}>
+                <Text style={[styles.sublabel, { color: theme.textMuted }]}>
+                  Selecciona hasta 5 días ({depositoFechas.length}/5)
+                </Text>
+                <View style={styles.dayGrid}>
+                  {Array.from({ length: 31 }, (_, i) => i + 1).map(day => {
+                    const selected = depositoFechas.includes(day);
+                    return (
+                      <TouchableOpacity
+                        key={day}
+                        style={[
+                          styles.dayBtn,
+                          {
+                            backgroundColor: selected ? theme.primary : theme.card,
+                            borderColor: selected ? theme.primary : theme.border,
+                          }
+                        ]}
+                        onPress={() => {
+                          if (selected) {
+                            const next = depositoFechas.filter(d => d !== day);
+                            setDepositoFechas(next);
+                            setFormData(prev => ({ ...prev, observaciones: buildDepositoObs('personalizado', next) }));
+                          } else {
+                            if (depositoFechas.length >= 5) return;
+                            const next = [...depositoFechas, day].sort((a, b) => a - b);
+                            setDepositoFechas(next);
+                            setFormData(prev => ({ ...prev, observaciones: buildDepositoObs('personalizado', next) }));
+                          }
+                        }}
+                      >
+                        <Text style={[styles.dayBtnText, { color: selected ? '#fff' : theme.text }]}>
+                          {day}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
               </View>
             )}
             {depositoTipo !== 'ninguno' && (
@@ -706,7 +878,6 @@ const styles = StyleSheet.create({
   },
   form: {
     padding: 16,
-    paddingBottom: 100,
     maxWidth: 800,
     alignSelf: 'center',
     width: '100%',
@@ -858,5 +1029,45 @@ const styles = StyleSheet.create({
   deptoItemDesc: {
     fontSize: 12,
     opacity: 0.6,
+  },
+  dayGridContainer: {
+    marginTop: 8,
+  },
+  dayGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 6,
+  },
+  dayBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dayBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  ineBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    height: 50,
+    borderRadius: 14,
+    marginBottom: 20,
+    shadowColor: '#7C3AED',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  ineBtnText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
   },
 });

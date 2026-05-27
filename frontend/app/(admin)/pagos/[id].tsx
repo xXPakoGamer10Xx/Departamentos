@@ -27,10 +27,11 @@ export default function PagoDetalleScreen() {
   const [pago, setPago] = useState<any>(null);
   const [cuotas, setCuotas] = useState<any[]>([]);
   const [totalExtra, setTotalExtra] = useState(0);
-  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [generando, setGenerando] = useState(false);
   const [confirmando, setConfirmando] = useState(false);
+  const [rechazando, setRechazando] = useState(false);
+  const [showRechazarModal, setShowRechazarModal] = useState(false);
+  const [rechazarComentario, setRechazarComentario] = useState('');
 
   // Historial
   const [historial, setHistorial] = useState<any[]>([]);
@@ -71,27 +72,6 @@ export default function PagoDetalleScreen() {
     finally { setLoadingHistorial(false); }
   }, [id, loadingHistorial]);
 
-  const generarQr = useCallback(async () => {
-    if (!id || Platform.OS !== 'web') return;
-    setGenerando(true);
-    try {
-      const res = await api.generarQrPago(id);
-      const token = res.data?.qr_token;
-      setPago(res.data);
-      if (token) {
-        const QRCode = await import('qrcode');
-        const baseUrl = config.app_url?.trim().replace(/\/$/, '') || window.location.origin;
-        const confirmUrl = `${baseUrl}/confirmar/${token}`;
-        const dataUrl = await QRCode.toDataURL(confirmUrl, { width: 280, margin: 2 });
-        setQrDataUrl(dataUrl);
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setGenerando(false);
-    }
-  }, [id, config]);
-
   const confirmarDirecto = useCallback(async () => {
     if (!pago) return;
     setConfirmando(true);
@@ -109,6 +89,21 @@ export default function PagoDetalleScreen() {
       setConfirmando(false);
     }
   }, [pago]);
+
+  const rechazarPago = useCallback(async () => {
+    if (!pago) return;
+    setRechazando(true);
+    try {
+      const res = await api.rechazarPagoPorId(pago.id, rechazarComentario.trim());
+      setPago(res.data);
+      setShowRechazarModal(false);
+      setRechazarComentario('');
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setRechazando(false);
+    }
+  }, [pago, rechazarComentario]);
 
   const addCuota = useCallback(async () => {
     if (!cuotaConcepto.trim()) { setCuotaError('El concepto es requerido'); return; }
@@ -210,6 +205,18 @@ export default function PagoDetalleScreen() {
               <Text style={styles.pagadoText}>Pagado</Text>
             </View>
           )}
+          {!pago?.confirmado && pago?.rechazado && (
+            <View style={[styles.pagadoBadge, { backgroundColor: '#EF444420' }]}>
+              <Ionicons name="close-circle" size={16} color="#EF4444" />
+              <Text style={[styles.pagadoText, { color: '#EF4444' }]}>Comprobante rechazado</Text>
+            </View>
+          )}
+          {!pago?.confirmado && pago?.rechazado && pago?.comentario_admin && (
+            <View style={[styles.rechazoRazon, { backgroundColor: isDark ? 'rgba(239,68,68,0.1)' : 'rgba(239,68,68,0.06)', borderColor: '#EF444430' }]}>
+              <Ionicons name="chatbubble-outline" size={13} color="#EF4444" />
+              <Text style={{ color: '#EF4444', fontSize: 12, flex: 1 }}>{pago.comentario_admin}</Text>
+            </View>
+          )}
         </View>
 
         {/* Cargos extra */}
@@ -298,40 +305,61 @@ export default function PagoDetalleScreen() {
               </View>
             )}
 
-            {!pago?.confirmado && (
-              <TouchableOpacity
-                style={[styles.confirmBtn, {
-                  backgroundColor: pago?.comprobante_url ? '#34C759' : (isDark ? 'rgba(52,199,89,0.3)' : '#34C75960'),
-                  opacity: confirmando ? 0.7 : 1,
-                }]}
-                onPress={confirmarDirecto}
-                disabled={confirmando}
-              >
-                {confirmando
-                  ? <ActivityIndicator color="#fff" size="small" />
-                  : <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
-                }
-                <Text style={styles.confirmBtnText}>
-                  {confirmando ? 'Confirmando…' : pago?.comprobante_url ? 'Confirmar pago ✓ Comprobante recibido' : 'Marcar como pagado'}
-                </Text>
-              </TouchableOpacity>
+            {!pago?.confirmado && !pago?.rechazado && (
+              <View style={{ gap: 10, marginTop: 4 }}>
+                {/* Botones de Confirmar y Rechazar cuando hay comprobante */}
+                {pago?.comprobante_url ? (
+                  <View style={{ flexDirection: 'row', gap: 10 }}>
+                    <TouchableOpacity
+                      style={[styles.confirmBtn, { flex: 1, marginTop: 0, backgroundColor: isDark ? 'rgba(239,68,68,0.85)' : '#EF4444', opacity: confirmando || rechazando ? 0.6 : 1 }]}
+                      onPress={() => { setRechazarComentario(''); setShowRechazarModal(true); }}
+                      disabled={confirmando || rechazando}
+                    >
+                      <Ionicons name="close-circle-outline" size={20} color="#fff" />
+                      <Text style={styles.confirmBtnText}>Rechazar</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.confirmBtn, { flex: 2, marginTop: 0, backgroundColor: '#34C759', opacity: confirmando || rechazando ? 0.7 : 1 }]}
+                      onPress={confirmarDirecto}
+                      disabled={confirmando || rechazando}
+                    >
+                      {confirmando
+                        ? <ActivityIndicator color="#fff" size="small" />
+                        : <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
+                      }
+                      <Text style={styles.confirmBtnText}>
+                        {confirmando ? 'Confirmando…' : 'Confirmar pago'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.confirmBtn, { backgroundColor: isDark ? 'rgba(52,199,89,0.3)' : '#34C75960', opacity: confirmando ? 0.7 : 1 }]}
+                    onPress={confirmarDirecto}
+                    disabled={confirmando}
+                  >
+                    {confirmando
+                      ? <ActivityIndicator color="#fff" size="small" />
+                      : <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
+                    }
+                    <Text style={styles.confirmBtnText}>
+                      {confirmando ? 'Confirmando…' : 'Marcar como pagado'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+            {/* Comprobante rechazado — esperando nuevo envío del inquilino */}
+            {!pago?.confirmado && pago?.rechazado && pago?.comprobante_url && (
+              <View style={[styles.comprobanteCard, { backgroundColor: isDark ? 'rgba(239,68,68,0.08)' : 'rgba(239,68,68,0.05)', borderColor: '#EF444430', opacity: 0.8 }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                  <Ionicons name="close-circle" size={14} color="#EF4444" />
+                  <Text style={{ color: '#EF4444', fontWeight: '700', fontSize: 12 }}>Comprobante rechazado — esperando reenvío</Text>
+                </View>
+                <Image source={{ uri: pago.comprobante_url }} style={[styles.comprobanteImg, { opacity: 0.6 }]} resizeMode="contain" />
+              </View>
             )}
 
-            {!pago && (
-              <TouchableOpacity
-                style={[styles.generateBtn, { backgroundColor: theme.primary, opacity: generando ? 0.7 : 1 }]}
-                onPress={generarQr}
-                disabled={generando}
-              >
-                {generando
-                  ? <ActivityIndicator color="#fff" size="small" />
-                  : <Ionicons name="add-circle-outline" size={20} color="#fff" />
-                }
-                <Text style={styles.confirmBtnText}>
-                  {generando ? 'Generando…' : 'Registrar pago'}
-                </Text>
-              </TouchableOpacity>
-            )}
           </View>
           );
         })()}
@@ -354,43 +382,12 @@ export default function PagoDetalleScreen() {
               ) : (
                 <>
                   <Text style={[styles.qrHint, { color: theme.textSecondary }]}>
-                    Genera el QR y escanéalo con tu teléfono para confirmar el pago automáticamente
+                    {pago?.qr_token
+                      ? 'El inquilino ya generó su QR. Puedes escanearlo o confirmar manualmente.'
+                      : 'El inquilino genera su QR desde la app. Usa la pestaña Escanear para confirmar el pago.'}
                   </Text>
 
-                  {qrDataUrl && Platform.OS === 'web' ? (
-                    <View style={styles.qrWrapper}>
-                      <Image
-                        source={{ uri: qrDataUrl }}
-                        style={styles.qrImage}
-                        resizeMode="contain"
-                      />
-                    </View>
-                  ) : null}
-
-                  {qrDataUrl && !config.app_url && (
-                    <View style={[styles.qrWarning, { backgroundColor: '#F59E0B15', borderColor: '#F59E0B40' }]}>
-                      <Ionicons name="warning-outline" size={14} color="#F59E0B" />
-                      <Text style={styles.qrWarningText}>
-                        Configura la URL de la app en Ajustes para que el QR funcione desde otros dispositivos
-                      </Text>
-                    </View>
-                  )}
-
-                  <TouchableOpacity
-                    style={[styles.generateBtn, { backgroundColor: theme.primary, opacity: generando ? 0.7 : 1 }]}
-                    onPress={generarQr}
-                    disabled={generando || Platform.OS !== 'web'}
-                  >
-                    {generando
-                      ? <ActivityIndicator color="#fff" size="small" />
-                      : <Ionicons name="qr-code-outline" size={20} color="#fff" />
-                    }
-                    <Text style={styles.confirmBtnText}>
-                      {generando ? 'Generando…' : qrDataUrl ? 'Regenerar QR' : 'Generar QR'}
-                    </Text>
-                  </TouchableOpacity>
-
-                  {pago?.qr_token && !pago.confirmado && (
+                  {pago?.qr_token ? (
                     <TouchableOpacity
                       style={[styles.confirmBtn, { backgroundColor: '#34C759', opacity: confirmando ? 0.7 : 1 }]}
                       onPress={confirmarDirecto}
@@ -404,6 +401,13 @@ export default function PagoDetalleScreen() {
                         {confirmando ? 'Confirmando…' : 'Confirmar pago aquí'}
                       </Text>
                     </TouchableOpacity>
+                  ) : (
+                    <View style={[styles.qrPendiente, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)' }]}>
+                      <Ionicons name="qr-code-outline" size={32} color={theme.textSecondary} />
+                      <Text style={[styles.qrPendienteText, { color: theme.textSecondary }]}>
+                        Sin QR activo este período
+                      </Text>
+                    </View>
                   )}
                 </>
               )}
@@ -476,6 +480,14 @@ export default function PagoDetalleScreen() {
                           </Text>
                         </View>
                       )}
+                      {p.escaneado_por_nombre && (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                          <Ionicons name="qr-code-outline" size={12} color={theme.textSecondary} />
+                          <Text style={[styles.histFecha, { color: theme.textSecondary }]}>
+                            Escaneado por {p.escaneado_por_nombre}
+                          </Text>
+                        </View>
+                      )}
                       {p.comprobante_url && (
                         <TouchableOpacity
                           style={[styles.verComprobanteBtn, { borderColor: theme.primary + '40', backgroundColor: isDark ? 'rgba(99,102,241,0.1)' : 'rgba(99,102,241,0.07)' }]}
@@ -500,6 +512,52 @@ export default function PagoDetalleScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* Modal rechazar pago */}
+      <Modal visible={showRechazarModal} transparent animationType="fade" onRequestClose={() => setShowRechazarModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, { backgroundColor: isDark ? '#1E2235' : '#fff' }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+              <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: '#EF444420', justifyContent: 'center', alignItems: 'center' }}>
+                <Ionicons name="close-circle" size={20} color="#EF4444" />
+              </View>
+              <Text style={[styles.modalTitle, { color: theme.text, marginBottom: 0 }]}>Rechazar comprobante</Text>
+            </View>
+            <Text style={[{ color: theme.textSecondary, fontSize: 13, marginBottom: 16 }]}>
+              El inquilino será notificado y podrá enviar un nuevo comprobante.
+            </Text>
+            <Text style={[styles.modalLabel, { color: theme.textSecondary }]}>Motivo del rechazo (opcional)</Text>
+            <TextInput
+              style={[styles.modalInput, { color: theme.text, borderColor: theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', minHeight: 80, textAlignVertical: 'top', paddingTop: 12 }]}
+              value={rechazarComentario}
+              onChangeText={setRechazarComentario}
+              placeholder="Ej: El comprobante no es legible, el monto no coincide..."
+              placeholderTextColor={theme.textSecondary}
+              multiline
+              maxLength={300}
+            />
+            <View style={styles.modalBtns}>
+              <TouchableOpacity
+                style={[styles.modalCancelBtn, { borderColor: theme.border }]}
+                onPress={() => setShowRechazarModal(false)}
+                disabled={rechazando}
+              >
+                <Text style={{ color: theme.text, fontWeight: '600' }}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalConfirmBtn, { backgroundColor: '#EF4444', opacity: rechazando ? 0.7 : 1 }]}
+                onPress={rechazarPago}
+                disabled={rechazando}
+              >
+                {rechazando
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={{ color: '#fff', fontWeight: '700' }}>Rechazar</Text>
+                }
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Modal comprobante */}
       <Modal visible={!!comprobanteModal} transparent animationType="fade" onRequestClose={() => setComprobanteModal(null)}>
@@ -627,6 +685,16 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   pagadoText: { color: '#34C759', fontWeight: '700', fontSize: 14 },
+  rechazoRazon: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
 
   sectionLabel: { fontSize: 12, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 8 },
 
@@ -733,6 +801,8 @@ const styles = StyleSheet.create({
   qrConfirmado: { alignItems: 'center', gap: 8, paddingVertical: 16 },
   qrConfirmadoText: { fontSize: 20, fontWeight: '800' },
   qrConfirmadoSub: { fontSize: 13 },
+  qrPendiente: { alignItems: 'center', gap: 8, paddingVertical: 20, borderRadius: 12, marginTop: 12 },
+  qrPendienteText: { fontSize: 14, textAlign: 'center' },
 
   comprobanteCard: { borderRadius: 16, padding: 16, borderWidth: 1, marginTop: 12 },
   comprobanteImg: { width: '100%', height: 200, borderRadius: 10 },

@@ -102,10 +102,14 @@ export default function ConfiguracionScreen() {
   const [loadingInquilinos, setLoadingInquilinos] = useState(false);
   const [vinculando, setVinculando] = useState(false);
 
-  // Plantilla de contrato DOCX
+  // Plantilla de contrato DOCX — flujo IA
   const [showPlantilla, setShowPlantilla] = useState(false);
+  const [plantillaStep, setPlantillaStep] = useState<'inicio' | 'procesando' | 'preview'>('inicio');
+  const [htmlTemplate, setHtmlTemplate] = useState<string | null>(null);
   const [subiendoPlantilla, setSubiendoPlantilla] = useState(false);
+  const [guardandoPlantilla, setGuardandoPlantilla] = useState(false);
   const [borrandoPlantilla, setBorrandoPlantilla] = useState(false);
+  const [plantillaError, setPlantillaError] = useState('');
 
   // Nuevo usuario form
   const [showNuevoUsuario, setShowNuevoUsuario] = useState(false);
@@ -293,10 +297,9 @@ export default function ConfiguracionScreen() {
   const subirPlantilla = async () => {
     try {
       let docxBase64: string | null = null;
-      let nombre = 'plantilla.docx';
 
       if (Platform.OS === 'web') {
-        const result = await new Promise<{ base64: string; name: string } | null>((resolve) => {
+        const result = await new Promise<{ base64: string } | null>((resolve) => {
           const input = document.createElement('input');
           input.type = 'file';
           input.accept = '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -304,14 +307,13 @@ export default function ConfiguracionScreen() {
             const file = e.target.files?.[0];
             if (!file) return resolve(null);
             const reader = new FileReader();
-            reader.onload = (ev) => resolve({ base64: ev.target?.result as string, name: file.name });
+            reader.onload = (ev) => resolve({ base64: ev.target?.result as string });
             reader.readAsDataURL(file);
           };
           input.click();
         });
         if (!result) return;
         docxBase64 = result.base64;
-        nombre = result.name;
       } else {
         const DocumentPicker = await import('expo-document-picker');
         const picked = await DocumentPicker.getDocumentAsync({
@@ -320,31 +322,96 @@ export default function ConfiguracionScreen() {
         });
         if (picked.canceled || !picked.assets?.[0]) return;
         const asset = picked.assets[0];
-        nombre = asset.name || 'plantilla.docx';
         const FileSystem = await import('expo-file-system');
-        const b64 = await FileSystem.readAsStringAsync(asset.uri, {
-          encoding: 'base64' as any,
-        });
+        const b64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: 'base64' as any });
         docxBase64 = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${b64}`;
       }
 
       if (!docxBase64) return;
+
+      // Paso 2: procesando con IA
+      setPlantillaError('');
+      setPlantillaStep('procesando');
       setSubiendoPlantilla(true);
+
       try {
-        await api.uploadContratoTemplate(docxBase64, nombre);
-        setConfig(prev => ({
-          ...prev,
-          contrato_docx_nombre: nombre,
-          contrato_docx_template: 'ok', // solo como flag visual
-        }));
-      } catch (e: any) {
-        if (Platform.OS === 'web') {
-          window.alert('Error al subir: ' + (e.message || 'Intenta de nuevo'));
+        const res = await api.procesarContratoIA(docxBase64);
+        if (res.data?.htmlTemplate) {
+          setHtmlTemplate(res.data.htmlTemplate);
+          setPlantillaStep('preview');
+        } else {
+          throw new Error('La IA no devolvió resultado');
         }
+      } catch (e: any) {
+        setPlantillaError(e.message || 'Error al procesar el documento');
+        setPlantillaStep('inicio');
       } finally {
         setSubiendoPlantilla(false);
       }
-    } catch { setSubiendoPlantilla(false); }
+    } catch {
+      setSubiendoPlantilla(false);
+      setPlantillaStep('inicio');
+    }
+  };
+
+  const verPreviewPdf = async () => {
+    if (!htmlTemplate) return;
+    try {
+      if (Platform.OS === 'web') {
+        // POST con fetch directo para abrir en nueva pestaña
+        const token = api.getToken();
+        const resp = await fetch(api.getPreviewContratoPdfUrl(), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ htmlTemplate }),
+        });
+        if (!resp.ok) throw new Error('Error al generar preview');
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank');
+      }
+    } catch (e: any) {
+      setPlantillaError(e.message || 'No se pudo generar el preview');
+    }
+  };
+
+  const descargarParaEditar = async () => {
+    if (!htmlTemplate) return;
+    try {
+      if (Platform.OS === 'web') {
+        const token = api.getToken();
+        const resp = await fetch(api.getDescargarContratoDocxUrl(), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ htmlTemplate }),
+        });
+        if (!resp.ok) throw new Error('Error al generar .docx');
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'plantilla_con_variables.docx'; a.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch (e: any) {
+      setPlantillaError(e.message || 'No se pudo descargar el archivo');
+    }
+  };
+
+  const guardarPlantilla = async () => {
+    if (!htmlTemplate) return;
+    setGuardandoPlantilla(true);
+    setPlantillaError('');
+    try {
+      await api.guardarHtmlTemplate(htmlTemplate);
+      setConfig(prev => ({ ...prev, contrato_html_template: '__existe__' }));
+      setShowPlantilla(false);
+      setPlantillaStep('inicio');
+      setHtmlTemplate(null);
+    } catch (e: any) {
+      setPlantillaError(e.message || 'No se pudo guardar la plantilla');
+    } finally {
+      setGuardandoPlantilla(false);
+    }
   };
 
   const eliminarPlantilla = async () => {
@@ -365,6 +432,7 @@ export default function ConfiguracionScreen() {
                 const next = { ...prev };
                 delete next['contrato_docx_template'];
                 delete next['contrato_docx_nombre'];
+                delete next['contrato_html_template'];
                 return next;
               });
             } catch { /* ignore */ }
@@ -517,9 +585,9 @@ export default function ConfiguracionScreen() {
               title="Plantilla de Contrato"
               subtitle={
                 loadingConfig ? 'Cargando…'
-                : config['contrato_docx_template']
-                  ? `✓ ${config['contrato_docx_nombre'] || 'Personalizada'}`
-                  : 'Usando plantilla por defecto'
+                : (config['contrato_html_template'] || config['contrato_docx_template'])
+                  ? '✓ Plantilla personalizada activa'
+                  : 'Toca para subir tu contrato Word'
               }
               onPress={() => setShowPlantilla(true)}
             />
@@ -1252,105 +1320,218 @@ export default function ConfiguracionScreen() {
         </View>
       </Modal>
 
-      {/* ── Modal: Plantilla de Contrato DOCX ─────────────────────────── */}
+      {/* ── Modal: Plantilla de Contrato con IA ───────────────────────── */}
       <Modal visible={showPlantilla} transparent animationType="slide">
         <View style={styles.modalOverlay}>
-          <GlassCard style={styles.modalBox} padding={0}>
+          <GlassCard style={[styles.modalBox, { maxHeight: '90%' }]} padding={0}>
+
+            {/* Header */}
             <View style={[styles.sheetHeader, { borderBottomColor: theme.border }]}>
-              <Text style={[styles.sheetTitle, { color: theme.text }]}>Plantilla de Contrato</Text>
-              <TouchableOpacity onPress={() => setShowPlantilla(false)}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.sheetTitle, { color: theme.text }]}>Plantilla de Contrato</Text>
+                {/* Pasos */}
+                <View style={{ flexDirection: 'row', gap: 6, marginTop: 4 }}>
+                  {(['inicio', 'procesando', 'preview'] as const).map((s, i) => (
+                    <View key={s} style={[styles.stepDot, {
+                      backgroundColor: plantillaStep === s
+                        ? '#7C3AED'
+                        : ((['inicio','procesando','preview'].indexOf(plantillaStep) > i)
+                            ? '#7C3AED60' : theme.border),
+                      width: plantillaStep === s ? 20 : 8,
+                    }]} />
+                  ))}
+                </View>
+              </View>
+              <TouchableOpacity onPress={() => {
+                setShowPlantilla(false);
+                setPlantillaStep('inicio');
+                setPlantillaError('');
+              }}>
                 <Ionicons name="close" size={24} color={theme.text} />
               </TouchableOpacity>
             </View>
 
-            <View style={styles.sheetBody}>
-              {/* Estado actual */}
-              <View style={[styles.plantillaBanner, {
-                backgroundColor: config['contrato_docx_template']
-                  ? '#7C3AED' + '15' : theme.card,
-                borderColor: config['contrato_docx_template']
-                  ? '#7C3AED' + '40' : theme.border,
-              }]}>
-                <Ionicons
-                  name={config['contrato_docx_template'] ? 'document-attach' : 'document-outline'}
-                  size={28}
-                  color={config['contrato_docx_template'] ? '#7C3AED' : theme.textSecondary}
-                />
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.plantillaBannerTitle, { color: theme.text }]}>
-                    {config['contrato_docx_template']
-                      ? config['contrato_docx_nombre'] || 'Plantilla personalizada'
-                      : 'Plantilla por defecto'}
+            {/* ── PASO 1: Inicio ───────────────────────────────────────────── */}
+            {plantillaStep === 'inicio' && (
+              <ScrollView style={{ maxHeight: 480 }} contentContainerStyle={styles.sheetBody}>
+                {/* Estado actual */}
+                <View style={[styles.plantillaBanner, {
+                  backgroundColor: (config['contrato_html_template'] || config['contrato_docx_template'])
+                    ? '#7C3AED15' : theme.card,
+                  borderColor: (config['contrato_html_template'] || config['contrato_docx_template'])
+                    ? '#7C3AED40' : theme.border,
+                }]}>
+                  <Ionicons
+                    name={(config['contrato_html_template'] || config['contrato_docx_template'])
+                      ? 'checkmark-circle' : 'document-outline'}
+                    size={28}
+                    color={(config['contrato_html_template'] || config['contrato_docx_template'])
+                      ? '#7C3AED' : theme.textSecondary}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.plantillaBannerTitle, { color: theme.text }]}>
+                      {(config['contrato_html_template'] || config['contrato_docx_template'])
+                        ? 'Plantilla personalizada activa'
+                        : 'Usando plantilla por defecto'}
+                    </Text>
+                    <Text style={[styles.plantillaBannerSub, { color: theme.textSecondary }]}>
+                      {(config['contrato_html_template'] || config['contrato_docx_template'])
+                        ? 'La IA ya procesó tu contrato'
+                        : 'Sube tu contrato Word y la IA detectará dónde va cada dato'}
+                    </Text>
+                  </View>
+                  {(config['contrato_html_template'] || config['contrato_docx_template']) && (
+                    <TouchableOpacity
+                      style={[styles.plantillaDeleteBtn, { borderColor: theme.danger + '40' }]}
+                      onPress={() => { setShowPlantilla(false); eliminarPlantilla(); }}
+                      disabled={borrandoPlantilla}
+                    >
+                      {borrandoPlantilla
+                        ? <ActivityIndicator size="small" color={theme.danger} />
+                        : <Ionicons name="trash-outline" size={18} color={theme.danger} />}
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {/* Error */}
+                {!!plantillaError && (
+                  <View style={[styles.errorBox, { backgroundColor: theme.danger + '15', borderColor: theme.danger + '30', marginBottom: 12 }]}>
+                    <Ionicons name="alert-circle-outline" size={15} color={theme.danger} />
+                    <Text style={[styles.errorText, { color: theme.danger }]}>{plantillaError}</Text>
+                  </View>
+                )}
+
+                {/* CTA principal */}
+                <TouchableOpacity
+                  style={[styles.primaryBtn, { backgroundColor: '#7C3AED' }]}
+                  onPress={subirPlantilla}
+                >
+                  <Ionicons name="sparkles-outline" size={18} color="#fff" />
+                  <Text style={styles.primaryBtnText}>
+                    {(config['contrato_html_template'] || config['contrato_docx_template'])
+                      ? 'Subir nuevo contrato y re-procesar con IA'
+                      : 'Subir mi contrato Word — la IA inserta las variables'}
                   </Text>
-                  <Text style={[styles.plantillaBannerSub, { color: theme.textSecondary }]}>
-                    {config['contrato_docx_template']
-                      ? 'Se usará tu plantilla Word al generar contratos'
-                      : 'Sube tu propio contrato Word (.docx) con variables'}
+                </TouchableOpacity>
+
+                <Text style={[styles.inputLabel, { color: theme.textSecondary, marginBottom: 6 }]}>
+                  ¿Cómo funciona?
+                </Text>
+                {[
+                  { icon: 'cloud-upload-outline', text: 'Sube tu contrato Word (.docx) tal como lo tienes' },
+                  { icon: 'sparkles-outline',     text: 'La IA detecta nombres, fechas, montos y los reemplaza con variables automáticamente' },
+                  { icon: 'eye-outline',           text: 'Ves el resultado y puedes descargarlo para revisar o editar en Word' },
+                  { icon: 'save-outline',          text: 'Guardas la plantilla y cada nuevo contrato se llena solo' },
+                ].map((step, i) => (
+                  <View key={i} style={styles.howStep}>
+                    <View style={[styles.howStepNum, { backgroundColor: '#7C3AED20' }]}>
+                      <Ionicons name={step.icon as any} size={14} color="#7C3AED" />
+                    </View>
+                    <Text style={[styles.howStepText, { color: theme.textSecondary }]}>{step.text}</Text>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+
+            {/* ── PASO 2: Procesando ───────────────────────────────────────── */}
+            {plantillaStep === 'procesando' && (
+              <View style={[styles.sheetBody, { alignItems: 'center', paddingVertical: 48 }]}>
+                <View style={[styles.processingIcon, { backgroundColor: '#7C3AED15' }]}>
+                  <ActivityIndicator size="large" color="#7C3AED" />
+                </View>
+                <Text style={[{ fontSize: 18, fontWeight: '700', color: theme.text, marginTop: 20 }]}>
+                  Analizando contrato…
+                </Text>
+                <Text style={[{ fontSize: 13, color: theme.textSecondary, marginTop: 8, textAlign: 'center' }]}>
+                  La IA está leyendo tu documento e{'\n'}insertando las variables automáticamente
+                </Text>
+              </View>
+            )}
+
+            {/* ── PASO 3: Preview ──────────────────────────────────────────── */}
+            {plantillaStep === 'preview' && htmlTemplate && (
+              <ScrollView style={{ maxHeight: 480 }} contentContainerStyle={styles.sheetBody}>
+                {/* Banner éxito */}
+                <View style={[styles.plantillaBanner, { backgroundColor: '#10B98115', borderColor: '#10B98130' }]}>
+                  <Ionicons name="checkmark-circle" size={28} color="#10B981" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.plantillaBannerTitle, { color: theme.text }]}>
+                      ¡Variables insertadas!
+                    </Text>
+                    <Text style={[styles.plantillaBannerSub, { color: theme.textSecondary }]}>
+                      Revisa el resultado antes de guardar
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Contador de variables encontradas */}
+                <View style={[styles.varsFoundBadge, { backgroundColor: '#7C3AED12', borderColor: '#7C3AED30' }]}>
+                  <Ionicons name="code-slash-outline" size={14} color="#7C3AED" />
+                  <Text style={{ color: '#7C3AED', fontSize: 12, fontWeight: '700' }}>
+                    {(htmlTemplate.match(/\{\{[^}]+\}\}/g) || []).length} variables detectadas
                   </Text>
                 </View>
-                {config['contrato_docx_template'] && (
-                  <TouchableOpacity
-                    style={[styles.plantillaDeleteBtn, { borderColor: theme.danger + '40' }]}
-                    onPress={() => { setShowPlantilla(false); eliminarPlantilla(); }}
-                    disabled={borrandoPlantilla}
-                  >
-                    {borrandoPlantilla
-                      ? <ActivityIndicator size="small" color={theme.danger} />
-                      : <Ionicons name="trash-outline" size={18} color={theme.danger} />}
-                  </TouchableOpacity>
+
+                {/* Acciones de revisión */}
+                {Platform.OS === 'web' && (
+                  <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+                    <TouchableOpacity
+                      style={[styles.previewBtn, { backgroundColor: '#0EA5E915', borderColor: '#0EA5E930', flex: 1 }]}
+                      onPress={verPreviewPdf}
+                    >
+                      <Ionicons name="eye-outline" size={16} color="#0EA5E9" />
+                      <Text style={[styles.previewBtnText, { color: '#0EA5E9' }]}>Ver PDF demo</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.previewBtn, { backgroundColor: '#10B98115', borderColor: '#10B98130', flex: 1 }]}
+                      onPress={descargarParaEditar}
+                    >
+                      <Ionicons name="download-outline" size={16} color="#10B981" />
+                      <Text style={[styles.previewBtnText, { color: '#10B981' }]}>Descargar .docx</Text>
+                    </TouchableOpacity>
+                  </View>
                 )}
-              </View>
 
-              {/* Botón subir */}
-              <TouchableOpacity
-                style={[styles.primaryBtn, { backgroundColor: '#7C3AED', opacity: subiendoPlantilla ? 0.7 : 1 }]}
-                onPress={() => { setShowPlantilla(false); subirPlantilla(); }}
-                disabled={subiendoPlantilla}
-              >
-                {subiendoPlantilla
-                  ? <ActivityIndicator size="small" color="#fff" />
-                  : <>
-                      <Ionicons name="cloud-upload-outline" size={18} color="#fff" />
-                      <Text style={styles.primaryBtnText}>
-                        {config['contrato_docx_template'] ? 'Reemplazar plantilla' : 'Subir plantilla (.docx)'}
-                      </Text>
-                    </>}
-              </TouchableOpacity>
+                {/* Variables encontradas */}
+                <Text style={[styles.inputLabel, { color: theme.textSecondary, marginBottom: 6 }]}>
+                  Variables insertadas por la IA:
+                </Text>
+                <View style={styles.varsGrid}>
+                  {[...new Set((htmlTemplate.match(/\{\{[^}]+\}\}/g) || []))].map(v => (
+                    <View key={v} style={[styles.varChip, { backgroundColor: '#7C3AED12', borderColor: '#7C3AED30' }]}>
+                      <Text style={[styles.varChipText, { color: '#7C3AED' }]}>{v}</Text>
+                    </View>
+                  ))}
+                </View>
 
-              {/* Variables disponibles */}
-              <Text style={[styles.inputLabel, { color: theme.textSecondary, marginTop: 8 }]}>
-                Variables disponibles en tu plantilla Word:
-              </Text>
-              <View style={styles.varsGrid}>
-                {[
-                  '{{nombre_completo}}', '{{depto_numero}}',
-                  '{{renta}}',           '{{renta_letra}}',
-                  '{{deposito}}',        '{{fecha_inicio}}',
-                  '{{fecha_termino}}',   '{{fecha_pago}}',
-                  '{{tel_arrendatario}}','{{fiador_nombre}}',
-                  '{{fiador_telefono}}', '{{metodo_pago}}',
-                  '{{arrendador_nombre}}','{{arrendador_direccion}}',
-                  '{{observaciones}}',   '{{inventario}}',
-                ].map(v => (
+                {!!plantillaError && (
+                  <View style={[styles.errorBox, { backgroundColor: theme.danger + '15', borderColor: theme.danger + '30', marginTop: 8 }]}>
+                    <Ionicons name="alert-circle-outline" size={15} color={theme.danger} />
+                    <Text style={[styles.errorText, { color: theme.danger }]}>{plantillaError}</Text>
+                  </View>
+                )}
+
+                {/* Botones finales */}
+                <View style={[styles.modalActions, { marginTop: 16 }]}>
                   <TouchableOpacity
-                    key={v}
-                    style={[styles.varChip, { backgroundColor: '#7C3AED' + '12', borderColor: '#7C3AED' + '30' }]}
-                    onPress={async () => {
-                      try {
-                        if (typeof navigator !== 'undefined' && navigator.clipboard) {
-                          await navigator.clipboard.writeText(v);
-                        }
-                      } catch { /* ignore */ }
-                    }}
+                    style={[styles.modalBtn, { borderWidth: 1, borderColor: theme.border }]}
+                    onPress={() => { setPlantillaStep('inicio'); setHtmlTemplate(null); }}
                   >
-                    <Text style={[styles.varChipText, { color: '#7C3AED' }]}>{v}</Text>
+                    <Text style={{ color: theme.text, fontWeight: '600' }}>← Volver</Text>
                   </TouchableOpacity>
-                ))}
-              </View>
-              <Text style={[{ fontSize: 11, color: theme.textSecondary, marginTop: 4 }]}>
-                Toca una variable para copiarla. Pégala en tu Word exactamente así.
-              </Text>
-            </View>
+                  <TouchableOpacity
+                    style={[styles.modalBtn, { backgroundColor: '#7C3AED', opacity: guardandoPlantilla ? 0.7 : 1 }]}
+                    onPress={guardarPlantilla}
+                    disabled={guardandoPlantilla}
+                  >
+                    {guardandoPlantilla
+                      ? <ActivityIndicator size="small" color="#fff" />
+                      : <Text style={{ color: '#fff', fontWeight: '700' }}>Guardar plantilla ✓</Text>}
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            )}
+
           </GlassCard>
         </View>
       </Modal>
@@ -1492,4 +1673,22 @@ const styles = StyleSheet.create({
     borderRadius: 8, borderWidth: 1,
   },
   varChipText: { fontSize: 10, fontWeight: '700', fontFamily: Platform.OS === 'web' ? 'monospace' : 'Courier' },
+  stepDot: { height: 6, borderRadius: 3 },
+  processingIcon: {
+    width: 80, height: 80, borderRadius: 40,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  howStep: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 10 },
+  howStepNum: { width: 28, height: 28, borderRadius: 8, justifyContent: 'center', alignItems: 'center', flexShrink: 0 },
+  howStepText: { flex: 1, fontSize: 13, lineHeight: 18 },
+  varsFoundBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, marginBottom: 12,
+    alignSelf: 'flex-start',
+  },
+  previewBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, height: 42, borderRadius: 12, borderWidth: 1,
+  },
+  previewBtnText: { fontSize: 13, fontWeight: '600' },
 });

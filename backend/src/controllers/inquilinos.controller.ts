@@ -372,7 +372,8 @@ export async function getContratoPdf(req: AuthRequest, res: Response, next: Next
     const [configRes, deptoRes] = await Promise.all([
       pool.query(
         `SELECT clave, valor FROM configuracion WHERE admin_id = $1
-         AND clave IN ('arrendador_nombre', 'arrendador_direccion', 'contrato_docx_template')`,
+         AND clave IN ('arrendador_nombre','arrendador_direccion',
+                       'contrato_docx_template','contrato_html_template')`,
         [req.user!.id]
       ),
       pool.query(`SELECT inventario_base FROM departamentos WHERE admin_id = $1 AND numero = $2`, [req.user!.id, inquilino.depto_numero]),
@@ -383,16 +384,20 @@ export async function getContratoPdf(req: AuthRequest, res: Response, next: Next
 
     const data = {
       ...inquilino,
-      arrendador_nombre: config['arrendador_nombre'] || 'Administración',
+      arrendador_nombre:    config['arrendador_nombre']    || 'Administración',
       arrendador_direccion: config['arrendador_direccion'] || inquilino.ubicacion || '',
-      inventario_base: deptoRes.rows[0]?.inventario_base || [],
+      inventario_base:      deptoRes.rows[0]?.inventario_base || [],
     };
 
-    // Usar plantilla personalizada si el admin la subió, sino la default
-    const customTemplate = config['contrato_docx_template'];
-    const pdfBuffer = customTemplate
-      ? await PdfService.generateFromDocxTemplate(customTemplate, data)
-      : await PdfService.generateContratoPdf(data);
+    // Prioridad: 1) HTML procesado por IA  2) DOCX subido manualmente  3) default
+    let pdfBuffer: Buffer;
+    if (config['contrato_html_template']) {
+      pdfBuffer = await PdfService.generateFromHtmlTemplate(config['contrato_html_template'], data);
+    } else if (config['contrato_docx_template']) {
+      pdfBuffer = await PdfService.generateFromDocxTemplate(config['contrato_docx_template'], data);
+    } else {
+      pdfBuffer = await PdfService.generateContratoPdf(data);
+    }
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="contrato_${inquilino.depto_numero}_${inquilino.nombre_completo.replace(/\s+/g, '_')}.pdf"`);

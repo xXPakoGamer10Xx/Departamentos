@@ -115,6 +115,32 @@ export class PdfService {
   }
 
   /**
+   * Genera PDF a partir de un HTML template con {{variables}} (procesado por IA).
+   * Reemplaza variables → parsea HTML → react-pdf
+   */
+  static async generateFromHtmlTemplate(htmlTemplate: string, contractData: any): Promise<Buffer> {
+    const vars = buildDocxVars(contractData);
+
+    // Reemplazar todas las {{variables}} en el HTML
+    let html = htmlTemplate;
+    for (const [key, value] of Object.entries(vars)) {
+      html = html.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), value);
+    }
+
+    const paragraphs = parseMammothHtml(html);
+
+    const element = React.createElement(ContratoPersonalizado, {
+      paragraphs,
+      data: {
+        nombre_completo:   contractData.nombre_completo  ?? '',
+        arrendador_nombre: contractData.arrendador_nombre ?? '',
+      },
+    });
+    // @ts-ignore
+    return await renderToBuffer(element);
+  }
+
+  /**
    * Genera PDF a partir de una plantilla DOCX personalizada (base64).
    * Pipeline: docxtemplater → DOCX relleno → mammoth → HTML → react-pdf
    */

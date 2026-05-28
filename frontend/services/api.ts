@@ -184,6 +184,15 @@ class ApiService {
   deleteContratoTemplate = () =>
     this.request<void>('DELETE', '/config/contrato-template');
 
+  procesarContratoIA = (docxBase64: string) =>
+    this.request<{ htmlTemplate: string }>('POST', '/config/contrato-procesar-ia', { docxBase64 });
+
+  guardarHtmlTemplate = (htmlTemplate: string) =>
+    this.request<void>('PUT', '/config', { contrato_html_template: htmlTemplate });
+
+  getPreviewContratoPdfUrl = () => `${this.baseUrl}/config/contrato-preview-pdf`;
+  getDescargarContratoDocxUrl = () => `${this.baseUrl}/config/contrato-descargar-docx`;
+
   // Tickets
   getTickets = (params?: { estado?: string }) =>
     this.request<any[]>('GET', '/tickets', undefined, params as any);

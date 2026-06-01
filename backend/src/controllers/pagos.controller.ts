@@ -14,12 +14,17 @@ function getCurrentPeriodo(): string {
 // POST /api/pagos/generar-qr/:inquilino_id
 export async function generarQr(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
+    // El QR de pago lo genera únicamente el inquilino desde su app.
+    // El admin/cobrador solo lo escanea para aceptar el pago en efectivo.
+    if (req.user!.rol !== 'inquilino') {
+      throw new AppError('Solo el inquilino puede generar su código QR de pago', 403);
+    }
+
     const { inquilino_id } = req.params;
     const periodo = getCurrentPeriodo();
 
-    let authCheck = req.user!.rol === 'inquilino' ? 'AND usuario_id = $2' : 'AND admin_id = $2';
     const inqRes = await pool.query(
-      `SELECT id, nombre_completo, depto_numero, renta, metodo_pago FROM inquilinos WHERE id = $1 ${authCheck} AND estado = 'activo'`,
+      `SELECT id, nombre_completo, depto_numero, renta, metodo_pago FROM inquilinos WHERE id = $1 AND usuario_id = $2 AND estado = 'activo'`,
       [inquilino_id, req.user!.id]
     );
     if (!inqRes.rows[0]) throw new AppError('Inquilino no encontrado o no autorizado', 403);

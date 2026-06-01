@@ -41,10 +41,14 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-depas_secret_2024}
       JWT_SECRET: ${JWT_SECRET:-cambia_este_secreto_en_produccion}
       JWT_EXPIRES_IN: 7d
+      # Orígenes permitidos por CORS en producción (separados por coma).
+      FRONTEND_URL: ${FRONTEND_URL:-https://nethrent.duckdns.org}
+      # Clave de Google Gemini para el procesado IA del contrato (opcional).
+      GOOGLE_AI_API_KEY: ${GOOGLE_AI_API_KEY:-}
       BACKUP_DIR: /app/backups
       BACKUP_CRON: "0 4 * * *"
     ports:
-      - "3001:3001"
+      - "127.0.0.1:3001:3001"
     volumes:
       - ./backups:/app/backups
     healthcheck:

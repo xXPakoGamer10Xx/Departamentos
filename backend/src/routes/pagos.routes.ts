@@ -1,12 +1,14 @@
 import { Router } from 'express';
 import { generarQr, confirmarPago, getEstadoPago, getPagoByToken, subirComprobante, confirmarPagoAdmin, rechazarPagoAdmin, getComprobantesPendientes, getHistorialPagos } from '../controllers/pagos.controller';
 import { authMiddleware, adminOnly, cobradorOrAdmin, softAuth } from '../middleware/auth.middleware';
+import { tokenLimiter } from '../middleware/rateLimit.middleware';
 
 export const pagosRouter = Router();
 
-// Rutas públicas (softAuth registra quién escaneó si hay sesión activa)
-pagosRouter.get('/info/:token', getPagoByToken);
-pagosRouter.post('/confirmar/:token', softAuth, confirmarPago);
+// Rutas públicas (softAuth registra quién escaneó si hay sesión activa).
+// tokenLimiter previene enumeración de tokens de pago.
+pagosRouter.get('/info/:token', tokenLimiter, getPagoByToken);
+pagosRouter.post('/confirmar/:token', tokenLimiter, softAuth, confirmarPago);
 
 // Rutas protegidas
 pagosRouter.use(authMiddleware);

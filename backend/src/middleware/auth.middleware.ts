@@ -12,10 +12,12 @@ export interface AuthRequest extends Request {
 }
 
 export function authMiddleware(req: AuthRequest, _res: Response, next: NextFunction): void {
+  // Solo se acepta el token vía header Authorization. El token por query string
+  // (?token=) queda restringido a las rutas públicas de QR que usan softAuth,
+  // para evitar fugas de token en logs, referers e historial del navegador.
   const authHeader = req.headers.authorization;
-  const queryToken = req.query?.token as string | undefined;
 
-  const raw = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : queryToken;
+  const raw = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : undefined;
   if (!raw) {
     return next(new AppError('Token de autenticación requerido', 401));
   }

@@ -16,6 +16,9 @@
       }
     },
     "preview": {
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://nethrent.duckdns.org/api"
+      },
       "distribution": "internal",
       "android": {
         "buildType": "apk"

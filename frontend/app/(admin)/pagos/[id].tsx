@@ -383,29 +383,23 @@ export default function PagoDetalleScreen() {
                 <>
                   <Text style={[styles.qrHint, { color: theme.textSecondary }]}>
                     {pago?.qr_token
-                      ? 'El inquilino ya generó su QR. Puedes escanearlo o confirmar manualmente.'
-                      : 'El inquilino genera su QR desde la app. Usa la pestaña Escanear para confirmar el pago.'}
+                      ? 'El inquilino ya generó su QR. Escanéalo desde la pestaña Escanear para aceptar el pago en efectivo.'
+                      : 'El inquilino genera su QR desde su app. Cuando lo tenga, escanéalo desde la pestaña Escanear para aceptar el pago en efectivo.'}
                   </Text>
 
-                  {pago?.qr_token ? (
-                    <TouchableOpacity
-                      style={[styles.confirmBtn, { backgroundColor: '#34C759', opacity: confirmando ? 0.7 : 1 }]}
-                      onPress={confirmarDirecto}
-                      disabled={confirmando}
-                    >
-                      {confirmando
-                        ? <ActivityIndicator color="#fff" size="small" />
-                        : <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
-                      }
-                      <Text style={styles.confirmBtnText}>
-                        {confirmando ? 'Confirmando…' : 'Confirmar pago aquí'}
-                      </Text>
-                    </TouchableOpacity>
-                  ) : (
+                  <TouchableOpacity
+                    style={[styles.confirmBtn, { backgroundColor: theme.primary }]}
+                    onPress={() => router.push('/(admin)/scan' as any)}
+                  >
+                    <Ionicons name="qr-code-outline" size={20} color="#fff" />
+                    <Text style={styles.confirmBtnText}>Ir a Escanear</Text>
+                  </TouchableOpacity>
+
+                  {!pago?.qr_token && (
                     <View style={[styles.qrPendiente, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)' }]}>
-                      <Ionicons name="qr-code-outline" size={32} color={theme.textSecondary} />
+                      <Ionicons name="time-outline" size={32} color={theme.textSecondary} />
                       <Text style={[styles.qrPendienteText, { color: theme.textSecondary }]}>
-                        Sin QR activo este período
+                        El inquilino aún no genera su QR este período
                       </Text>
                     </View>
                   )}

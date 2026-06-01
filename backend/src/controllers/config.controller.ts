@@ -27,20 +27,33 @@ const DEMO_DATA = {
   inventario_base:    ['Refrigerador', 'Estufa', 'Lavadora'],
 };
 
+// Sanitiza HTML de plantillas: elimina scripts, estilos y manejadores de eventos.
+function sanitizeHtml(html: string): string {
+  if (typeof html !== 'string') return '';
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/\son\w+\s*=\s*"[^"]*"/gi, '')
+    .replace(/\son\w+\s*=\s*'[^']*'/gi, '')
+    .replace(/javascript:/gi, '');
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // GET /api/config
 // ────────────────────────────────────────────────────────────────────────────
 export async function getConfig(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     let adminId = req.user!.id;
+    let deptoNumero: number | null = null;
 
     if (req.user!.rol === 'inquilino') {
       const inq = await pool.query(
-        `SELECT admin_id FROM inquilinos WHERE usuario_id = $1 AND estado = 'activo' LIMIT 1`,
+        `SELECT admin_id, depto_numero FROM inquilinos WHERE usuario_id = $1 AND estado = 'activo' LIMIT 1`,
         [req.user!.id]
       );
       if (inq.rows[0]) {
         adminId = inq.rows[0].admin_id;
+        deptoNumero = inq.rows[0].depto_numero;
       } else {
         res.json({ success: true, data: {} });
         return;
@@ -60,6 +73,32 @@ export async function getConfig(req: AuthRequest, res: Response, next: NextFunct
         config[row.clave] = row.valor;
       }
     }
+
+    // Resolver la cuenta bancaria que aplica para el inquilino: la asignada a su
+    // departamento; si no tiene, la predeterminada del admin. Sobreescribe los
+    // campos banco_* para que la pantalla del inquilino los muestre sin cambios.
+    if (req.user!.rol === 'inquilino') {
+      const cuenta = await pool.query(
+        `SELECT cb.banco_nombre, cb.banco_clabe, cb.banco_titular
+         FROM cuentas_bancarias cb
+         WHERE cb.admin_id = $1 AND cb.activo = TRUE
+           AND (
+             cb.id = (SELECT d.cuenta_bancaria_id FROM departamentos d
+                      WHERE d.admin_id = $1 AND d.numero = $2)
+             OR cb.es_predeterminada = TRUE
+           )
+         ORDER BY (cb.id = (SELECT d.cuenta_bancaria_id FROM departamentos d
+                            WHERE d.admin_id = $1 AND d.numero = $2)) DESC
+         LIMIT 1`,
+        [adminId, deptoNumero]
+      );
+      if (cuenta.rows[0]) {
+        config['banco_nombre']  = cuenta.rows[0].banco_nombre  ?? '';
+        config['banco_clabe']   = cuenta.rows[0].banco_clabe   ?? '';
+        config['banco_titular'] = cuenta.rows[0].banco_titular ?? '';
+      }
+    }
+
     res.json({ success: true, data: config });
   } catch (err) {
     next(err);
@@ -83,8 +122,12 @@ export async function updateConfig(req: AuthRequest, res: Response, next: NextFu
       'contrato_html_template',
     ];
 
-    for (const [clave, valor] of Object.entries(updates)) {
+    for (const [clave, rawValor] of Object.entries(updates)) {
       if (!allowed.includes(clave)) continue;
+      // Sanitiza el HTML del contrato: elimina <script>/<style> y atributos on*
+      const valor = clave === 'contrato_html_template'
+        ? sanitizeHtml(rawValor)
+        : rawValor;
       await pool.query(
         `INSERT INTO configuracion (admin_id, clave, valor) VALUES ($1, $2, $3)
          ON CONFLICT (admin_id, clave) DO UPDATE SET valor = $3, updated_at = NOW()`,

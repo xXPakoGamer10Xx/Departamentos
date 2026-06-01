@@ -8,6 +8,8 @@ import { Theme } from '../../../constants/Theme';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { GlassCard } from '../../../components/ui/GlassCard';
+import RichHtmlEditor from '../../../components/ui/RichHtmlEditor';
+import { DEFAULT_CONTRATO_HTML } from '../../../components/ui/contractVariables';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useState, useCallback } from 'react';
 import api from '../../../services/api';
@@ -110,6 +112,20 @@ export default function ConfiguracionScreen() {
   const [guardandoPlantilla, setGuardandoPlantilla] = useState(false);
   const [borrandoPlantilla, setBorrandoPlantilla] = useState(false);
   const [plantillaError, setPlantillaError] = useState('');
+
+  // Editor de contrato
+  const [showEditor, setShowEditor] = useState(false);
+  const [editorHtml, setEditorHtml] = useState('');
+  const [guardandoEditor, setGuardandoEditor] = useState(false);
+  const [editorError, setEditorError] = useState('');
+
+  // Cuentas bancarias
+  const [showCuentas, setShowCuentas] = useState(false);
+  const [cuentas, setCuentas] = useState<any[]>([]);
+  const [loadingCuentas, setLoadingCuentas] = useState(false);
+  const [cuentaForm, setCuentaForm] = useState<{ id?: string; alias: string; banco_nombre: string; banco_clabe: string; banco_titular: string } | null>(null);
+  const [guardandoCuenta, setGuardandoCuenta] = useState(false);
+  const [cuentaError, setCuentaError] = useState('');
 
   // Nuevo usuario form
   const [showNuevoUsuario, setShowNuevoUsuario] = useState(false);
@@ -234,6 +250,38 @@ export default function ConfiguracionScreen() {
       setAdmins(prev => prev.map(a => a.id === id ? { ...a, activo: res.data?.activo } : a));
     } catch { /* ignore */ }
     finally { setTogglingId(null); }
+  };
+
+  const eliminarUsuario = async (id: string, nombre: string) => {
+    const { Platform, Alert } = await import('react-native');
+    const doEliminar = async () => {
+      try {
+        await api.deleteUsuario(id);
+        const res = await api.getUsuarios();
+        setAdmins(res.data || []);
+      } catch (e: any) {
+        if (Platform.OS === 'web') {
+          window.alert(e.message || 'No se pudo eliminar el usuario');
+        } else {
+          Alert.alert('Error', e.message || 'No se pudo eliminar el usuario');
+        }
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm(`¿Seguro que deseas eliminar a ${nombre}? Esta acción no se puede deshacer.`)) {
+        await doEliminar();
+      }
+    } else {
+      Alert.alert(
+        'Eliminar usuario',
+        `¿Seguro que deseas eliminar a ${nombre}? Esta acción no se puede deshacer.`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Eliminar', style: 'destructive', onPress: doEliminar },
+        ]
+      );
+    }
   };
 
   const cambiarRolUsuario = async (id: string, nuevoRol: string) => {
@@ -443,6 +491,128 @@ export default function ConfiguracionScreen() {
     );
   };
 
+  // ── Editor de contrato ──────────────────────────────────────────────
+  const abrirEditor = (initialHtml: string) => {
+    setEditorHtml(initialHtml || '');
+    setEditorError('');
+    setShowEditor(true);
+  };
+
+  const previewEditorPdf = async () => {
+    if (!editorHtml.trim()) { setEditorError('El contrato está vacío'); return; }
+    if (Platform.OS !== 'web') {
+      setEditorError('La vista previa PDF está disponible en la versión web');
+      return;
+    }
+    try {
+      const token = api.getToken();
+      const resp = await fetch(api.getPreviewContratoPdfUrl(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ htmlTemplate: editorHtml }),
+      });
+      if (!resp.ok) throw new Error('Error al generar preview');
+      const blob = await resp.blob();
+      window.open(URL.createObjectURL(blob), '_blank');
+    } catch (e: any) {
+      setEditorError(e.message || 'No se pudo generar el preview');
+    }
+  };
+
+  const guardarEditor = async () => {
+    if (!editorHtml.trim()) { setEditorError('El contrato está vacío'); return; }
+    setGuardandoEditor(true);
+    setEditorError('');
+    try {
+      await api.guardarHtmlTemplate(editorHtml);
+      setConfig(prev => ({ ...prev, contrato_html_template: editorHtml }));
+      setShowEditor(false);
+      setShowPlantilla(false);
+      setPlantillaStep('inicio');
+      setHtmlTemplate(null);
+    } catch (e: any) {
+      setEditorError(e.message || 'No se pudo guardar el contrato');
+    } finally {
+      setGuardandoEditor(false);
+    }
+  };
+
+  // ── Cuentas bancarias ───────────────────────────────────────────────
+  const openCuentas = async () => {
+    setShowCuentas(true);
+    setLoadingCuentas(true);
+    try {
+      const res = await api.getCuentasBancarias();
+      setCuentas(res.data || []);
+    } catch { setCuentas([]); }
+    finally { setLoadingCuentas(false); }
+  };
+
+  const nuevaCuenta = () => {
+    setCuentaError('');
+    setCuentaForm({ alias: '', banco_nombre: '', banco_clabe: '', banco_titular: '' });
+  };
+
+  const editarCuenta = (c: any) => {
+    setCuentaError('');
+    setCuentaForm({
+      id: c.id, alias: c.alias || '', banco_nombre: c.banco_nombre || '',
+      banco_clabe: c.banco_clabe || '', banco_titular: c.banco_titular || '',
+    });
+  };
+
+  const guardarCuenta = async () => {
+    if (!cuentaForm) return;
+    if (cuentaForm.banco_clabe.length !== 18) { setCuentaError('La CLABE debe tener 18 dígitos'); return; }
+    setGuardandoCuenta(true);
+    setCuentaError('');
+    try {
+      if (cuentaForm.id) {
+        await api.updateCuentaBancaria(cuentaForm.id, {
+          alias: cuentaForm.alias, banco_nombre: cuentaForm.banco_nombre,
+          banco_clabe: cuentaForm.banco_clabe, banco_titular: cuentaForm.banco_titular,
+        });
+      } else {
+        await api.createCuentaBancaria({
+          alias: cuentaForm.alias, banco_nombre: cuentaForm.banco_nombre,
+          banco_clabe: cuentaForm.banco_clabe, banco_titular: cuentaForm.banco_titular,
+        });
+      }
+      const res = await api.getCuentasBancarias();
+      setCuentas(res.data || []);
+      setCuentaForm(null);
+    } catch (e: any) {
+      setCuentaError(e.message || 'No se pudo guardar la cuenta');
+    } finally {
+      setGuardandoCuenta(false);
+    }
+  };
+
+  const marcarDefaultCuenta = async (id: string) => {
+    try {
+      await api.setCuentaDefault(id);
+      const res = await api.getCuentasBancarias();
+      setCuentas(res.data || []);
+    } catch { /* ignore */ }
+  };
+
+  const eliminarCuenta = async (id: string) => {
+    const { Alert } = await import('react-native');
+    Alert.alert('Eliminar cuenta', '¿Seguro que deseas eliminar esta cuenta bancaria?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Eliminar', style: 'destructive',
+        onPress: async () => {
+          try {
+            await api.deleteCuentaBancaria(id);
+            const res = await api.getCuentasBancarias();
+            setCuentas(res.data || []);
+          } catch { /* ignore */ }
+        },
+      },
+    ]);
+  };
+
   const abrirNuevoUsuario = () => {
     setNuNombre(''); setNuEmail(''); setNuPassword('');
     setNuRol('admin'); setNuError('');
@@ -606,25 +776,11 @@ export default function ConfiguracionScreen() {
           <GlassCard style={styles.section} borderRadius={Theme.borderRadius.xl} padding={0}>
             <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>Datos Bancarios (Transferencias)</Text>
             <SettingRow
-              icon="business"
-              iconColor="#34C759"
-              title="Banco"
-              subtitle={loadingConfig ? 'Cargando…' : (config['banco_nombre'] || 'Sin configurar')}
-              onPress={() => openEdit('banco_nombre', 'Banco')}
-            />
-            <SettingRow
               icon="card"
               iconColor="#34C759"
-              title="CLABE / Cuenta"
-              subtitle={loadingConfig ? 'Cargando…' : (config['banco_clabe'] || 'Sin configurar')}
-              onPress={() => openEdit('banco_clabe', 'CLABE / Número de cuenta')}
-            />
-            <SettingRow
-              icon="person"
-              iconColor="#34C759"
-              title="Titular de la cuenta"
-              subtitle={loadingConfig ? 'Cargando…' : (config['banco_titular'] || 'Sin configurar')}
-              onPress={() => openEdit('banco_titular', 'Titular de la cuenta')}
+              title="Cuentas Bancarias"
+              subtitle="Administra varias cuentas y asígnalas a cada departamento"
+              onPress={openCuentas}
             />
           </GlassCard>
 
@@ -859,6 +1015,7 @@ export default function ConfiguracionScreen() {
                       const isToggling = togglingId === a.id;
                       const rolColor = a.rol === 'admin' ? theme.primary : a.rol === 'cobrador' ? '#10B981' : '#FF9500';
                       const rolLabel = a.rol === 'admin' ? 'ADMIN' : a.rol === 'cobrador' ? 'COBRADOR' : 'INQUILINO';
+                      const isSelf = a.id === getStoredUser()?.id;
                       return (
                         <View key={a.id} style={[styles.adminItem, { borderBottomColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }]}>
                           <View style={[styles.adminAvatar, { backgroundColor: rolColor }]}>
@@ -868,10 +1025,11 @@ export default function ConfiguracionScreen() {
                             <View style={styles.adminNameRow}>
                               <Text style={[styles.adminName, { color: theme.text }]} numberOfLines={1}>{a.nombre_completo}</Text>
                               <TouchableOpacity
-                                style={[styles.rolBadge, { backgroundColor: rolColor + '25' }]}
-                                onPress={() => setRolModalUser(a)}
+                                style={[styles.rolBadge, { backgroundColor: rolColor + '25', opacity: isSelf ? 0.5 : 1 }]}
+                                onPress={() => { if (!isSelf) setRolModalUser(a); }}
+                                disabled={isSelf}
                               >
-                                <Text style={[styles.rolBadgeText, { color: rolColor }]}>{rolLabel} ▾</Text>
+                                <Text style={[styles.rolBadgeText, { color: rolColor }]}>{rolLabel} {isSelf ? '' : '▾'}</Text>
                               </TouchableOpacity>
                             </View>
                             <Text style={[styles.adminEmail, { color: theme.textSecondary }]}>{a.email}</Text>
@@ -886,26 +1044,37 @@ export default function ConfiguracionScreen() {
                                 <Text style={[styles.toggleBtnText, { color: theme.primary }]}>Vincular</Text>
                               </TouchableOpacity>
                             )}
-                            <TouchableOpacity
-                              style={[
-                                styles.toggleBtn,
-                                { backgroundColor: a.activo ? theme.success + '20' : theme.danger + '20' }
-                              ]}
-                              onPress={() => toggleAdmin(a.id)}
-                              disabled={isToggling}
-                            >
-                              {isToggling
-                                ? <ActivityIndicator size="small" color={a.activo ? theme.success : theme.danger} />
-                                : <Ionicons
-                                    name={a.activo ? 'checkmark-circle' : 'close-circle'}
-                                    size={18}
-                                    color={a.activo ? theme.success : theme.danger}
-                                  />
-                              }
-                              <Text style={[styles.toggleBtnText, { color: a.activo ? theme.success : theme.danger }]}>
-                                {a.activo ? 'Activo' : 'Inactivo'}
-                              </Text>
-                            </TouchableOpacity>
+                            <View style={{ flexDirection: 'row', gap: 6 }}>
+                              <TouchableOpacity
+                                style={[
+                                  styles.toggleBtn,
+                                  { flex: 1, backgroundColor: a.activo ? theme.success + '20' : theme.danger + '20', opacity: isSelf ? 0.5 : 1 }
+                                ]}
+                                onPress={() => toggleAdmin(a.id)}
+                                disabled={isToggling || isSelf}
+                              >
+                                {isToggling
+                                  ? <ActivityIndicator size="small" color={a.activo ? theme.success : theme.danger} />
+                                  : <Ionicons
+                                      name={a.activo ? 'checkmark-circle' : 'close-circle'}
+                                      size={18}
+                                      color={a.activo ? theme.success : theme.danger}
+                                    />
+                                }
+                                <Text style={[styles.toggleBtnText, { color: a.activo ? theme.success : theme.danger }]}>
+                                  {a.activo ? 'Activo' : 'Inactivo'}
+                                </Text>
+                              </TouchableOpacity>
+
+                              {a.id !== getStoredUser()?.id && (
+                                <TouchableOpacity
+                                  style={[styles.toggleBtn, { paddingHorizontal: 12, backgroundColor: theme.danger + '20' }]}
+                                  onPress={() => eliminarUsuario(a.id, a.nombre_completo)}
+                                >
+                                  <Ionicons name="trash-outline" size={18} color={theme.danger} />
+                                </TouchableOpacity>
+                              )}
+                            </View>
                           </View>
                         </View>
                       );
@@ -1414,6 +1583,22 @@ export default function ConfiguracionScreen() {
                   </Text>
                 </TouchableOpacity>
 
+                {/* Editar/crear el contrato directamente en la app (sin subir Word) */}
+                {(() => {
+                  const tieneHtml = !!config['contrato_html_template'] && config['contrato_html_template'] !== '__existe__';
+                  return (
+                    <TouchableOpacity
+                      style={[styles.primaryBtn, { backgroundColor: '#0EA5E9' }]}
+                      onPress={() => abrirEditor(tieneHtml ? config['contrato_html_template'] : DEFAULT_CONTRATO_HTML)}
+                    >
+                      <Ionicons name="create-outline" size={18} color="#fff" />
+                      <Text style={styles.primaryBtnText}>
+                        {tieneHtml ? 'Editar contrato en la app' : 'Escribir contrato desde cero'}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })()}
+
                 <Text style={[styles.inputLabel, { color: theme.textSecondary, marginBottom: 6 }]}>
                   ¿Cómo funciona?
                 </Text>
@@ -1471,6 +1656,15 @@ export default function ConfiguracionScreen() {
                     {(htmlTemplate.match(/\{\{[^}]+\}\}/g) || []).length} variables detectadas
                   </Text>
                 </View>
+
+                {/* Editar contrato en la app (web + móvil) */}
+                <TouchableOpacity
+                  style={[styles.primaryBtn, { backgroundColor: '#0EA5E9', marginBottom: 12 }]}
+                  onPress={() => abrirEditor(htmlTemplate)}
+                >
+                  <Ionicons name="create-outline" size={18} color="#fff" />
+                  <Text style={styles.primaryBtnText}>Editar contrato en la app</Text>
+                </TouchableOpacity>
 
                 {/* Acciones de revisión */}
                 {Platform.OS === 'web' && (
@@ -1532,6 +1726,214 @@ export default function ConfiguracionScreen() {
               </ScrollView>
             )}
 
+          </GlassCard>
+        </View>
+      </Modal>
+
+      {/* ── Modal: Editor de contrato ─────────────────────────────────── */}
+      <Modal visible={showEditor} transparent animationType="slide" onRequestClose={() => setShowEditor(false)}>
+        <View style={styles.modalOverlay}>
+          <GlassCard style={[styles.modalBox, { maxHeight: '92%', maxWidth: 640 }]} padding={0}>
+            <View style={[styles.sheetHeader, { borderBottomColor: theme.border }]}>
+              <Text style={[styles.sheetTitle, { color: theme.text }]}>Editar contrato</Text>
+              <TouchableOpacity onPress={() => setShowEditor(false)}>
+                <Ionicons name="close" size={24} color={theme.text} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={{ maxHeight: 540 }} contentContainerStyle={styles.sheetBody} keyboardShouldPersistTaps="handled">
+              <Text style={[styles.plantillaBannerSub, { color: theme.textSecondary, marginBottom: 12 }]}>
+                Edita el texto y usa los botones para insertar variables como {'{{renta}}'} o {'{{nombre_completo}}'}. Cada contrato se llenará con los datos reales del inquilino.
+              </Text>
+
+              <RichHtmlEditor html={editorHtml} onChange={setEditorHtml} isDark={isDark} theme={theme} />
+
+              {!!editorError && (
+                <View style={[styles.errorBox, { backgroundColor: theme.danger + '15', borderColor: theme.danger + '30', marginTop: 12 }]}>
+                  <Ionicons name="alert-circle-outline" size={15} color={theme.danger} />
+                  <Text style={[styles.errorText, { color: theme.danger }]}>{editorError}</Text>
+                </View>
+              )}
+
+              {Platform.OS === 'web' && (
+                <TouchableOpacity
+                  style={[styles.previewBtn, { backgroundColor: '#0EA5E915', borderColor: '#0EA5E930', marginTop: 12 }]}
+                  onPress={previewEditorPdf}
+                >
+                  <Ionicons name="eye-outline" size={16} color="#0EA5E9" />
+                  <Text style={[styles.previewBtnText, { color: '#0EA5E9' }]}>Ver PDF demo</Text>
+                </TouchableOpacity>
+              )}
+
+              <View style={[styles.modalActions, { marginTop: 16 }]}>
+                <TouchableOpacity
+                  style={[styles.modalBtn, { borderWidth: 1, borderColor: theme.border }]}
+                  onPress={() => setShowEditor(false)}
+                  disabled={guardandoEditor}
+                >
+                  <Text style={{ color: theme.text, fontWeight: '600' }}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalBtn, { backgroundColor: '#7C3AED', opacity: guardandoEditor ? 0.7 : 1 }]}
+                  onPress={guardarEditor}
+                  disabled={guardandoEditor}
+                >
+                  {guardandoEditor
+                    ? <ActivityIndicator size="small" color="#fff" />
+                    : <Text style={{ color: '#fff', fontWeight: '700' }}>Guardar contrato ✓</Text>}
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </GlassCard>
+        </View>
+      </Modal>
+
+      {/* ── Modal: Cuentas bancarias ──────────────────────────────────── */}
+      <Modal visible={showCuentas} transparent animationType="slide" onRequestClose={() => setShowCuentas(false)}>
+        <View style={styles.modalOverlay}>
+          <GlassCard style={[styles.modalBox, { maxHeight: '88%' }]} padding={0}>
+            <View style={[styles.sheetHeader, { borderBottomColor: theme.border }]}>
+              <Text style={[styles.sheetTitle, { color: theme.text }]}>Cuentas Bancarias</Text>
+              <View style={styles.sheetHeaderActions}>
+                <TouchableOpacity style={[styles.addUserBtn, { backgroundColor: '#34C759' }]} onPress={nuevaCuenta}>
+                  <Ionicons name="add" size={16} color="#fff" />
+                  <Text style={styles.addUserBtnText}>Nueva</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setShowCuentas(false)}>
+                  <Ionicons name="close" size={22} color={theme.textSecondary} />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.sheetBody}>
+              {loadingCuentas ? (
+                <ActivityIndicator size="small" color="#34C759" style={{ marginTop: 20 }} />
+              ) : cuentas.length === 0 ? (
+                <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
+                  Aún no tienes cuentas. Toca “Nueva” para agregar la primera.
+                </Text>
+              ) : (
+                <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 460 }}>
+                  {cuentas.map(c => (
+                    <View key={c.id} style={[styles.backupItem, { borderBottomColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }]}>
+                      <View style={[styles.backupTypeIcon, { backgroundColor: '#34C75920' }]}>
+                        <Ionicons name="card" size={16} color="#34C759" />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <Text style={[styles.backupName, { color: theme.text }]}>
+                            {c.alias || c.banco_nombre || 'Cuenta'}
+                          </Text>
+                          {c.es_predeterminada && (
+                            <View style={[styles.rolBadge, { backgroundColor: '#34C75925' }]}>
+                              <Text style={[styles.rolBadgeText, { color: '#34C759' }]}>PREDET.</Text>
+                            </View>
+                          )}
+                        </View>
+                        <Text style={[styles.backupMeta, { color: theme.textSecondary }]}>
+                          {c.banco_nombre ? `${c.banco_nombre} · ` : ''}{c.banco_clabe}
+                        </Text>
+                        {Array.isArray(c.departamentos) && c.departamentos.length > 0 && (
+                          <Text style={[styles.backupMeta, { color: theme.textSecondary }]}>
+                            Deptos: {c.departamentos.join(', ')}
+                          </Text>
+                        )}
+                      </View>
+                      <View style={{ gap: 6 }}>
+                        {!c.es_predeterminada && (
+                          <TouchableOpacity style={[styles.toggleBtn, { backgroundColor: '#34C75920' }]} onPress={() => marcarDefaultCuenta(c.id)}>
+                            <Ionicons name="star-outline" size={15} color="#34C759" />
+                          </TouchableOpacity>
+                        )}
+                        <TouchableOpacity style={[styles.toggleBtn, { backgroundColor: theme.primary + '20' }]} onPress={() => editarCuenta(c)}>
+                          <Ionicons name="create-outline" size={15} color={theme.primary} />
+                        </TouchableOpacity>
+                        <TouchableOpacity style={[styles.toggleBtn, { backgroundColor: theme.danger + '20' }]} onPress={() => eliminarCuenta(c.id)}>
+                          <Ionicons name="trash-outline" size={15} color={theme.danger} />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))}
+                </ScrollView>
+              )}
+              <Text style={[styles.plantillaBannerSub, { color: theme.textSecondary, marginTop: 12 }]}>
+                Asigna qué cuenta usa cada departamento desde la pantalla del departamento. El inquilino verá automáticamente la cuenta de su depto (o la predeterminada).
+              </Text>
+            </View>
+          </GlassCard>
+        </View>
+      </Modal>
+
+      {/* Modal alta/edición de cuenta */}
+      <Modal visible={!!cuentaForm} transparent animationType="fade" onRequestClose={() => setCuentaForm(null)}>
+        <View style={styles.modalOverlay}>
+          <GlassCard style={styles.modalBox} borderRadius={Theme.borderRadius.xl} padding={28}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>
+              {cuentaForm?.id ? 'Editar cuenta' : 'Nueva cuenta'}
+            </Text>
+
+            <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>Alias (opcional)</Text>
+            <TextInput
+              style={[styles.modalInput, { color: theme.text, borderColor: theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' }]}
+              value={cuentaForm?.alias}
+              onChangeText={t => setCuentaForm(f => f ? { ...f, alias: t.slice(0, 60) } : f)}
+              placeholder="Ej. Cuenta Torre A"
+              placeholderTextColor={theme.textSecondary}
+            />
+
+            <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>Banco</Text>
+            <TextInput
+              style={[styles.modalInput, { color: theme.text, borderColor: theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' }]}
+              value={cuentaForm?.banco_nombre}
+              onChangeText={t => setCuentaForm(f => f ? { ...f, banco_nombre: t.slice(0, 60) } : f)}
+              placeholder="Ej. BBVA"
+              placeholderTextColor={theme.textSecondary}
+            />
+
+            <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>CLABE (18 dígitos)</Text>
+            <TextInput
+              style={[styles.modalInput, { color: theme.text, borderColor: cuentaError ? theme.danger : theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' }]}
+              value={cuentaForm?.banco_clabe}
+              onChangeText={t => { setCuentaForm(f => f ? { ...f, banco_clabe: t.replace(/\D/g, '').slice(0, 18) } : f); setCuentaError(''); }}
+              placeholder="18 dígitos"
+              placeholderTextColor={theme.textSecondary}
+              keyboardType="numeric"
+              maxLength={18}
+            />
+
+            <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>Titular</Text>
+            <TextInput
+              style={[styles.modalInput, { color: theme.text, borderColor: theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' }]}
+              value={cuentaForm?.banco_titular}
+              onChangeText={t => setCuentaForm(f => f ? { ...f, banco_titular: t.slice(0, 120) } : f)}
+              placeholder="Nombre del titular"
+              placeholderTextColor={theme.textSecondary}
+            />
+
+            {cuentaError ? (
+              <View style={[styles.errorBox, { backgroundColor: theme.danger + '15', borderColor: theme.danger + '30', marginTop: 8 }]}>
+                <Ionicons name="alert-circle-outline" size={15} color={theme.danger} />
+                <Text style={[styles.errorText, { color: theme.danger }]}>{cuentaError}</Text>
+              </View>
+            ) : null}
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalBtn, { borderWidth: 1, borderColor: theme.border }]}
+                onPress={() => setCuentaForm(null)}
+                disabled={guardandoCuenta}
+              >
+                <Text style={{ color: theme.text, fontWeight: '600' }}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalBtn, { backgroundColor: '#34C759', opacity: guardandoCuenta ? 0.7 : 1 }]}
+                onPress={guardarCuenta}
+                disabled={guardandoCuenta}
+              >
+                {guardandoCuenta
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={{ color: '#fff', fontWeight: '700' }}>Guardar</Text>}
+              </TouchableOpacity>
+            </View>
           </GlassCard>
         </View>
       </Modal>

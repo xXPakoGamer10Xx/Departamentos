@@ -50,8 +50,10 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "your-eas-project-id"
-      }
-    }
+        "projectId": "1f892520-31c7-4a1e-9db4-ae1b07a68ce7"
+      },
+      "router": {}
+    },
+    "owner": "xxpakogamer10xx"
   }
 }

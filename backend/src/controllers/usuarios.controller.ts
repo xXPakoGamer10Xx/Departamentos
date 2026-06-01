@@ -5,12 +5,19 @@ import { AppError } from '../middleware/error.middleware';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { toTitleCase } from '../utils/formatters';
 
-// GET /api/usuarios
-export async function getUsuarios(_req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+// GET /api/usuarios — Solo devuelve el propio admin + los que invitó
+export async function getUsuarios(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
+    const adminId = req.user!.id;
     const result = await pool.query(
-      `SELECT id, email, nombre_completo, rol, avatar_url, activo, ultimo_acceso, created_at
-       FROM usuarios ORDER BY created_at ASC`
+      `SELECT u.id, u.email, u.nombre_completo, u.rol, u.avatar_url, u.activo, u.ultimo_acceso, u.created_at
+       FROM usuarios u
+       WHERE u.id = $1
+          OR u.id IN (
+            SELECT usado_por FROM codigos_invitacion WHERE admin_id = $1 AND usado_por IS NOT NULL
+          )
+       ORDER BY u.created_at ASC`,
+      [adminId]
     );
     res.json({ success: true, data: result.rows });
   } catch (err) {
@@ -50,7 +57,15 @@ export async function createUsuario(req: AuthRequest, res: Response, next: NextF
 export async function toggleUsuario(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     const { id } = req.params;
-    if (id === req.user!.id) throw new AppError('No puedes desactivar tu propia cuenta', 400);
+    const adminId = req.user!.id;
+    if (id === adminId) throw new AppError('No puedes desactivar tu propia cuenta', 400);
+
+    // Verificar que el usuario pertenece al scope del admin
+    const scopeCheck = await pool.query(
+      `SELECT 1 FROM codigos_invitacion WHERE admin_id = $1 AND usado_por = $2`,
+      [adminId, id]
+    );
+    if (!scopeCheck.rows[0]) throw new AppError('No tienes permiso para modificar este usuario', 403);
 
     const result = await pool.query(
       `UPDATE usuarios SET activo = NOT activo WHERE id = $1 RETURNING id, email, activo`,
@@ -102,6 +117,32 @@ export async function updatePerfil(req: AuthRequest, res: Response, next: NextFu
       [nombre_completo ? toTitleCase(nombre_completo) : null, avatar_url || null, req.user!.id]
     );
     res.json({ success: true, data: result.rows[0] });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// DELETE /api/usuarios/:id — Eliminar usuario
+export async function deleteUsuario(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { id } = req.params;
+    const adminId = req.user!.id;
+
+    if (id === adminId) {
+      throw new AppError('No puedes eliminar tu propia cuenta', 400);
+    }
+
+    // Verificar que el usuario pertenece al scope del admin
+    const scopeCheck = await pool.query(
+      `SELECT 1 FROM codigos_invitacion WHERE admin_id = $1 AND usado_por = $2`,
+      [adminId, id]
+    );
+    if (!scopeCheck.rows[0]) throw new AppError('No tienes permiso para eliminar este usuario', 403);
+
+    const result = await pool.query('DELETE FROM usuarios WHERE id = $1 RETURNING id', [id]);
+    if (!result.rows[0]) throw new AppError('Usuario no encontrado', 404);
+
+    res.json({ success: true, message: 'Usuario eliminado exitosamente' });
   } catch (err) {
     next(err);
   }

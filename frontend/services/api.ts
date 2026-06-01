@@ -148,6 +148,25 @@ class ApiService {
   deleteDepartamento = (numero: number) =>
     this.request<void>('DELETE', `/departamentos/${numero}`);
 
+  // Cuentas bancarias (transferencias)
+  getCuentasBancarias = () =>
+    this.request<any[]>('GET', '/cuentas-bancarias');
+
+  createCuentaBancaria = (data: { alias?: string; banco_nombre?: string; banco_clabe: string; banco_titular?: string }) =>
+    this.request<any>('POST', '/cuentas-bancarias', data);
+
+  updateCuentaBancaria = (id: string, data: object) =>
+    this.request<any>('PUT', `/cuentas-bancarias/${id}`, data);
+
+  setCuentaDefault = (id: string) =>
+    this.request<any>('PATCH', `/cuentas-bancarias/${id}/predeterminada`);
+
+  deleteCuentaBancaria = (id: string) =>
+    this.request<void>('DELETE', `/cuentas-bancarias/${id}`);
+
+  asignarCuentaDepto = (numero: number, cuenta_bancaria_id: string | null) =>
+    this.request<any>('PATCH', `/cuentas-bancarias/departamento/${numero}`, { cuenta_bancaria_id });
+
   // Usuarios
   getUsuarios = () =>
     this.request<any[]>('GET', '/usuarios');
@@ -157,6 +176,10 @@ class ApiService {
 
   toggleUsuario = (id: string) =>
     this.request<any>('PUT', `/usuarios/${id}/toggle`);
+
+  deleteUsuario = (id: string) =>
+    this.request<void>('DELETE', `/usuarios/${id}`);
+
 
   updatePerfil = (data: object) =>
     this.request<any>('PATCH', '/usuarios/perfil', data);

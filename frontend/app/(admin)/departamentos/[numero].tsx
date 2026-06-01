@@ -25,6 +25,8 @@ export default function DepartamentoDetailScreen() {
   const [nuevoItem, setNuevoItem] = useState('');
   const [guardando, setGuardando] = useState(false);
   const [cambiandoEstado, setCambiandoEstado] = useState(false);
+  const [cuentas, setCuentas] = useState<any[]>([]);
+  const [asignandoCuenta, setAsignandoCuenta] = useState(false);
   const inputRef = useRef<TextInput>(null);
 
   useEffect(() => {
@@ -36,7 +38,20 @@ export default function DepartamentoDetailScreen() {
       })
       .catch(e => Alert.alert('Error', e.message || 'No se pudo cargar el departamento'))
       .finally(() => setLoading(false));
+    api.getCuentasBancarias().then(r => setCuentas(r.data || [])).catch(() => {});
   }, [numero]);
+
+  const asignarCuenta = async (cuentaId: string | null) => {
+    setAsignandoCuenta(true);
+    try {
+      await api.asignarCuentaDepto(Number(numero), cuentaId);
+      setDepto((prev: any) => ({ ...prev, cuenta_bancaria_id: cuentaId }));
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'No se pudo asignar la cuenta');
+    } finally {
+      setAsignandoCuenta(false);
+    }
+  };
 
   const agregarItem = () => {
     const item = nuevoItem.trim();
@@ -254,6 +269,60 @@ export default function DepartamentoDetailScreen() {
         </TouchableOpacity>
       </View>
 
+      <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
+        <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>CUENTA PARA TRANSFERENCIAS</Text>
+        <Text style={[styles.hint, { color: theme.textSecondary }]}>
+          El inquilino de este departamento verá esta cuenta al pagar. Si no eliges ninguna, se usa la predeterminada.
+        </Text>
+
+        <TouchableOpacity
+          style={[styles.cuentaRow, { borderColor: !depto.cuenta_bancaria_id ? theme.primary : theme.border }]}
+          onPress={() => asignarCuenta(null)}
+          disabled={asignandoCuenta}
+        >
+          <Ionicons
+            name={!depto.cuenta_bancaria_id ? 'radio-button-on' : 'radio-button-off'}
+            size={20}
+            color={!depto.cuenta_bancaria_id ? theme.primary : theme.textSecondary}
+          />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.itemText, { color: theme.text }]}>Cuenta predeterminada</Text>
+          </View>
+        </TouchableOpacity>
+
+        {cuentas.map(c => {
+          const selected = depto.cuenta_bancaria_id === c.id;
+          return (
+            <TouchableOpacity
+              key={c.id}
+              style={[styles.cuentaRow, { borderColor: selected ? theme.primary : theme.border }]}
+              onPress={() => asignarCuenta(c.id)}
+              disabled={asignandoCuenta}
+            >
+              <Ionicons
+                name={selected ? 'radio-button-on' : 'radio-button-off'}
+                size={20}
+                color={selected ? theme.primary : theme.textSecondary}
+              />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.itemText, { color: theme.text }]}>
+                  {c.alias || c.banco_nombre || 'Cuenta'}{c.es_predeterminada ? '  (predet.)' : ''}
+                </Text>
+                <Text style={[styles.desc, { color: theme.textSecondary }]}>
+                  {c.banco_nombre ? `${c.banco_nombre} · ` : ''}{c.banco_clabe}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+
+        {cuentas.length === 0 && (
+          <Text style={[styles.hint, { color: theme.textSecondary, marginTop: 8 }]}>
+            No hay cuentas registradas. Agrégalas en Configuración → Cuentas Bancarias.
+          </Text>
+        )}
+      </View>
+
       {depto.historial_inquilinos?.length > 0 ? (
         <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
           <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>HISTORIAL</Text>
@@ -290,6 +359,10 @@ const styles = StyleSheet.create({
   hint: { fontSize: 12, fontStyle: 'italic', marginBottom: 8 },
   nombre: { fontSize: 16, fontWeight: '600' },
   itemRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 },
+  cuentaRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingVertical: 10, paddingHorizontal: 12, borderWidth: 1, borderRadius: 12, marginTop: 8,
+  },
   itemText: { flex: 1, fontSize: 14 },
   deleteItemBtn: { padding: 4 },
   addRow: { flexDirection: 'row', gap: 8, marginTop: 8 },

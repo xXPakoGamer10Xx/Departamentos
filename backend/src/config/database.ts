@@ -102,6 +102,40 @@ ALTER TABLE pagos ADD COLUMN IF NOT EXISTS escaneado_en TIMESTAMPTZ;
 ALTER TABLE usuarios DROP CONSTRAINT IF EXISTS usuarios_rol_check;
 ALTER TABLE usuarios ADD CONSTRAINT usuarios_rol_check
   CHECK (rol IN ('admin', 'inquilino', 'cobrador'));
+
+-- Cuentas bancarias múltiples por admin (transferencias)
+CREATE TABLE IF NOT EXISTS cuentas_bancarias (
+  id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  admin_id          UUID NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+  alias             VARCHAR(60),
+  banco_nombre      VARCHAR(60),
+  banco_clabe       VARCHAR(18),
+  banco_titular     VARCHAR(120),
+  es_predeterminada BOOLEAN NOT NULL DEFAULT FALSE,
+  activo            BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_cuentas_bancarias_admin ON cuentas_bancarias(admin_id);
+
+-- Asignación de cuenta por departamento
+ALTER TABLE departamentos ADD COLUMN IF NOT EXISTS cuenta_bancaria_id UUID
+  REFERENCES cuentas_bancarias(id) ON DELETE SET NULL;
+
+-- Migración de datos: si un admin ya tenía banco_* en configuracion y aún no
+-- tiene ninguna cuenta bancaria, crear una predeterminada con esos datos.
+INSERT INTO cuentas_bancarias (admin_id, alias, banco_nombre, banco_clabe, banco_titular, es_predeterminada)
+SELECT c.admin_id,
+       'Cuenta principal',
+       MAX(CASE WHEN c.clave = 'banco_nombre'  THEN c.valor END),
+       MAX(CASE WHEN c.clave = 'banco_clabe'   THEN c.valor END),
+       MAX(CASE WHEN c.clave = 'banco_titular' THEN c.valor END),
+       TRUE
+FROM configuracion c
+WHERE c.clave IN ('banco_nombre', 'banco_clabe', 'banco_titular')
+GROUP BY c.admin_id
+HAVING COALESCE(MAX(CASE WHEN c.clave = 'banco_clabe' THEN c.valor END), '') <> ''
+   AND NOT EXISTS (SELECT 1 FROM cuentas_bancarias cb WHERE cb.admin_id = c.admin_id);
 `;
 
 export async function initDB(): Promise<void> {

@@ -61,6 +61,13 @@ DB_PASSWORD=${DB_PASSWORD}
 JWT_SECRET=${JWT_SECRET}
 JWT_EXPIRES_IN=7d
 
+# CORS — dominios permitidos en producción (separados por coma)
+FRONTEND_URL=https://nethrent.duckdns.org
+
+# Google Gemini — necesaria para el procesado IA del contrato (opcional).
+# Obtén una clave en https://aistudio.google.com/apikey y pégala aquí.
+GOOGLE_AI_API_KEY=
+
 # Backup
 BACKUP_DIR=/app/backups
 BACKUP_CRON="0 4 * * *"

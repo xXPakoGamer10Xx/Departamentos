@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import {
   StyleSheet, View, Text, TouchableOpacity, useColorScheme,
-  ActivityIndicator, Platform, useWindowDimensions,
+  ActivityIndicator, Platform, useWindowDimensions, TextInput,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -40,6 +40,7 @@ export default function ScanQRScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [confirmando, setConfirmando] = useState(false);
+  const [manualToken, setManualToken] = useState('');
   const scannedRef = useRef(false);
 
   useFocusEffect(useCallback(() => {
@@ -93,7 +94,16 @@ export default function ScanQRScreen() {
     setPago(null);
     setToken('');
     setError('');
+    setManualToken('');
     scannedRef.current = false;
+  };
+
+  // Entrada manual del código (web sin cámara): acepta el token UUID o la URL del QR.
+  const buscarManual = () => {
+    const raw = manualToken.trim();
+    if (!raw) return;
+    const match = raw.match(TOKEN_REGEX);
+    processToken(match ? match[0] : raw);
   };
 
   const fmtRenta = (n: number) =>
@@ -134,16 +144,48 @@ export default function ScanQRScreen() {
                 <Ionicons name="phone-portrait-outline" size={40} color={theme.primary} />
               </View>
               <Text style={[styles.webNoticeTitle, { color: theme.text }]}>
-                Usa la app móvil para escanear
+                Escanea con la app móvil
               </Text>
               <Text style={[styles.webNoticeText, { color: theme.textSecondary }]}>
-                Abre la app en tu celular y ve a la pestaña de Escanear para confirmar pagos con la cámara.
+                Abre la app en tu celular y ve a la pestaña Escanear para aceptar el pago en efectivo con la cámara.
               </Text>
+
               <View style={[styles.webNoticeTip, { backgroundColor: isDark ? 'rgba(99,102,241,0.08)' : 'rgba(99,102,241,0.06)', borderColor: theme.primary + '30' }]}>
                 <Ionicons name="information-circle-outline" size={14} color={theme.primary} />
                 <Text style={[styles.webNoticeTipText, { color: theme.textSecondary }]}>
-                  También puedes confirmar pagos directamente desde la pantalla de cada inquilino en Pagos.
+                  ¿Sin cámara? Pide al inquilino el código de su QR e ingrésalo aquí abajo.
                 </Text>
+              </View>
+
+              {/* Entrada manual del código (web) */}
+              <View style={{ width: '100%', marginTop: 16, gap: 10 }}>
+                <TextInput
+                  style={[styles.manualInput, {
+                    color: theme.text,
+                    borderColor: error ? theme.danger : theme.border,
+                    backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
+                  }]}
+                  value={manualToken}
+                  onChangeText={t => { setManualToken(t); setError(''); }}
+                  placeholder="Código del QR (o pega la liga)"
+                  placeholderTextColor={theme.textSecondary}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  onSubmitEditing={buscarManual}
+                />
+                {error ? (
+                  <Text style={{ color: theme.danger, fontSize: 13 }}>{error}</Text>
+                ) : null}
+                <TouchableOpacity
+                  style={[styles.permBtn, { backgroundColor: theme.primary, opacity: (loading || !manualToken.trim()) ? 0.6 : 1, alignSelf: 'stretch', justifyContent: 'center' }]}
+                  onPress={buscarManual}
+                  disabled={loading || !manualToken.trim()}
+                >
+                  {loading
+                    ? <ActivityIndicator color="#fff" size="small" />
+                    : <Ionicons name="search" size={16} color="#fff" />}
+                  <Text style={styles.permBtnText}>Buscar pago</Text>
+                </TouchableOpacity>
               </View>
             </View>
           ) : (
@@ -329,6 +371,9 @@ const styles = StyleSheet.create({
     padding: 12, borderRadius: 12, borderWidth: 1, width: '100%',
   },
   webNoticeTipText: { flex: 1, fontSize: 13, lineHeight: 18 },
+  manualInput: {
+    borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15,
+  },
 
   // Cámara
   cameraPlaceholder: {

@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
 -- Tabla de departamentos
 CREATE TABLE IF NOT EXISTS departamentos (
   id          SERIAL PRIMARY KEY,
-  admin_id    UUID NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+  admin_id    UUID REFERENCES usuarios(id) ON DELETE CASCADE,
   numero      INTEGER NOT NULL,
   descripcion TEXT,
   estado      VARCHAR(20) NOT NULL DEFAULT 'disponible'
@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS departamentos (
   ubicacion   VARCHAR(500) NOT NULL DEFAULT 'Callejón Zaragoza s/n, San Juan Chiautla, C.P. 56030',
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE(admin_id, numero)
+  UNIQUE(numero)
 );
 
 -- Tabla de inquilinos

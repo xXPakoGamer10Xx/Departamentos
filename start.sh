@@ -6,7 +6,7 @@
 set -e
 
 echo "╔══════════════════════════════════════════════╗"
-echo "║  🏠 NethRent — Iniciar en Producción         ║"
+echo "║  🏠 VertexRent — Iniciar en Producción       ║"
 echo "╚══════════════════════════════════════════════╝"
 echo ""
 
@@ -62,7 +62,7 @@ JWT_SECRET=${JWT_SECRET}
 JWT_EXPIRES_IN=7d
 
 # CORS — dominios permitidos en producción (separados por coma)
-FRONTEND_URL=https://nethrent.duckdns.org
+FRONTEND_URL=https://laspuercotas.xyz
 
 # Google Gemini — necesaria para el procesado IA del contrato (opcional).
 # Obtén una clave en https://aistudio.google.com/apikey y pégala aquí.

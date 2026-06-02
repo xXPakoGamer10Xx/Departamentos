@@ -90,7 +90,7 @@ export function Sidebar({ isDark: passedIsDark }: { isDark?: boolean }) {
           <Ionicons name="home" size={18} color="#fff" />
         </LinearGradient>
         <View>
-          <Text style={[styles.brand, { color: theme.text }]}>NethRent</Text>
+          <Text style={[styles.brand, { color: theme.text }]}>VertexRent</Text>
           <Text style={[styles.brandSub, { color: theme.textMuted }]}>Gestión de renta</Text>
         </View>
       </View>

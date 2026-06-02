@@ -5,7 +5,7 @@
 export PATH="$HOME/.local/bin:$PATH"
 
 echo "╔══════════════════════════════════════════╗"
-echo "║  🏠 NethRent — Entorno de Desarrollo     ║"
+echo "║  🏠 VertexRent — Entorno de Desarrollo   ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
 

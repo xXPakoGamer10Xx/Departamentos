@@ -100,7 +100,7 @@ export default function LoginScreen() {
               <View style={styles.logoWrap}>
                 <Ionicons name="home" size={28} color="#fff" />
               </View>
-              <Text style={styles.cardTopTitle}>NethRent</Text>
+              <Text style={styles.cardTopTitle}>VertexRent</Text>
               <Text style={styles.cardTopSub}>Gestión de arrendamientos</Text>
             </LinearGradient>
 

@@ -202,6 +202,7 @@ class ApiService {
     this.request<void>('PUT', '/config', {
       contrato_docx_template: docxBase64,
       contrato_docx_nombre: nombre,
+      contrato_html_template: '',
     });
 
   deleteContratoTemplate = () =>

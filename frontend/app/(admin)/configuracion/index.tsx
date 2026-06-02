@@ -151,7 +151,7 @@ export default function ConfiguracionScreen() {
         setNotifPref(false);
         return;
       }
-      new Notification('NethRent', { body: 'Notificaciones activadas ✓', icon: '/favicon.ico' });
+      new Notification('VertexRent', { body: 'Notificaciones activadas ✓', icon: '/favicon.ico' });
     }
     setNotifEnabled(val);
     setNotifPref(val);
@@ -329,8 +329,8 @@ export default function ConfiguracionScreen() {
     try {
       const { Share } = await import('react-native');
       await Share.share({
-        message: `Tu código de invitación para NethRent: ${codigo}`,
-        title: 'Código de Invitación NethRent',
+        message: `Tu código de invitación para VertexRent: ${codigo}`,
+        title: 'Código de Invitación VertexRent',
       });
     } catch { /* ignore */ }
   };
@@ -340,6 +340,68 @@ export default function ConfiguracionScreen() {
       await api.revocarCodigoInvitacion(id);
       setCodigos(prev => prev.filter(c => c.id !== id));
     } catch { /* ignore */ }
+  };
+
+  const subirPlantillaManual = async () => {
+    try {
+      let docxBase64: string | null = null;
+      let docxNombre = 'Plantilla_Manual.docx';
+
+      if (Platform.OS === 'web') {
+        const result = await new Promise<{ base64: string; name: string } | null>((resolve) => {
+          const input = document.createElement('input');
+          input.type = 'file';
+          input.accept = '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+          input.onchange = (e: any) => {
+            const file = e.target.files?.[0];
+            if (!file) return resolve(null);
+            const reader = new FileReader();
+            reader.onload = (ev) => resolve({ base64: ev.target?.result as string, name: file.name });
+            reader.readAsDataURL(file);
+          };
+          input.click();
+        });
+        if (!result) return;
+        docxBase64 = result.base64;
+        docxNombre = result.name;
+      } else {
+        const DocumentPicker = await import('expo-document-picker');
+        const picked = await DocumentPicker.getDocumentAsync({
+          type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          copyToCacheDirectory: true,
+        });
+        if (picked.canceled || !picked.assets?.[0]) return;
+        const asset = picked.assets[0];
+        const FileSystem = await import('expo-file-system');
+        const b64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: 'base64' as any });
+        docxBase64 = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${b64}`;
+        docxNombre = asset.name;
+      }
+
+      if (!docxBase64) return;
+
+      setSubiendoPlantilla(true);
+      setPlantillaError('');
+
+      try {
+        await api.uploadContratoTemplate(docxBase64, docxNombre);
+        const cfgRes = await api.getConfig();
+        setConfig(cfgRes.data || {});
+        setShowPlantilla(false);
+        const { Alert } = await import('react-native');
+        if (Platform.OS === 'web') {
+          window.alert('Plantilla manual subida correctamente');
+        } else {
+          Alert.alert('Éxito', 'Plantilla manual subida correctamente');
+        }
+      } catch (e: any) {
+        setPlantillaError(e.message || 'Error al subir la plantilla');
+      } finally {
+        setSubiendoPlantilla(false);
+      }
+    } catch {
+      setSubiendoPlantilla(false);
+    }
   };
 
   const subirPlantilla = async () => {
@@ -833,7 +895,7 @@ export default function ConfiguracionScreen() {
           <Text style={[styles.logoutText, { color: theme.danger }]}>Cerrar Sesión</Text>
         </TouchableOpacity>
 
-        <Text style={[styles.version, { color: theme.textSecondary }]}>NethRent v1.0</Text>
+        <Text style={[styles.version, { color: theme.textSecondary }]}>VertexRent v1.0</Text>
       </ScrollView>
 
       {/* Modal editar config */}
@@ -1599,8 +1661,18 @@ export default function ConfiguracionScreen() {
                   );
                 })()}
 
+                <TouchableOpacity
+                  style={[styles.primaryBtn, { backgroundColor: theme.card, borderWidth: 1, borderColor: theme.border }]}
+                  onPress={subirPlantillaManual}
+                >
+                  <Ionicons name="document-text-outline" size={18} color={theme.text} />
+                  <Text style={[styles.primaryBtnText, { color: theme.text }]}>
+                    Subir plantilla DOCX manual (con tus propias variables)
+                  </Text>
+                </TouchableOpacity>
+
                 <Text style={[styles.inputLabel, { color: theme.textSecondary, marginBottom: 6 }]}>
-                  ¿Cómo funciona?
+                  ¿Cómo funciona con IA?
                 </Text>
                 {[
                   { icon: 'cloud-upload-outline', text: 'Sube tu contrato Word (.docx) tal como lo tienes' },
@@ -1615,6 +1687,23 @@ export default function ConfiguracionScreen() {
                     <Text style={[styles.howStepText, { color: theme.textSecondary }]}>{step.text}</Text>
                   </View>
                 ))}
+
+                <Text style={[styles.inputLabel, { color: theme.textSecondary, marginTop: 12, marginBottom: 6 }]}>
+                  Variables para subir contrato manual:
+                </Text>
+                <View style={{ backgroundColor: theme.border + '40', padding: 12, borderRadius: 8, gap: 4 }}>
+                  {[
+                    '{{nombre_completo}}', '{{depto_numero}}', '{{renta}}', '{{renta_letra}}',
+                    '{{deposito}}', '{{fecha_inicio}}', '{{fecha_termino}}', '{{fecha_pago}}',
+                    '{{tel_arrendatario}}', '{{fiador_nombre}}', '{{fiador_telefono}}',
+                    '{{arrendador_nombre}}', '{{arrendador_direccion}}', '{{metodo_pago}}',
+                    '{{observaciones}}', '{{inventario}}'
+                  ].map(v => (
+                    <Text key={v} style={{ color: theme.text, fontSize: 12, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>
+                      {v}
+                    </Text>
+                  ))}
+                </View>
               </ScrollView>
             )}
 

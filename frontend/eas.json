@@ -17,7 +17,7 @@
     },
     "preview": {
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://nethrent.duckdns.org/api"
+        "EXPO_PUBLIC_API_URL": "https://laspuercotas.xyz/api"
       },
       "distribution": "internal",
       "android": {

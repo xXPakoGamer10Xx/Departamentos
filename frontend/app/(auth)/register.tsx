@@ -108,7 +108,7 @@ export default function RegisterScreen() {
                 <Ionicons name="person-add" size={26} color="#fff" />
               </View>
               <Text style={styles.cardTopTitle}>Crear cuenta</Text>
-              <Text style={styles.cardTopSub}>NethRent</Text>
+              <Text style={styles.cardTopSub}>VertexRent</Text>
             </LinearGradient>
 
             <View style={styles.form}>
@@ -206,7 +206,7 @@ export default function RegisterScreen() {
           </GlassCard>
 
           <Text style={[styles.footer, { color: theme.textMuted }]}>
-            NethRent
+            VertexRent
           </Text>
         </ScrollView>
       </KeyboardAvoidingView>

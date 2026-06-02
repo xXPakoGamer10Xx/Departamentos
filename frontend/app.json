@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "NethRent",
+    "name": "VertexRent",
     "slug": "nethrent",
     "scheme": "nethrent",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/icono.png",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
@@ -15,13 +15,14 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.nethrent.app",
+      "bundleIdentifier": "com.vertexrent.app",
       "statusBarStyle": "auto"
     },
     "android": {
-      "package": "com.nethrent.app",
+      "package": "com.vertexrent.app",
+      "versionCode": 1,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/icono.png",
         "backgroundColor": "#007AFF"
       },
       "edgeToEdgeEnabled": true,

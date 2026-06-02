@@ -40,7 +40,7 @@ app.use(helmet({
 
 // CORS: en producción solo orígenes permitidos. Si FRONTEND_URL no está definida,
 // se usa el dominio de producción conocido en lugar de permitir TODOS los orígenes.
-const PROD_DEFAULT_ORIGIN = 'https://nethrent.duckdns.org';
+const PROD_DEFAULT_ORIGIN = 'https://laspuercotas.xyz';
 app.use(cors({
   origin: IS_PROD
     ? (process.env.FRONTEND_URL

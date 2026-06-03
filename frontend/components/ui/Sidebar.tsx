@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, usePathname } from 'expo-router';
+import { getItem, removeItem } from '../../services/storage';
 
 const USER_KEY = 'auth_user';
 const TOKEN_KEY = 'auth_token';
@@ -36,19 +37,15 @@ export function Sidebar({ isDark: passedIsDark }: { isDark?: boolean }) {
   const [userData, setUserData] = useState<{ nombre_completo?: string; email?: string } | null>(null);
 
   useEffect(() => {
-    if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
-      const raw = localStorage.getItem(USER_KEY);
-      if (raw) {
-        try { setUserData(JSON.parse(raw)); } catch {}
-      }
+    const raw = getItem(USER_KEY);
+    if (raw) {
+      try { setUserData(JSON.parse(raw)); } catch {}
     }
   }, []);
 
   const handleLogout = () => {
-    if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(USER_KEY);
-    }
+    removeItem(TOKEN_KEY);
+    removeItem(USER_KEY);
     router.replace('/(auth)/login');
   };
 

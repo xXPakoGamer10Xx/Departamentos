@@ -8,9 +8,7 @@
     "start": "node dist/app.js",
     "dev": "ts-node-dev --respawn --transpile-only src/app.ts",
     "migrate": "ts-node src/config/migrate.ts",
-    "seed": "ts-node src/config/seed.ts",
-    "migrate:prod": "node dist/config/migrate.js",
-    "seed:prod": "node dist/config/seed.js"
+    "migrate:prod": "node dist/config/migrate.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

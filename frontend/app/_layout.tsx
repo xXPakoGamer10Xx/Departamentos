@@ -2,10 +2,11 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState } from 'react';
-import { useColorScheme, Platform } from 'react-native';
+import { useColorScheme } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Colors } from '../constants/Colors';
 import api from '../services/api';
+import { hydrateStorage, getItem, setItem, removeItem } from '../services/storage';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -24,28 +25,35 @@ export default function RootLayout() {
     };
 
     const init = async () => {
-      if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
-        const saved = localStorage.getItem(TOKEN_KEY);
+      try {
+        // Precargar el almacenamiento (token/usuario) — necesario en nativo para
+        // poder leerlo de forma síncrona en el resto de la app.
+        await hydrateStorage();
+
+        const saved = getItem(TOKEN_KEY);
         if (saved) {
           api.setToken(saved);
           try {
             const meRes = await api.me();
-            // Actualizar datos de usuario en localStorage con la info más reciente del servidor
+            // Actualizar datos de usuario con la info más reciente del servidor
             if (meRes.data) {
-              localStorage.setItem(USER_KEY, JSON.stringify(meRes.data));
+              setItem(USER_KEY, JSON.stringify(meRes.data));
             }
             // Token válido — app/index.tsx se encarga del routing según el rol almacenado
           } catch {
             // Token expirado, inválido o backend no disponible — limpiar sesión
             // app/index.tsx detectará que no hay token y redirigirá al login
-            localStorage.removeItem(TOKEN_KEY);
-            localStorage.removeItem(USER_KEY);
+            removeItem(TOKEN_KEY);
+            removeItem(USER_KEY);
             api.setToken(null);
           }
         }
+      } finally {
+        // Siempre marcar listo y ocultar el splash, aunque algo falle, para no
+        // dejar la app colgada en la pantalla de carga.
+        setReady(true);
+        SplashScreen.hideAsync();
       }
-      setReady(true);
-      SplashScreen.hideAsync();
     };
 
     init();

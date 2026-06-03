@@ -1,3 +1,5 @@
+import { removeItem } from './storage';
+
 // URL del backend: cambia esto en producción al dominio/IP de tu VPS
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001/api';
 
@@ -30,10 +32,8 @@ class ApiService {
 
   private clearSession() {
     this.token = null;
-    if (typeof localStorage !== 'undefined') {
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(USER_KEY);
-    }
+    removeItem(TOKEN_KEY);
+    removeItem(USER_KEY);
   }
 
   private async request<T>(

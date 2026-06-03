@@ -11,6 +11,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { LinearGradient } from 'expo-linear-gradient';
 import api from '../../services/api';
+import { setItem } from '../../services/storage';
 
 const TOKEN_KEY = 'auth_token';
 const USER_KEY = 'auth_user';
@@ -38,10 +39,8 @@ export default function LoginScreen() {
       const res = await api.login(emailTrim, password);
       if (res.data?.token) {
         api.setToken(res.data.token);
-        if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
-          localStorage.setItem(TOKEN_KEY, res.data.token);
-          localStorage.setItem(USER_KEY, JSON.stringify(res.data.user));
-        }
+        setItem(TOKEN_KEY, res.data.token);
+        setItem(USER_KEY, JSON.stringify(res.data.user));
         const rol = res.data.user.rol;
         const dest = rol === 'inquilino' ? '/(inquilino)' : rol === 'cobrador' ? '/(cobrador)/scan' : '/(admin)';
         router.replace(dest as any);

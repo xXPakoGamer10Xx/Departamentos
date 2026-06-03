@@ -77,25 +77,6 @@ services:
     profiles:
       - tools
 
-  # ─── Seed (se ejecuta una vez y termina) ─────────────────────────────────
-  seed:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
-      target: backend-builder
-    container_name: depas_seed
-    depends_on:
-      db:
-        condition: service_healthy
-    environment:
-      DB_HOST: db
-      DB_PORT: 5432
-      DB_NAME: ${DB_NAME:-departamentos}
-      DB_USER: ${DB_USER:-depas_user}
-      DB_PASSWORD: ${DB_PASSWORD:-depas_secret_2024}
-    command: ["npx", "ts-node", "src/config/seed.ts"]
-    profiles:
-      - tools
 
 volumes:
   pgdata:

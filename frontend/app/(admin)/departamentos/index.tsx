@@ -331,74 +331,84 @@ export default function DepartamentosScreen() {
       </Modal>
 
       <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={cerrarModal}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
           <GlassCard style={styles.modalBox} borderRadius={Theme.borderRadius.xl}>
             <Text style={[styles.modalTitle, { color: theme.text }]}>Nuevo Departamento</Text>
 
-            <Input
-              label="Número *"
-              placeholder="Número de Departamento"
-              value={nuevoNumero}
-              onChangeText={(text) => {
-                setModalError('');
-                setNuevoNumero(text.replace(/[^0-9]/g, ''));
-              }}
-              keyboardType={Platform.OS === 'web' ? 'default' : 'number-pad'}
-            />
+            <ScrollView
+              style={styles.modalScroll}
+              contentContainerStyle={{ paddingBottom: 4 }}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              <Input
+                label="Número *"
+                placeholder="Número de Departamento"
+                value={nuevoNumero}
+                onChangeText={(text) => {
+                  setModalError('');
+                  setNuevoNumero(text.replace(/[^0-9]/g, ''));
+                }}
+                keyboardType={Platform.OS === 'web' ? 'default' : 'number-pad'}
+              />
 
-            <Input
-              label="Descripción (opcional)"
-              placeholder="Ej: Planta baja"
-              value={nuevaDesc}
-              onChangeText={setNuevaDesc}
-            />
+              <Input
+                label="Descripción (opcional)"
+                placeholder="Ej: Planta baja"
+                value={nuevaDesc}
+                onChangeText={setNuevaDesc}
+              />
 
-            <View style={{ marginBottom: Theme.spacing.md }}>
-              <Text style={[styles.label, { color: theme.textSecondary }]}>Inventario del departamento</Text>
-              <Text style={[styles.invHint, { color: theme.textSecondary }]}>
-                Agrega los artículos que tiene este departamento (muebles, electrodomésticos, etc.)
-              </Text>
-            </View>
-
-            {nuevoInventario.length > 0 && (
-              <View style={[styles.invList, { borderColor: theme.border }]}>
-                {nuevoInventario.map((item, i) => (
-                  <View key={i} style={[styles.invItem, i > 0 && { borderTopWidth: 0.5, borderTopColor: theme.border }]}>
-                    <Ionicons name="checkmark-circle-outline" size={16} color={theme.success} />
-                    <Text style={[styles.invItemText, { color: theme.text }]}>{item}</Text>
-                    <TouchableOpacity onPress={() => eliminarItemInv(i)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                      <Ionicons name="close-circle" size={18} color={theme.textSecondary} />
-                    </TouchableOpacity>
-                  </View>
-                ))}
+              <View style={{ marginBottom: Theme.spacing.md }}>
+                <Text style={[styles.label, { color: theme.textSecondary }]}>Inventario del departamento</Text>
+                <Text style={[styles.invHint, { color: theme.textSecondary }]}>
+                  Agrega los artículos que tiene este departamento (muebles, electrodomésticos, etc.)
+                </Text>
               </View>
-            )}
 
-            <View style={styles.invAddRow}>
-              <View style={{ flex: 1 }}>
-                <Input
-                  placeholder="Ej: Refrigerador, cama..."
-                  value={nuevoItemInv}
-                  onChangeText={setNuevoItemInv}
-                  onSubmitEditing={agregarItemInv}
-                  returnKeyType="done"
-                  style={{ marginBottom: 0 }}
-                />
-              </View>
-              <TouchableOpacity
-                style={[styles.invAddBtn, { backgroundColor: theme.primary }]}
-                onPress={agregarItemInv}
-              >
-                <Ionicons name="add" size={20} color="#fff" />
-              </TouchableOpacity>
-            </View>
+              {nuevoInventario.length > 0 && (
+                <View style={[styles.invList, { borderColor: theme.border }]}>
+                  {nuevoInventario.map((item, i) => (
+                    <View key={i} style={[styles.invItem, i > 0 && { borderTopWidth: 0.5, borderTopColor: theme.border }]}>
+                      <Ionicons name="checkmark-circle-outline" size={16} color={theme.success} />
+                      <Text style={[styles.invItemText, { color: theme.text }]}>{item}</Text>
+                      <TouchableOpacity onPress={() => eliminarItemInv(i)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Ionicons name="close-circle" size={18} color={theme.textSecondary} />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              )}
 
-            {modalError ? (
-              <View style={[styles.errorBox, { backgroundColor: theme.dangerLight, borderColor: theme.danger + '40' }]}>
-                <Ionicons name="alert-circle-outline" size={16} color={theme.danger} />
-                <Text style={[styles.errorText, { color: theme.danger }]}>{modalError}</Text>
+              <View style={styles.invAddRow}>
+                <View style={{ flex: 1 }}>
+                  <Input
+                    placeholder="Ej: Refrigerador, cama..."
+                    value={nuevoItemInv}
+                    onChangeText={setNuevoItemInv}
+                    onSubmitEditing={agregarItemInv}
+                    returnKeyType="done"
+                    style={{ marginBottom: 0 }}
+                  />
+                </View>
+                <TouchableOpacity
+                  style={[styles.invAddBtn, { backgroundColor: theme.primary }]}
+                  onPress={agregarItemInv}
+                >
+                  <Ionicons name="add" size={20} color="#fff" />
+                </TouchableOpacity>
               </View>
-            ) : null}
+
+              {modalError ? (
+                <View style={[styles.errorBox, { backgroundColor: theme.dangerLight, borderColor: theme.danger + '40' }]}>
+                  <Ionicons name="alert-circle-outline" size={16} color={theme.danger} />
+                  <Text style={[styles.errorText, { color: theme.danger }]}>{modalError}</Text>
+                </View>
+              ) : null}
+            </ScrollView>
 
             <View style={styles.modalActions}>
               <Button
@@ -526,7 +536,11 @@ const styles = StyleSheet.create({
   modalBox: {
     width: '100%',
     maxWidth: 500,
+    maxHeight: '90%',
     padding: 24,
+  },
+  modalScroll: {
+    flexShrink: 1,
   },
   modalTitle: { fontSize: 22, fontWeight: '700', marginBottom: Theme.spacing.lg },
   label: { fontSize: 13, fontWeight: '600', marginBottom: 4 },

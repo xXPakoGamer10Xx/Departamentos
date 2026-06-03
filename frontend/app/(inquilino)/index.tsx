@@ -11,6 +11,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState, useCallback } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import api from '../../services/api';
+import { getItem, removeItem } from '../../services/storage';
 import { useSSEEvent } from '../../hooks/useSSE';
 import { showWebNotification } from '../../services/webNotifications';
 import { NotificationBell } from '../../components/ui/NotificationBell';
@@ -40,9 +41,7 @@ export default function InquilinoHome() {
 
   const storedUser = (() => {
     try {
-      if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
-        return JSON.parse(localStorage.getItem(USER_KEY) || 'null');
-      }
+      return JSON.parse(getItem(USER_KEY) || 'null');
     } catch { /* empty */ }
     return null;
   })();
@@ -157,10 +156,8 @@ export default function InquilinoHome() {
   }, [inquilino, comprobantePreview]);
 
   const handleLogout = () => {
-    if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(USER_KEY);
-    }
+    removeItem(TOKEN_KEY);
+    removeItem(USER_KEY);
     api.setToken(null);
     router.replace('/(auth)/login');
   };

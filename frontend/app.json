@@ -15,8 +15,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.vertexrent.app",
-      "statusBarStyle": "auto"
+      "bundleIdentifier": "com.vertexrent.app"
     },
     "android": {
       "package": "com.vertexrent.app",
@@ -55,7 +54,8 @@
           },
           "imageWidth": 200
         }
-      ]
+      ],
+      "expo-font"
     ],
     "extra": {
       "eas": {

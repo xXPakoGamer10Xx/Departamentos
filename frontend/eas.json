@@ -29,6 +29,9 @@
     },
     "production": {
       "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://laspuercotas.xyz/api"
+      },
       "android": {
         "buildType": "app-bundle"
       }

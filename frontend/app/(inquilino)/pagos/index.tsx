@@ -10,14 +10,13 @@ import { useCallback, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import api from '../../../services/api';
+import { getItem } from '../../../services/storage';
 
 const USER_KEY = 'auth_user';
 
 function getMiId(): string | null {
   try {
-    const user = JSON.parse(
-      (typeof localStorage !== 'undefined' ? localStorage.getItem(USER_KEY) : null) || 'null'
-    );
+    const user = JSON.parse(getItem(USER_KEY) || 'null');
     return user?.id || null;
   } catch { return null; }
 }

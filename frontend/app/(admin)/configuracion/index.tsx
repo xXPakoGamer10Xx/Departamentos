@@ -13,28 +13,21 @@ import { DEFAULT_CONTRATO_HTML } from '../../../components/ui/contractVariables'
 import { LinearGradient } from 'expo-linear-gradient';
 import { useState, useCallback } from 'react';
 import api from '../../../services/api';
+import { getItem, setItem, removeItem } from '../../../services/storage';
 
 const TOKEN_KEY = 'auth_token';
 const USER_KEY = 'auth_user';
 
 function getStoredUser() {
-  if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
-    try { return JSON.parse(localStorage.getItem(USER_KEY) || 'null'); } catch { return null; }
-  }
-  return null;
+  try { return JSON.parse(getItem(USER_KEY) || 'null'); } catch { return null; }
 }
 
 function getNotifPref(): boolean {
-  if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
-    return localStorage.getItem('notif_enabled') !== 'false';
-  }
-  return true;
+  return getItem('notif_enabled') !== 'false';
 }
 
 function setNotifPref(val: boolean) {
-  if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
-    localStorage.setItem('notif_enabled', val ? 'true' : 'false');
-  }
+  setItem('notif_enabled', val ? 'true' : 'false');
 }
 
 export default function ConfiguracionScreen() {
@@ -701,10 +694,9 @@ export default function ConfiguracionScreen() {
   };
 
   const handleLogout = () => {
-    if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(USER_KEY);
-    }
+    removeItem(TOKEN_KEY);
+    removeItem(USER_KEY);
+    api.setToken(null);
     router.replace('/(auth)/login');
   };
 

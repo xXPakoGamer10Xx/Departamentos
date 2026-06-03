@@ -135,14 +135,9 @@ if [ "$FORCE_RESET" = "1" ] || [ "${TABLE_EXISTS:-0}" = "0" ]; then
     echo "🔄 Primer despliegue — creando esquema de base de datos..."
   fi
 
-  docker compose build migrate seed
+  docker compose build migrate
   docker compose --profile tools run --rm migrate
   echo "✅ Esquema creado"
-
-  echo ""
-  echo "🌱 Creando datos iniciales..."
-  docker compose --profile tools run --rm seed
-  echo "✅ Datos iniciales creados"
 else
   echo "✅ Base de datos ya inicializada — omitiendo migraciones"
   echo "   (usa ./start.sh --reset para borrar todo y empezar de cero)"

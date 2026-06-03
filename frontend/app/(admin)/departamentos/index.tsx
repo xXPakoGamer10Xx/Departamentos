@@ -125,7 +125,7 @@ export default function DepartamentosScreen() {
     }
   };
 
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const isDesktop = width >= Theme.breakpoints.tablet;
   const insets = useSafeAreaInsets();
 
@@ -335,15 +335,16 @@ export default function DepartamentosScreen() {
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalOverlay}
         >
-          <GlassCard style={styles.modalBox} borderRadius={Theme.borderRadius.xl}>
-            <Text style={[styles.modalTitle, { color: theme.text }]}>Nuevo Departamento</Text>
+          <View style={[styles.modalWrapper, { maxHeight: height * 0.88 }]}>
+            <GlassCard style={styles.modalBox} borderRadius={Theme.borderRadius.xl}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>Nuevo Departamento</Text>
 
-            <ScrollView
-              style={styles.modalScroll}
-              contentContainerStyle={{ paddingBottom: 4 }}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-            >
+              <ScrollView
+                style={styles.modalScroll}
+                contentContainerStyle={{ paddingBottom: 4 }}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+              >
               <Input
                 label="Número *"
                 placeholder="Número de Departamento"
@@ -410,22 +411,23 @@ export default function DepartamentosScreen() {
               ) : null}
             </ScrollView>
 
-            <View style={styles.modalActions}>
-              <Button
-                title="Cancelar"
-                variant="outline"
-                onPress={cerrarModal}
-                style={{ flex: 1 }}
-              />
-              <Button
-                title="Crear"
-                variant="primary"
-                onPress={handleCrear}
-                loading={creando}
-                style={{ flex: 1 }}
-              />
-            </View>
-          </GlassCard>
+              <View style={styles.modalActions}>
+                <Button
+                  title="Cancelar"
+                  variant="outline"
+                  onPress={cerrarModal}
+                  style={{ flex: 1 }}
+                />
+                <Button
+                  title="Crear"
+                  variant="primary"
+                  onPress={handleCrear}
+                  loading={creando}
+                  style={{ flex: 1 }}
+                />
+              </View>
+            </GlassCard>
+          </View>
         </KeyboardAvoidingView>
       </Modal>
     </View>
@@ -533,14 +535,17 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)',
     padding: 24,
   },
-  modalBox: {
+  modalWrapper: {
     width: '100%',
     maxWidth: 500,
-    maxHeight: '90%',
+    flex: 1,
+  },
+  modalBox: {
+    flex: 1,
     padding: 24,
   },
   modalScroll: {
-    flexShrink: 1,
+    flex: 1,
   },
   modalTitle: { fontSize: 22, fontWeight: '700', marginBottom: Theme.spacing.lg },
   label: { fontSize: 13, fontWeight: '600', marginBottom: 4 },
@@ -563,5 +568,5 @@ const styles = StyleSheet.create({
   confirmActions: { flexDirection: 'row', gap: 12, width: '100%', marginTop: 8 },
   deleteErrorBox: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, borderRadius: 10, borderWidth: 1, width: '100%' },
   deleteErrorText: { flex: 1, fontSize: 13 },
-  modalActions: { flexDirection: 'row', gap: 12, marginTop: 8 },
+  modalActions: { flexDirection: 'row', gap: 12, marginTop: 16, paddingTop: 8 },
 });

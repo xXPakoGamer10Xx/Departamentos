@@ -9,6 +9,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState, useRef } from 'react';
 import api from '../../../services/api';
+import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 export default function DepartamentoDetailScreen() {
   const { numero } = useLocalSearchParams();
@@ -65,6 +67,7 @@ export default function DepartamentoDetailScreen() {
   const eliminarItem = (idx: number) => {
     setInventario(prev => prev.filter((_, i) => i !== idx));
   };
+
 
   const guardar = async () => {
     try {
@@ -223,15 +226,31 @@ export default function DepartamentoDetailScreen() {
           Artículos incluidos al momento de arrendar este departamento.
         </Text>
 
-        {inventario.map((item, i) => (
-          <View key={i} style={styles.itemRow}>
-            <Ionicons name="checkmark-circle-outline" size={18} color={theme.success} />
-            <Text style={[styles.itemText, { color: theme.text }]}>{item}</Text>
-            <TouchableOpacity onPress={() => eliminarItem(i)} style={styles.deleteItemBtn}>
-              <Ionicons name="trash-outline" size={18} color={theme.danger} />
-            </TouchableOpacity>
-          </View>
-        ))}
+        <GestureHandlerRootView>
+          <DraggableFlatList
+            data={inventario}
+            keyExtractor={(_, i) => String(i)}
+            scrollEnabled={false}
+            onDragEnd={({ data }) => setInventario(data)}
+            renderItem={({ item, getIndex, drag, isActive }: RenderItemParams<string>) => {
+              const i = getIndex() ?? 0;
+              return (
+                <ScaleDecorator>
+                  <View style={[styles.itemRow, isActive && { opacity: 0.85, backgroundColor: theme.card }]}>
+                    <TouchableOpacity onLongPress={drag} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Ionicons name="reorder-three-outline" size={22} color={theme.textSecondary} />
+                    </TouchableOpacity>
+                    <Ionicons name="checkmark-circle-outline" size={18} color={theme.success} />
+                    <Text style={[styles.itemText, { color: theme.text }]}>{item}</Text>
+                    <TouchableOpacity onPress={() => eliminarItem(i)} style={styles.deleteItemBtn}>
+                      <Ionicons name="trash-outline" size={18} color={theme.danger} />
+                    </TouchableOpacity>
+                  </View>
+                </ScaleDecorator>
+              );
+            }}
+          />
+        </GestureHandlerRootView>
 
         <View style={styles.addRow}>
           <TextInput

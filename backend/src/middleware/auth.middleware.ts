@@ -45,6 +45,20 @@ export function cobradorOrAdmin(req: AuthRequest, _res: Response, next: NextFunc
   next();
 }
 
+// Para rutas que el browser abre directamente (PDF): acepta token en header O en ?token=
+export function pdfAuth(req: AuthRequest, _res: Response, next: NextFunction): void {
+  const authHeader = req.headers.authorization;
+  const queryToken = req.query?.token as string | undefined;
+  const raw = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : queryToken;
+  if (!raw) return next(new AppError('Token de autenticación requerido', 401));
+  try {
+    req.user = jwt.verify(raw, process.env.JWT_SECRET!) as any;
+    next();
+  } catch {
+    next(new AppError('Token inválido o expirado', 401));
+  }
+}
+
 export function softAuth(req: AuthRequest, _res: Response, next: NextFunction): void {
   const authHeader = req.headers.authorization;
   const queryToken = req.query?.token as string | undefined;

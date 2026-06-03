@@ -295,11 +295,17 @@ export async function deleteInquilino(req: AuthRequest, res: Response, next: Nex
       [req.user!.id, id]
     );
 
-    // Liberar el departamento
-    await pool.query(
-      `UPDATE departamentos SET estado = 'disponible' WHERE admin_id = $1 AND numero = $2`,
-      [req.user!.id, anterior.rows[0].depto_numero]
+    // Liberar el departamento solo si no quedan otros inquilinos activos en ese depto
+    const otrosActivos = await pool.query(
+      `SELECT id FROM inquilinos WHERE admin_id = $1 AND depto_numero = $2 AND estado = 'activo' AND id != $3`,
+      [req.user!.id, anterior.rows[0].depto_numero, id]
     );
+    if (otrosActivos.rows.length === 0) {
+      await pool.query(
+        `UPDATE departamentos SET estado = 'disponible' WHERE admin_id = $1 AND numero = $2`,
+        [req.user!.id, anterior.rows[0].depto_numero]
+      );
+    }
 
     if ((req as any).audit) {
       await (req as any).audit(id, anterior.rows[0], { ...anterior.rows[0], estado: 'inactivo' });

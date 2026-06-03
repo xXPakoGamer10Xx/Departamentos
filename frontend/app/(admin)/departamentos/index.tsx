@@ -3,11 +3,14 @@ import {
   useColorScheme, Platform, ActivityIndicator, Alert,
   Modal, KeyboardAvoidingView, useWindowDimensions, ScrollView,
 } from 'react-native';
+import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../../../constants/Colors';
 import { Theme } from '../../../constants/Theme';
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { useRouter } from 'expo-router';
 import api from '../../../services/api';
 import { GlassCard } from '../../../components/ui/GlassCard';
@@ -53,7 +56,7 @@ export default function DepartamentosScreen() {
     }
   };
 
-  useEffect(() => { cargar(); }, []);
+  useFocusEffect(useCallback(() => { cargar(); }, []));
 
   const agregarItemInv = () => {
     const item = nuevoItemInv.trim();
@@ -65,6 +68,7 @@ export default function DepartamentosScreen() {
   const eliminarItemInv = (idx: number) => {
     setNuevoInventario(prev => prev.filter((_, i) => i !== idx));
   };
+
 
   const cerrarModal = () => {
     setModalVisible(false);
@@ -335,16 +339,16 @@ export default function DepartamentosScreen() {
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalOverlay}
         >
-          <View style={[styles.modalWrapper, { maxHeight: height * 0.88 }]}>
-            <GlassCard style={styles.modalBox} borderRadius={Theme.borderRadius.xl}>
-              <Text style={[styles.modalTitle, { color: theme.text }]}>Nuevo Departamento</Text>
+          <GlassCard style={styles.modalBox} borderRadius={Theme.borderRadius.xl}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Nuevo Departamento</Text>
 
-              <ScrollView
-                style={styles.modalScroll}
-                contentContainerStyle={{ paddingBottom: 4 }}
-                showsVerticalScrollIndicator={false}
-                keyboardShouldPersistTaps="handled"
-              >
+            {/* maxHeight en píxeles explícitos — sin depender de flex dentro de GlassCard */}
+            <ScrollView
+              style={{ maxHeight: height * 0.88 - 260 }}
+              contentContainerStyle={{ paddingBottom: 4 }}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
               <Input
                 label="Número *"
                 placeholder="Número de Departamento"
@@ -371,17 +375,31 @@ export default function DepartamentosScreen() {
               </View>
 
               {nuevoInventario.length > 0 && (
-                <View style={[styles.invList, { borderColor: theme.border }]}>
-                  {nuevoInventario.map((item, i) => (
-                    <View key={i} style={[styles.invItem, i > 0 && { borderTopWidth: 0.5, borderTopColor: theme.border }]}>
-                      <Ionicons name="checkmark-circle-outline" size={16} color={theme.success} />
-                      <Text style={[styles.invItemText, { color: theme.text }]}>{item}</Text>
-                      <TouchableOpacity onPress={() => eliminarItemInv(i)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                        <Ionicons name="close-circle" size={18} color={theme.textSecondary} />
-                      </TouchableOpacity>
-                    </View>
-                  ))}
-                </View>
+                <GestureHandlerRootView style={[styles.invList, { borderColor: theme.border }]}>
+                  <DraggableFlatList
+                    data={nuevoInventario}
+                    keyExtractor={(_, i) => String(i)}
+                    scrollEnabled={false}
+                    onDragEnd={({ data }) => setNuevoInventario(data)}
+                    renderItem={({ item, getIndex, drag, isActive }: RenderItemParams<string>) => {
+                      const i = getIndex() ?? 0;
+                      return (
+                        <ScaleDecorator>
+                          <View style={[styles.invItem, i > 0 && { borderTopWidth: 0.5, borderTopColor: theme.border }, isActive && { opacity: 0.85 }]}>
+                            <TouchableOpacity onLongPress={drag} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                              <Ionicons name="reorder-three-outline" size={20} color={theme.textSecondary} />
+                            </TouchableOpacity>
+                            <Ionicons name="checkmark-circle-outline" size={16} color={theme.success} />
+                            <Text style={[styles.invItemText, { color: theme.text }]}>{item}</Text>
+                            <TouchableOpacity onPress={() => eliminarItemInv(i)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                              <Ionicons name="close-circle" size={18} color={theme.textSecondary} />
+                            </TouchableOpacity>
+                          </View>
+                        </ScaleDecorator>
+                      );
+                    }}
+                  />
+                </GestureHandlerRootView>
               )}
 
               <View style={styles.invAddRow}>
@@ -411,23 +429,22 @@ export default function DepartamentosScreen() {
               ) : null}
             </ScrollView>
 
-              <View style={styles.modalActions}>
-                <Button
-                  title="Cancelar"
-                  variant="outline"
-                  onPress={cerrarModal}
-                  style={{ flex: 1 }}
-                />
-                <Button
-                  title="Crear"
-                  variant="primary"
-                  onPress={handleCrear}
-                  loading={creando}
-                  style={{ flex: 1 }}
-                />
-              </View>
-            </GlassCard>
-          </View>
+            <View style={styles.modalActions}>
+              <Button
+                title="Cancelar"
+                variant="outline"
+                onPress={cerrarModal}
+                style={{ flex: 1 }}
+              />
+              <Button
+                title="Crear"
+                variant="primary"
+                onPress={handleCrear}
+                loading={creando}
+                style={{ flex: 1 }}
+              />
+            </View>
+          </GlassCard>
         </KeyboardAvoidingView>
       </Modal>
     </View>
@@ -535,17 +552,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)',
     padding: 24,
   },
-  modalWrapper: {
+  modalBox: {
     width: '100%',
     maxWidth: 500,
-    flex: 1,
-  },
-  modalBox: {
-    flex: 1,
     padding: 24,
-  },
-  modalScroll: {
-    flex: 1,
   },
   modalTitle: { fontSize: 22, fontWeight: '700', marginBottom: Theme.spacing.lg },
   label: { fontSize: 13, fontWeight: '600', marginBottom: 4 },

@@ -4,10 +4,14 @@ import {
   createInquilino, updateInquilino, deleteInquilino, vincularUsuario,
   extraerIne,
 } from '../controllers/inquilinos.controller';
-import { authMiddleware, adminOnly } from '../middleware/auth.middleware';
+import { authMiddleware, adminOnly, pdfAuth } from '../middleware/auth.middleware';
 import { auditLog } from '../middleware/audit.middleware';
 
 export const inquilinosRouter = Router();
+
+// PDF se registra ANTES del authMiddleware global porque el browser lo abre
+// directamente y no puede mandar headers — acepta token en ?token= también.
+inquilinosRouter.get('/:id/pdf', pdfAuth, adminOnly, getContratoPdf);
 
 inquilinosRouter.use(authMiddleware);
 
@@ -17,7 +21,6 @@ inquilinosRouter.post('/extraer-ine', adminOnly, extraerIne);
 
 inquilinosRouter.get('/', getInquilinos);
 inquilinosRouter.get('/:id', getInquilinoById);
-inquilinosRouter.get('/:id/pdf', getContratoPdf);
 inquilinosRouter.post('/', adminOnly, auditLog('inquilinos', 'crear'), createInquilino);
 inquilinosRouter.put('/:id', adminOnly, auditLog('inquilinos', 'editar'), updateInquilino);
 inquilinosRouter.put('/:id/vincular-usuario', adminOnly, vincularUsuario);

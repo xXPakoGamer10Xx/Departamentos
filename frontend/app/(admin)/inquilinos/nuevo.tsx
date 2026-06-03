@@ -245,8 +245,13 @@ export default function NuevoInquilinoScreen() {
     }
   }, [editId, fromId]);
 
-  // isEdit en deps para evitar stale closure cuando la pantalla se reutiliza
-  useFocusEffect(useCallback(() => { loadDeptos(); }, [isEdit]));
+  useFocusEffect(useCallback(() => {
+    loadDeptos();
+    // Resetear siempre que se entra en modo creación (no edición ni copia)
+    if (!isEdit && !fromId) {
+      resetForm();
+    }
+  }, [isEdit, fromId]));
 
   const [showDatePicker, setShowDatePicker] = useState<'inicio' | 'termino' | null>(null);
 

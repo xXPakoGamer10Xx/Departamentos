@@ -6,8 +6,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { Badge } from '../../components/ui/Badge';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useState } from 'react';
-import { useRouter } from 'expo-router';
+import { useEffect, useState, useCallback } from 'react';
+import { useRouter, useFocusEffect } from 'expo-router';
 import api from '../../services/api';
 
 interface QuickActionItem {
@@ -47,7 +47,8 @@ export default function DashboardScreen() {
   const [contratosVencidos, setContratosVencidos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
+    setLoading(true);
     Promise.all([
       api.getDepartamentosStats(),
       api.getInquilinos({ estado: 'activo' }),
@@ -96,7 +97,7 @@ export default function DashboardScreen() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, []));
 
   const formatMoney = (n: number | string) =>
     new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(Number(n));

@@ -117,11 +117,66 @@ async function checkContratoExpiration(): Promise<void> {
   }
 }
 
+async function checkDepositoReminders(): Promise<void> {
+  try {
+    const diasObjetivo = [3, 1, 0];
+
+    const { rows: inquilinos } = await pool.query(
+      `SELECT i.id, i.usuario_id, i.deposito_fechas, i.nombre_completo, i.depto_numero, i.admin_id
+       FROM inquilinos i
+       WHERE i.estado = 'activo'`
+    );
+
+    for (const inq of inquilinos) {
+      if (!inq.deposito_fechas || !Array.isArray(inq.deposito_fechas)) continue;
+      
+      const hoy = new Date();
+      hoy.setHours(0, 0, 0, 0);
+
+      for (const fechaStr of inq.deposito_fechas) {
+        if (typeof fechaStr !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(fechaStr)) continue;
+
+        const targetDate = new Date(fechaStr + 'T12:00:00');
+        targetDate.setHours(0, 0, 0, 0);
+
+        const diasRestantes = Math.round((targetDate.getTime() - hoy.getTime()) / 86400000);
+
+        if (!diasObjetivo.includes(diasRestantes)) continue;
+
+        const subKey = `deposito_${inq.id}_${fechaStr}_dias_${diasRestantes}`;
+
+        // Notificación al inquilino
+        if (inq.usuario_id && !(await yaNotificadoHoy(inq.usuario_id, 'renta', subKey))) {
+          const titulo = diasRestantes === 0 ? '🔔 Hoy es el pago de tu depósito diferido' : '📅 Recordatorio de depósito diferido';
+          const msg = diasRestantes === 0
+            ? `Hoy vence el pago de tu depósito diferido — Depto ${inq.depto_numero}`
+            : diasRestantes === 1
+              ? `Tu pago de depósito diferido vence mañana — Depto ${inq.depto_numero}`
+              : `Tu pago de depósito diferido vence en ${diasRestantes} días — Depto ${inq.depto_numero}`;
+          await createAndSendNotification(inq.usuario_id, titulo, msg, 'renta');
+        }
+
+        // Notificación al admin
+        if (inq.admin_id && !(await yaNotificadoHoy(inq.admin_id, 'renta', `admin_${subKey}`))) {
+          const adminMsg = diasRestantes === 0
+            ? `Hoy vence el depósito diferido de ${inq.nombre_completo} (Depto ${inq.depto_numero})`
+            : diasRestantes === 1
+              ? `Mañana vence el depósito diferido de ${inq.nombre_completo} (Depto ${inq.depto_numero})`
+              : `En ${diasRestantes} días vence el depósito diferido de ${inq.nombre_completo} (Depto ${inq.depto_numero})`;
+          await createAndSendNotification(inq.admin_id, '💰 Vencimiento de depósito próximo', adminMsg, 'renta');
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[Scheduler] Error en checkDepositoReminders:', err);
+  }
+}
+
 export function initScheduler(): void {
   // Ejecutar todos los días a las 9:00 AM
   cron.schedule('0 9 * * *', async () => {
     console.log('[Scheduler] Ejecutando recordatorios de pago y contratos...');
-    await Promise.all([checkRentaReminders(), checkContratoExpiration()]);
+    await Promise.all([checkRentaReminders(), checkContratoExpiration(), checkDepositoReminders()]);
     console.log('[Scheduler] Recordatorios enviados.');
   }, { timezone: 'America/Mexico_City' });
 

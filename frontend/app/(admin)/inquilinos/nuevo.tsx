@@ -175,7 +175,7 @@ export default function NuevoInquilinoScreen() {
 
   // INE OCR
   const [extrayendoINE, setExtrayendoINE] = useState(false);
-  const [depositoFechas, setDepositoFechas] = useState<number[]>([]);
+  const [depositoFechas, setDepositoFechas] = useState<string[]>([]);
   const [depositoManuallyEdited, setDepositoManuallyEdited] = useState(false);
 
   const resetForm = () => {
@@ -205,7 +205,15 @@ export default function NuevoInquilinoScreen() {
         const fechaTermino = d.fecha_termino ? String(d.fecha_termino).substring(0, 10) : '';
         setMetodoPago(d.metodo_pago || 'efectivo');
         const tipo = d.deposito_tipo || 'ninguno';
-        const fechas: number[] = Array.isArray(d.deposito_fechas) ? d.deposito_fechas : [];
+        const fechas: string[] = Array.isArray(d.deposito_fechas) ? d.deposito_fechas.map((x: any) => {
+          if (typeof x === 'number' || /^\d+$/.test(String(x))) {
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = String(today.getMonth() + 1).padStart(2, '0');
+            return `${year}-${month}-${String(x).padStart(2, '0')}`;
+          }
+          return String(x).substring(0, 10);
+        }) : [];
         setDepositoTipo(tipo);
         setDepositoFechas(fechas);
         setDepositoManuallyEdited(true);
@@ -253,10 +261,10 @@ export default function NuevoInquilinoScreen() {
     }
   }, [isEdit, fromId]));
 
-  const [showDatePicker, setShowDatePicker] = useState<'inicio' | 'termino' | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState<'inicio' | 'termino' | 'deposito' | null>(null);
 
   const handleDateChange = (
-    type: 'inicio' | 'termino',
+    type: 'inicio' | 'termino' | 'deposito',
     event: DateTimePickerEvent | undefined,
     selectedDate?: Date
   ) => {
@@ -265,6 +273,16 @@ export default function NuevoInquilinoScreen() {
     }
 
     if (!selectedDate) return;
+
+    if (type === 'deposito') {
+      const { dateString } = formatDateParts(selectedDate);
+      if (!depositoFechas.includes(dateString)) {
+        const next = [...depositoFechas, dateString].sort();
+        setDepositoFechas(next);
+        setFormData(prev => ({ ...prev, observaciones: buildDepositoObs('personalizado', next) }));
+      }
+      return;
+    }
 
     const { dateString, day } = formatDateParts(selectedDate);
 
@@ -366,17 +384,21 @@ export default function NuevoInquilinoScreen() {
     }
   };
 
-  const buildDepositoObs = (tipo: string, fechas: number[]): string => {
+  const buildDepositoObs = (tipo: string, fechas: string[]): string => {
     if (tipo === 'ninguno') return '';
     if (tipo === 'quincenas') {
       return 'Se realizará el pago del depósito en 2 quincenas, los días 15 y 30 del mes en curso';
     }
     if (tipo === 'personalizado' && fechas.length > 0) {
-      const sorted = [...fechas].sort((a, b) => a - b);
+      const sorted = [...fechas].sort();
+      const formatStr = (d: string) => {
+        const date = new Date(d + 'T12:00:00');
+        return date.toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' });
+      };
       const diasStr = sorted.length === 1
-        ? `el día ${sorted[0]}`
-        : `los días ${sorted.slice(0, -1).join(', ')} y ${sorted[sorted.length - 1]}`;
-      return `Se realizará el pago del depósito en ${sorted.length} parte${sorted.length > 1 ? 's' : ''}, ${diasStr} del mes en curso`;
+        ? `el día ${formatStr(sorted[0])}`
+        : `los días ${sorted.slice(0, -1).map(formatStr).join(', ')} y ${formatStr(sorted[sorted.length - 1])}`;
+      return `Se realizará el pago del depósito en ${sorted.length} parte${sorted.length > 1 ? 's' : ''}, ${diasStr}`;
     }
     return '';
   };
@@ -384,8 +406,16 @@ export default function NuevoInquilinoScreen() {
   const handleDepositoTipo = (tipo: 'ninguno' | 'quincenas' | 'personalizado') => {
     setDepositoTipo(tipo);
     if (tipo === 'quincenas') {
-      setDepositoFechas([15, 30]);
-      setFormData(prev => ({ ...prev, observaciones: buildDepositoObs('quincenas', [15, 30]) }));
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const q1 = `${year}-${month}-15`;
+      let d2 = 30;
+      if (today.getMonth() === 1) d2 = (year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)) ? 29 : 28;
+      const q2 = `${year}-${month}-${d2}`;
+      
+      setDepositoFechas([q1, q2]);
+      setFormData(prev => ({ ...prev, observaciones: buildDepositoObs('quincenas', [q1, q2]) }));
     } else if (tipo === 'ninguno') {
       setDepositoFechas([]);
       setFormData(prev => ({ ...prev, observaciones: '' }));
@@ -627,13 +657,15 @@ export default function NuevoInquilinoScreen() {
           {Platform.OS !== 'web' && showDatePicker && (
             <DateTimePicker
               value={
-                showDatePicker === 'inicio' 
+                showDatePicker === 'inicio'
                   ? (formData.fechaInicio ? new Date(formData.fechaInicio + 'T12:00:00') : new Date())
-                  : (formData.fechaTermino ? new Date(formData.fechaTermino + 'T12:00:00') : new Date())
+                  : showDatePicker === 'termino'
+                  ? (formData.fechaTermino ? new Date(formData.fechaTermino + 'T12:00:00') : new Date())
+                  : new Date()
               }
               mode="date"
               display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              onChange={(event, date) => handleDateChange(showDatePicker as 'inicio' | 'termino', event, date)}
+              onChange={(event, date) => handleDateChange(showDatePicker, event, date)}
             />
           )}
 
@@ -749,43 +781,51 @@ export default function NuevoInquilinoScreen() {
               ))}
             </View>
             {depositoTipo === 'personalizado' && (
-              <View style={styles.dayGridContainer}>
-                <Text style={[styles.sublabel, { color: theme.textMuted }]}>
-                  Selecciona hasta 5 días ({depositoFechas.length}/5)
+              <View style={{ marginTop: 12 }}>
+                <Text style={[styles.sublabel, { color: theme.textMuted, marginBottom: 8 }]}>
+                  Fechas seleccionadas ({depositoFechas.length}/5)
                 </Text>
-                <View style={styles.dayGrid}>
-                  {Array.from({ length: 31 }, (_, i) => i + 1).map(day => {
-                    const selected = depositoFechas.includes(day);
-                    return (
-                      <TouchableOpacity
-                        key={day}
-                        style={[
-                          styles.dayBtn,
-                          {
-                            backgroundColor: selected ? theme.primary : theme.card,
-                            borderColor: selected ? theme.primary : theme.border,
-                          }
-                        ]}
-                        onPress={() => {
-                          if (selected) {
-                            const next = depositoFechas.filter(d => d !== day);
-                            setDepositoFechas(next);
-                            setFormData(prev => ({ ...prev, observaciones: buildDepositoObs('personalizado', next) }));
-                          } else {
-                            if (depositoFechas.length >= 5) return;
-                            const next = [...depositoFechas, day].sort((a, b) => a - b);
-                            setDepositoFechas(next);
-                            setFormData(prev => ({ ...prev, observaciones: buildDepositoObs('personalizado', next) }));
-                          }
-                        }}
-                      >
-                        <Text style={[styles.dayBtnText, { color: selected ? '#fff' : theme.text }]}>
-                          {day}
+                
+                {depositoFechas.length > 0 && (
+                  <View style={{ gap: 8, marginBottom: 12 }}>
+                    {[...depositoFechas].sort().map(d => (
+                      <View key={d} style={[{ backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)', borderColor: theme.border, borderWidth: 1, flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 12 }]}>
+                        <Ionicons name="calendar-outline" size={16} color={theme.textSecondary} />
+                        <Text style={{ color: theme.text, flex: 1, marginLeft: 8 }}>
+                          {new Date(d + 'T12:00:00').toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
                         </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
+                        <TouchableOpacity onPress={() => {
+                          const next = depositoFechas.filter(x => x !== d);
+                          setDepositoFechas(next);
+                          setFormData(prev => ({ ...prev, observaciones: buildDepositoObs('personalizado', next) }));
+                        }}>
+                          <Ionicons name="trash-outline" size={18} color={theme.danger} />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                {depositoFechas.length < 5 && (
+                  <InputGroup
+                    label="Agregar fecha"
+                    value=""
+                    isAction
+                    onPressAction={() => setShowDatePicker('deposito')}
+                    onChange={(date: Date) => {
+                      const { dateString } = formatDateParts(date);
+                      if (!depositoFechas.includes(dateString)) {
+                        const next = [...depositoFechas, dateString].sort();
+                        setDepositoFechas(next);
+                        setFormData(prev => ({ ...prev, observaciones: buildDepositoObs('personalizado', next) }));
+                      }
+                    }}
+                    placeholder="Seleccionar..."
+                    icon="add-circle-outline"
+                    theme={theme}
+                    isDark={isDark}
+                  />
+                )}
               </View>
             )}
             {depositoTipo !== 'ninguno' && (

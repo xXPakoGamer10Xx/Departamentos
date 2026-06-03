@@ -395,6 +395,20 @@ export default function PagoDetalleScreen() {
                     <Text style={styles.confirmBtnText}>Ir a Escanear</Text>
                   </TouchableOpacity>
 
+                  <TouchableOpacity
+                    style={[styles.confirmBtn, { backgroundColor: isDark ? 'rgba(52,199,89,0.3)' : '#34C75960', opacity: confirmando ? 0.7 : 1, marginTop: 10 }]}
+                    onPress={confirmarDirecto}
+                    disabled={confirmando}
+                  >
+                    {confirmando
+                      ? <ActivityIndicator color={isDark ? '#34C759' : '#15803D'} size="small" />
+                      : <Ionicons name="checkmark-circle-outline" size={20} color={isDark ? '#34C759' : '#15803D'} />
+                    }
+                    <Text style={[styles.confirmBtnText, { color: isDark ? '#34C759' : '#15803D' }]}>
+                      {confirmando ? 'Confirmando…' : 'Marcar como pagado (Manual)'}
+                    </Text>
+                  </TouchableOpacity>
+
                   {!pago?.qr_token && (
                     <View style={[styles.qrPendiente, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)' }]}>
                       <Ionicons name="time-outline" size={32} color={theme.textSecondary} />

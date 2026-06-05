@@ -392,6 +392,100 @@ export async function getHistorialPagos(req: AuthRequest, res: Response, next: N
   }
 }
 
+// POST /api/pagos/marcar-pagado/:inquilino_id  — admin marca como pagado sin QR ni comprobante
+export async function marcarPagadoAdmin(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { inquilino_id } = req.params;
+    const periodo = getCurrentPeriodo();
+
+    const inqRes = await pool.query(
+      `SELECT * FROM inquilinos WHERE id = $1 AND admin_id = $2 AND estado = 'activo'`,
+      [inquilino_id, req.user!.id]
+    );
+    if (!inqRes.rows[0]) throw new AppError('Inquilino no encontrado o no autorizado', 404);
+    const inquilino = inqRes.rows[0];
+
+    let pagoRes = await pool.query(
+      `SELECT * FROM pagos WHERE inquilino_id = $1 AND periodo = $2`,
+      [inquilino_id, periodo]
+    );
+
+    if (!pagoRes.rows[0]) {
+      const cuotasRes = await pool.query(
+        `SELECT COALESCE(SUM(monto), 0) as total_extra FROM cuotas_extra WHERE inquilino_id = $1 AND estado = 'pendiente'`,
+        [inquilino_id]
+      );
+      const montoTotal = parseFloat(inquilino.renta) + parseFloat(cuotasRes.rows[0].total_extra);
+      pagoRes = await pool.query(
+        `INSERT INTO pagos (inquilino_id, periodo, monto, metodo) VALUES ($1, $2, $3, $4) RETURNING *`,
+        [inquilino_id, periodo, montoTotal, inquilino.metodo_pago || 'efectivo']
+      );
+    } else if (pagoRes.rows[0].confirmado) {
+      res.json({ success: true, data: pagoRes.rows[0], yaConfirmado: true });
+      return;
+    }
+
+    const updated = await pool.query(
+      `UPDATE pagos SET confirmado = true, confirmado_en = NOW(), escaneado_por = $2, escaneado_en = NOW()
+       WHERE id = $1 RETURNING *`,
+      [pagoRes.rows[0].id, req.user!.id]
+    );
+
+    await pool.query(
+      `UPDATE cuotas_extra SET estado = 'pagado', pagado_en = NOW()
+       WHERE inquilino_id = $1 AND estado = 'pendiente'`,
+      [inquilino_id]
+    );
+
+    const pagoData = {
+      ...updated.rows[0],
+      nombre_completo: inquilino.nombre_completo,
+      depto_numero: inquilino.depto_numero,
+    };
+    res.json({ success: true, data: pagoData });
+
+    if (inquilino.usuario_id) {
+      emitToUser(inquilino.usuario_id, 'payment_confirmed', { pago: pagoData });
+      createAndSendNotification(
+        inquilino.usuario_id,
+        '✅ ¡Pago confirmado!',
+        `Tu pago de ${periodo} fue confirmado por el administrador`,
+        'pago'
+      ).catch(() => {});
+    }
+  } catch (err) {
+    next(err);
+  }
+}
+
+// GET /api/pagos/estados-actuales  — estado del periodo actual para los inquilinos activos
+export async function getEstadosPagosActuales(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const rol = req.user!.rol;
+    const periodo = getCurrentPeriodo();
+
+    // Admin ve solo los suyos; cobrador ve todos (igual que comprobantes-pendientes)
+    const whereAdmin = rol === 'admin' ? 'AND i.admin_id = $2' : '';
+    const params = rol === 'admin' ? [periodo, req.user!.id] : [periodo];
+
+    const result = await pool.query(
+      `SELECT i.id AS inquilino_id,
+              p.id AS pago_id,
+              COALESCE(p.confirmado, false) AS confirmado,
+              COALESCE(p.rechazado, false) AS rechazado,
+              p.comprobante_url
+       FROM inquilinos i
+       LEFT JOIN pagos p ON p.inquilino_id = i.id AND p.periodo = $1
+       WHERE i.estado = 'activo' ${whereAdmin}`,
+      params
+    );
+
+    res.json({ success: true, data: result.rows });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // GET /api/pagos/estado/:inquilino_id
 export async function getEstadoPago(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {

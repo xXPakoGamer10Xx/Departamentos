@@ -35,7 +35,7 @@ async function checkRentaReminders(): Promise<void> {
     const { rows: inquilinos } = await pool.query(
       `SELECT i.id, i.usuario_id, i.fecha_pago, i.nombre_completo, i.depto_numero, i.admin_id
        FROM inquilinos i
-       WHERE i.estado = 'activo' AND i.usuario_id IS NOT NULL`
+       WHERE i.estado = 'activo'`
     );
 
     const diasObjetivo = [7, 3, 2, 1, 0];
@@ -50,7 +50,7 @@ async function checkRentaReminders(): Promise<void> {
       const subKey = `pago_dia_${diaPago}_dias_${diasRestantes}`;
 
       // Notificación al inquilino
-      if (!(await yaNotificadoHoy(inq.usuario_id, 'renta', subKey))) {
+      if (inq.usuario_id && !(await yaNotificadoHoy(inq.usuario_id, 'renta', subKey))) {
         const titulo = diasRestantes === 0 ? '🔔 Hoy es tu día de pago' : '📅 Recordatorio de pago';
         const msg = diasRestantes === 0
           ? `Hoy es tu día de pago — Recuerda pagar tu renta del depto ${inq.depto_numero}`

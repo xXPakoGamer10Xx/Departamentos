@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { generarQr, confirmarPago, getEstadoPago, getPagoByToken, subirComprobante, confirmarPagoAdmin, rechazarPagoAdmin, getComprobantesPendientes, getHistorialPagos } from '../controllers/pagos.controller';
+import { generarQr, confirmarPago, getEstadoPago, getEstadosPagosActuales, getPagoByToken, subirComprobante, confirmarPagoAdmin, rechazarPagoAdmin, getComprobantesPendientes, getHistorialPagos, marcarPagadoAdmin } from '../controllers/pagos.controller';
 import { authMiddleware, adminOnly, cobradorOrAdmin, softAuth } from '../middleware/auth.middleware';
 import { tokenLimiter } from '../middleware/rateLimit.middleware';
 
@@ -13,9 +13,11 @@ pagosRouter.post('/confirmar/:token', tokenLimiter, softAuth, confirmarPago);
 // Rutas protegidas
 pagosRouter.use(authMiddleware);
 pagosRouter.post('/generar-qr/:inquilino_id', generarQr);
+pagosRouter.get('/estados-actuales', cobradorOrAdmin, getEstadosPagosActuales);
 pagosRouter.get('/estado/:inquilino_id', getEstadoPago);
 pagosRouter.post('/comprobante/:inquilino_id', subirComprobante);
 pagosRouter.post('/confirmar-admin/:pago_id', cobradorOrAdmin, confirmarPagoAdmin);
+pagosRouter.post('/marcar-pagado/:inquilino_id', adminOnly, marcarPagadoAdmin);
 pagosRouter.post('/rechazar-admin/:pago_id', adminOnly, rechazarPagoAdmin);
 pagosRouter.get('/comprobantes-pendientes', cobradorOrAdmin, getComprobantesPendientes);
 pagosRouter.get('/historial/:inquilino_id', getHistorialPagos);

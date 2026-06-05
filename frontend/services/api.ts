@@ -247,6 +247,9 @@ class ApiService {
   getEstadoPago = (inquilino_id: string) =>
     this.request<any>('GET', `/pagos/estado/${inquilino_id}`);
 
+  getEstadosPagosActuales = () =>
+    this.request<any[]>('GET', '/pagos/estados-actuales');
+
   getPagoByToken = (token: string) =>
     this.request<any>('GET', `/pagos/info/${token}`);
 
@@ -258,6 +261,9 @@ class ApiService {
 
   confirmarPagoPorId = (pago_id: string) =>
     this.request<any>('POST', `/pagos/confirmar-admin/${pago_id}`);
+
+  marcarPagadoAdmin = (inquilino_id: string) =>
+    this.request<any>('POST', `/pagos/marcar-pagado/${inquilino_id}`);
 
   rechazarPagoPorId = (pago_id: string, comentario?: string) =>
     this.request<any>('POST', `/pagos/rechazar-admin/${pago_id}`, { comentario: comentario || '' });

@@ -7,8 +7,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../../../constants/Colors';
 import { Theme } from '../../../constants/Theme';
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { useEffect, useState, useCallback } from 'react';
+import { useSSEEvent } from '../../../hooks/useSSE';
 import { LinearGradient } from 'expo-linear-gradient';
 import api from '../../../services/api';
 
@@ -30,6 +31,7 @@ export default function PagoDetalleScreen() {
   const [loading, setLoading] = useState(true);
   const [confirmando, setConfirmando] = useState(false);
   const [rechazando, setRechazando] = useState(false);
+  const [marcandoPagado, setMarcandoPagado] = useState(false);
   const [showRechazarModal, setShowRechazarModal] = useState(false);
   const [rechazarComentario, setRechazarComentario] = useState('');
 
@@ -46,8 +48,9 @@ export default function PagoDetalleScreen() {
   const [savingCuota, setSavingCuota] = useState(false);
   const [cuotaError, setCuotaError] = useState('');
 
-  useEffect(() => {
+  const cargar = useCallback((showLoader = false) => {
     if (!id) return;
+    if (showLoader) setLoading(true);
     Promise.all([
       api.getInquilinoById(id),
       api.getConfig(),
@@ -55,11 +58,26 @@ export default function PagoDetalleScreen() {
     ]).then(([inqRes, cfgRes, estadoRes]) => {
       setInquilino(inqRes.data);
       setConfig(cfgRes.data || {});
-      if (estadoRes.data) setPago(estadoRes.data);
-      if (estadoRes.cuotas) setCuotas(estadoRes.cuotas);
-      if (estadoRes.total_extra) setTotalExtra(estadoRes.total_extra);
+      setPago(estadoRes.data || null);
+      setCuotas(estadoRes.cuotas || []);
+      setTotalExtra(estadoRes.total_extra || 0);
     }).catch(() => {}).finally(() => setLoading(false));
   }, [id]);
+
+  useFocusEffect(useCallback(() => { cargar(true); }, [cargar]));
+
+  // Polling en vivo. No recargar con un modal abierto para no pisar lo que se edita.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (showRechazarModal || showCuota) return;
+      cargar();
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [cargar, showRechazarModal, showCuota]);
+
+  // Refresco inmediato en web cuando el inquilino sube comprobante o paga
+  useSSEEvent('comprobante_subido', () => cargar());
+  useSSEEvent('payment_confirmed', () => cargar());
 
   const loadHistorial = useCallback(async () => {
     if (!id || loadingHistorial) return;
@@ -123,6 +141,21 @@ export default function PagoDetalleScreen() {
       setSavingCuota(false);
     }
   }, [id, cuotaConcepto, cuotaMonto]);
+
+  const marcarPagadoManual = useCallback(async () => {
+    if (!inquilino) return;
+    setMarcandoPagado(true);
+    try {
+      const res = await api.marcarPagadoAdmin(inquilino.id);
+      setPago(res.data);
+      setCuotas([]);
+      setTotalExtra(0);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setMarcandoPagado(false);
+    }
+  }, [inquilino]);
 
   const removeCuota = useCallback(async (cuotaId: string, monto: number) => {
     try {
@@ -218,6 +251,23 @@ export default function PagoDetalleScreen() {
             </View>
           )}
         </View>
+
+        {/* Botón marcar pagado manualmente */}
+        {!pago?.confirmado && (
+          <TouchableOpacity
+            style={[styles.confirmBtn, { backgroundColor: '#34C759', opacity: marcandoPagado ? 0.7 : 1 }]}
+            onPress={marcarPagadoManual}
+            disabled={marcandoPagado}
+          >
+            {marcandoPagado
+              ? <ActivityIndicator color="#fff" size="small" />
+              : <Ionicons name="checkmark-circle" size={20} color="#fff" />
+            }
+            <Text style={styles.confirmBtnText}>
+              {marcandoPagado ? 'Marcando…' : 'Marcar como pagado'}
+            </Text>
+          </TouchableOpacity>
+        )}
 
         {/* Cargos extra */}
         {!pago?.confirmado && (

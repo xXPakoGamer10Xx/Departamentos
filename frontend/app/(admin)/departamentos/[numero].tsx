@@ -6,11 +6,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../../../constants/Colors';
 import { Theme } from '../../../constants/Theme';
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState, useRef } from 'react';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import api from '../../../services/api';
-import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 export default function DepartamentoDetailScreen() {
   const { numero } = useLocalSearchParams();
@@ -31,17 +29,34 @@ export default function DepartamentoDetailScreen() {
   const [asignandoCuenta, setAsignandoCuenta] = useState(false);
   const inputRef = useRef<TextInput>(null);
 
-  useEffect(() => {
+  const cargar = useCallback((syncInventario = false) => {
     api.getDepartamentoByNumero(Number(numero))
       .then(r => {
         setDepto(r.data);
-        const inv = r.data?.inventario_base;
-        setInventario(Array.isArray(inv) ? inv : []);
+        if (syncInventario) {
+          const inv = r.data?.inventario_base;
+          setInventario(Array.isArray(inv) ? inv : []);
+        }
       })
-      .catch(e => Alert.alert('Error', e.message || 'No se pudo cargar el departamento'))
+      .catch(e => setDepto((prev: any) => {
+        if (!prev) Alert.alert('Error', e.message || 'No se pudo cargar el departamento');
+        return prev;
+      }))
       .finally(() => setLoading(false));
     api.getCuentasBancarias().then(r => setCuentas(r.data || [])).catch(() => {});
   }, [numero]);
+
+  // Sincroniza al entrar/volver a la pantalla (incluye inventario)
+  useFocusEffect(useCallback(() => { cargar(true); }, [cargar]));
+
+  // Polling en vivo del estado/inquilino. No toca el inventario en edición ni pisa acciones en curso.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (guardando || cambiandoEstado || asignandoCuenta) return;
+      cargar();
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [cargar, guardando, cambiandoEstado, asignandoCuenta]);
 
   const asignarCuenta = async (cuentaId: string | null) => {
     setAsignandoCuenta(true);
@@ -226,31 +241,25 @@ export default function DepartamentoDetailScreen() {
           Artículos incluidos al momento de arrendar este departamento.
         </Text>
 
-        <GestureHandlerRootView>
-          <DraggableFlatList
-            data={inventario}
-            keyExtractor={(_, i) => String(i)}
-            scrollEnabled={false}
-            onDragEnd={({ data }) => setInventario(data)}
-            renderItem={({ item, getIndex, drag, isActive }: RenderItemParams<string>) => {
-              const i = getIndex() ?? 0;
-              return (
-                <ScaleDecorator>
-                  <View style={[styles.itemRow, isActive && { opacity: 0.85, backgroundColor: theme.card }]}>
-                    <TouchableOpacity onLongPress={drag} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                      <Ionicons name="reorder-three-outline" size={22} color={theme.textSecondary} />
-                    </TouchableOpacity>
-                    <Ionicons name="checkmark-circle-outline" size={18} color={theme.success} />
-                    <Text style={[styles.itemText, { color: theme.text }]}>{item}</Text>
-                    <TouchableOpacity onPress={() => eliminarItem(i)} style={styles.deleteItemBtn}>
-                      <Ionicons name="trash-outline" size={18} color={theme.danger} />
-                    </TouchableOpacity>
-                  </View>
-                </ScaleDecorator>
-              );
-            }}
-          />
-        </GestureHandlerRootView>
+        <View>
+          {inventario.map((item, i) => (
+            <View key={i} style={styles.itemRow}>
+              <View style={{ flexDirection: 'column' }}>
+                <TouchableOpacity onPress={() => i > 0 && setInventario(prev => { const a = [...prev]; [a[i-1], a[i]] = [a[i], a[i-1]]; return a; })} hitSlop={{ top: 4, bottom: 2, left: 6, right: 6 }}>
+                  <Ionicons name="chevron-up" size={16} color={i === 0 ? 'transparent' : theme.textSecondary} />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => i < inventario.length - 1 && setInventario(prev => { const a = [...prev]; [a[i], a[i+1]] = [a[i+1], a[i]]; return a; })} hitSlop={{ top: 2, bottom: 4, left: 6, right: 6 }}>
+                  <Ionicons name="chevron-down" size={16} color={i === inventario.length - 1 ? 'transparent' : theme.textSecondary} />
+                </TouchableOpacity>
+              </View>
+              <Ionicons name="checkmark-circle-outline" size={18} color={theme.success} />
+              <Text style={[styles.itemText, { color: theme.text }]}>{item}</Text>
+              <TouchableOpacity onPress={() => eliminarItem(i)} style={styles.deleteItemBtn}>
+                <Ionicons name="trash-outline" size={18} color={theme.danger} />
+              </TouchableOpacity>
+            </View>
+          ))}
+        </View>
 
         <View style={styles.addRow}>
           <TextInput

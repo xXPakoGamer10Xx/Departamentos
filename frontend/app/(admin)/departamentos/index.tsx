@@ -3,8 +3,6 @@ import {
   useColorScheme, Platform, ActivityIndicator, Alert,
   Modal, KeyboardAvoidingView, useWindowDimensions, ScrollView,
 } from 'react-native';
-import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../../../constants/Colors';
 import { Theme } from '../../../constants/Theme';
@@ -40,9 +38,9 @@ export default function DepartamentosScreen() {
   const [eliminandoDepto, setEliminandoDepto] = useState(false);
   const [deleteDeptoError, setDeleteDeptoError] = useState('');
 
-  const cargar = async () => {
+  const cargar = async (showLoader = true) => {
     try {
-      setLoading(true);
+      if (showLoader) setLoading(true);
       const [dRes, sRes] = await Promise.all([
         api.getDepartamentos(),
         api.getDepartamentosStats(),
@@ -50,13 +48,19 @@ export default function DepartamentosScreen() {
       setDepartamentos(dRes.data || []);
       setStats(sRes.data || {});
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'No se pudieron cargar los departamentos');
+      if (showLoader) Alert.alert('Error', e.message || 'No se pudieron cargar los departamentos');
     } finally {
-      setLoading(false);
+      if (showLoader) setLoading(false);
     }
   };
 
   useFocusEffect(useCallback(() => { cargar(); }, []));
+
+  // Polling en vivo (silencioso) mientras la pantalla está abierta
+  useEffect(() => {
+    const interval = setInterval(() => cargar(false), 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   const agregarItemInv = () => {
     const item = nuevoItemInv.trim();
@@ -375,31 +379,25 @@ export default function DepartamentosScreen() {
               </View>
 
               {nuevoInventario.length > 0 && (
-                <GestureHandlerRootView style={[styles.invList, { borderColor: theme.border }]}>
-                  <DraggableFlatList
-                    data={nuevoInventario}
-                    keyExtractor={(_, i) => String(i)}
-                    scrollEnabled={false}
-                    onDragEnd={({ data }) => setNuevoInventario(data)}
-                    renderItem={({ item, getIndex, drag, isActive }: RenderItemParams<string>) => {
-                      const i = getIndex() ?? 0;
-                      return (
-                        <ScaleDecorator>
-                          <View style={[styles.invItem, i > 0 && { borderTopWidth: 0.5, borderTopColor: theme.border }, isActive && { opacity: 0.85 }]}>
-                            <TouchableOpacity onLongPress={drag} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                              <Ionicons name="reorder-three-outline" size={20} color={theme.textSecondary} />
-                            </TouchableOpacity>
-                            <Ionicons name="checkmark-circle-outline" size={16} color={theme.success} />
-                            <Text style={[styles.invItemText, { color: theme.text }]}>{item}</Text>
-                            <TouchableOpacity onPress={() => eliminarItemInv(i)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                              <Ionicons name="close-circle" size={18} color={theme.textSecondary} />
-                            </TouchableOpacity>
-                          </View>
-                        </ScaleDecorator>
-                      );
-                    }}
-                  />
-                </GestureHandlerRootView>
+                <View style={[styles.invList, { borderColor: theme.border }]}>
+                  {nuevoInventario.map((item, i) => (
+                    <View key={i} style={[styles.invItem, i > 0 && { borderTopWidth: 0.5, borderTopColor: theme.border }]}>
+                      <View style={{ flexDirection: 'column' }}>
+                        <TouchableOpacity onPress={() => i > 0 && setNuevoInventario(prev => { const a = [...prev]; [a[i-1], a[i]] = [a[i], a[i-1]]; return a; })} hitSlop={{ top: 4, bottom: 2, left: 6, right: 6 }}>
+                          <Ionicons name="chevron-up" size={14} color={i === 0 ? 'transparent' : theme.textSecondary} />
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => i < nuevoInventario.length - 1 && setNuevoInventario(prev => { const a = [...prev]; [a[i], a[i+1]] = [a[i+1], a[i]]; return a; })} hitSlop={{ top: 2, bottom: 4, left: 6, right: 6 }}>
+                          <Ionicons name="chevron-down" size={14} color={i === nuevoInventario.length - 1 ? 'transparent' : theme.textSecondary} />
+                        </TouchableOpacity>
+                      </View>
+                      <Ionicons name="checkmark-circle-outline" size={16} color={theme.success} />
+                      <Text style={[styles.invItemText, { color: theme.text }]}>{item}</Text>
+                      <TouchableOpacity onPress={() => eliminarItemInv(i)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                        <Ionicons name="close-circle" size={18} color={theme.textSecondary} />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
               )}
 
               <View style={styles.invAddRow}>

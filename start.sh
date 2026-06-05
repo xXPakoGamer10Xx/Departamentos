@@ -146,11 +146,34 @@ fi
 # ─── Construir y levantar backend ───────────────────────────────────────────
 echo ""
 echo "🔨 Construyendo backend..."
-docker compose build backend
+# Intenta BuildKit primero; si falla (plugin corrupto), usa el builder legacy
+if ! docker compose build backend 2>/dev/null; then
+  echo "   BuildKit no disponible, usando builder legacy..."
+  DOCKER_BUILDKIT=0 docker build -f backend/Dockerfile -t departamentos-backend:latest . || {
+    echo "❌ Error al construir la imagen. Revisa los logs."
+    exit 1
+  }
+fi
 
 echo ""
 echo "🚀 Iniciando backend..."
-docker compose up -d backend
+if ! docker compose up -d backend 2>/dev/null; then
+  # Fallback: arrancar contenedores manualmente
+  NETWORK=$(docker network ls --filter name=departamentos_default -q 2>/dev/null)
+  [ -z "$NETWORK" ] && docker network create departamentos_default 2>/dev/null || true
+  docker rm -f depas_backend 2>/dev/null || true
+  DB_PASS=$(grep -E '^DB_PASSWORD=' .env | cut -d'=' -f2)
+  JWT=$(grep -E '^JWT_SECRET=' .env | cut -d'=' -f2)
+  FRONTEND_U=$(grep -E '^FRONTEND_URL=' .env | cut -d'=' -f2)
+  docker run -d --name depas_backend --network departamentos_default \
+    --restart unless-stopped -p 127.0.0.1:3001:3001 \
+    -e NODE_ENV=production -e PORT=3001 -e TZ=America/Mexico_City \
+    -e DB_HOST=db -e DB_PORT=5432 -e DB_NAME="${DB_NAME}" -e DB_USER="${DB_USER}" \
+    -e DB_PASSWORD="${DB_PASS}" -e JWT_SECRET="${JWT}" -e JWT_EXPIRES_IN=7d \
+    -e FRONTEND_URL="${FRONTEND_U}" -e BACKUP_DIR=/app/backups \
+    -v "$(pwd)/backups:/app/backups" \
+    departamentos-backend:latest
+fi
 
 # ─── Esperar a que el backend responda ──────────────────────────────────────
 echo ""

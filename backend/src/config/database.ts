@@ -136,6 +136,34 @@ WHERE c.clave IN ('banco_nombre', 'banco_clabe', 'banco_titular')
 GROUP BY c.admin_id
 HAVING COALESCE(MAX(CASE WHEN c.clave = 'banco_clabe' THEN c.valor END), '') <> ''
    AND NOT EXISTS (SELECT 1 FROM cuentas_bancarias cb WHERE cb.admin_id = c.admin_id);
+
+-- Abonos múltiples por periodo de pago (soporta pagos parciales con historial)
+CREATE TABLE IF NOT EXISTS abonos_pago (
+  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  pago_id         UUID NOT NULL REFERENCES pagos(id) ON DELETE CASCADE,
+  monto           NUMERIC(10,2) NOT NULL CHECK (monto > 0),
+  fecha           DATE NOT NULL DEFAULT CURRENT_DATE,
+  metodo          VARCHAR(20) NOT NULL DEFAULT 'efectivo',
+  nota            TEXT,
+  comprobante_url TEXT,
+  registrado_por  UUID REFERENCES usuarios(id) ON DELETE SET NULL,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_abonos_pago_pago  ON abonos_pago(pago_id);
+CREATE INDEX IF NOT EXISTS idx_abonos_pago_fecha ON abonos_pago(fecha);
+
+-- Migración de datos: los pagos ya confirmados se tratan como un abono único
+-- igual al monto total, para no perder historial al introducir abonos_pago.
+INSERT INTO abonos_pago (pago_id, monto, fecha, metodo, nota, registrado_por, created_at)
+SELECT p.id, p.monto,
+       COALESCE(p.confirmado_en::date, p.created_at::date),
+       p.metodo,
+       'Migración automática — pago histórico confirmado antes del sistema de abonos',
+       p.escaneado_por,
+       COALESCE(p.confirmado_en, p.created_at)
+FROM pagos p
+WHERE p.confirmado = true
+  AND NOT EXISTS (SELECT 1 FROM abonos_pago a WHERE a.pago_id = p.id);
 `;
 
 export async function initDB(): Promise<void> {

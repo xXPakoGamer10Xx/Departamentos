@@ -44,7 +44,8 @@ export default function ContratosScreen() {
       setOpeningId(String(item.id));
       try {
         const url = api.getContratoPdfUrl(String(item.id));
-        const token = api.getToken();
+        const tokenRes = await api.generarTokenPdf(String(item.id));
+        const token = tokenRes.data?.token;
         window.open(`${url}?token=${encodeURIComponent(token || '')}`, '_blank');
       } finally {
         setOpeningId(null);

@@ -24,6 +24,7 @@ export default function PagosScreen() {
 
   const [inquilinos, setInquilinos] = useState<any[]>([]);
   const [estados, setEstados] = useState<Record<string, any>>({});
+  const [saldos, setSaldos] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [marcandoId, setMarcandoId] = useState<string | null>(null);
@@ -33,12 +34,16 @@ export default function PagosScreen() {
     Promise.all([
       api.getInquilinos({ estado: 'activo' }),
       api.getEstadosPagosActuales().catch(() => ({ data: [] as any[] })),
+      api.getSaldosInquilinos().catch(() => ({ data: [] as any[] })),
     ])
-      .then(([inqRes, estRes]) => {
+      .then(([inqRes, estRes, saldosRes]) => {
         setInquilinos(inqRes.data || []);
         const map: Record<string, any> = {};
         (estRes.data || []).forEach((e: any) => { map[e.inquilino_id] = e; });
         setEstados(map);
+        const saldoMap: Record<string, number> = {};
+        (saldosRes.data || []).forEach((s: any) => { saldoMap[s.inquilino_id] = parseFloat(s.deuda_total); });
+        setSaldos(saldoMap);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -61,17 +66,14 @@ export default function PagosScreen() {
   const marcarPagado = useCallback(async (inquilinoId: string) => {
     setMarcandoId(inquilinoId);
     try {
-      const res = await api.marcarPagadoAdmin(inquilinoId);
-      setEstados(prev => ({
-        ...prev,
-        [inquilinoId]: { ...prev[inquilinoId], ...res.data, inquilino_id: inquilinoId, confirmado: true },
-      }));
+      await api.marcarPagadoAdmin(inquilinoId);
+      cargar();
     } catch (e) {
       console.error(e);
     } finally {
       setMarcandoId(null);
     }
-  }, []);
+  }, [cargar]);
 
   const filtered = inquilinos.filter(i =>
     !search ||
@@ -137,6 +139,12 @@ export default function PagosScreen() {
                   <Text style={[styles.cardSub, { color: theme.textSecondary }]}>
                     Depto {item.depto_numero} · {fmtRenta(item.renta)}/mes
                   </Text>
+                  {saldos[item.id] > 0 && (
+                    <View style={styles.deudaBadge}>
+                      <Ionicons name="alert-circle" size={11} color="#EF4444" />
+                      <Text style={styles.deudaText}>Debe {fmtRenta(saldos[item.id])}</Text>
+                    </View>
+                  )}
                 </View>
                 {estados[item.id]?.confirmado ? (
                   <View style={styles.pagadoBadge}>
@@ -221,6 +229,13 @@ const styles = StyleSheet.create({
   },
   cardName: { fontSize: 15, fontWeight: '700', letterSpacing: -0.2 },
   cardSub: { fontSize: 13, marginTop: 2 },
+  deudaBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    alignSelf: 'flex-start', marginTop: 5,
+    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10,
+    backgroundColor: '#EF444420',
+  },
+  deudaText: { fontSize: 11, fontWeight: '700', color: '#EF4444' },
   pagadoBadge: {
     flexDirection: 'row',
     alignItems: 'center',

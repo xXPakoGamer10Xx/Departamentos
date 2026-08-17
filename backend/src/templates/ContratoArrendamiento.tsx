@@ -18,6 +18,10 @@ interface ContratoProps {
     inventario_base: string[];
     arrendador_nombre: string;
     arrendador_direccion: string;
+    deposito: number | null;
+    deposito_tipo: string | null;
+    deposito_fechas: string[] | null;
+    metodo_pago: string | null;
   };
 }
 
@@ -143,6 +147,10 @@ export function ContratoArrendamiento({ data }: ContratoProps) {
     observaciones,
     arrendador_nombre,
     arrendador_direccion,
+    deposito,
+    deposito_tipo,
+    deposito_fechas,
+    metodo_pago,
   } = data;
 
   const hoy = new Date().toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' }).toUpperCase();
@@ -152,6 +160,25 @@ export function ContratoArrendamiento({ data }: ContratoProps) {
   const arrendadorUpper = arrendador_nombre.toUpperCase();
   const arrendatarioUpper = nombre_completo.toUpperCase();
   const fiadorUpper = fiador_nombre ? fiador_nombre.toUpperCase() : '';
+
+  const metodoPagoLabel = metodo_pago === 'transferencia'
+    ? 'transferencia bancaria'
+    : metodo_pago === 'ambos'
+    ? 'efectivo o transferencia bancaria'
+    : 'efectivo';
+
+  const depositoParrafo = deposito && Number(deposito) > 0
+    ? (() => {
+        const depositoAmount = formatMoneda(Number(deposito));
+        if (deposito_tipo === 'quincenas' || deposito_tipo === 'personalizado') {
+          const fechasStr = Array.isArray(deposito_fechas) && deposito_fechas.length > 0
+            ? deposito_fechas.map(formatFecha).join(', ')
+            : '';
+          return `El arrendatario entregará un depósito en garantía de ${depositoAmount}, pagadero en ${metodoPagoLabel}, en abonos diferidos con vencimiento en las siguientes fechas: ${fechasStr}.`;
+        }
+        return `El arrendatario entregará un depósito en garantía de ${depositoAmount}, pagadero en ${metodoPagoLabel} al inicio del presente contrato.`;
+      })()
+    : null;
 
   const inventarioItems: string[] =
     Array.isArray(data.inventario) && data.inventario.length > 0
@@ -205,6 +232,10 @@ export function ContratoArrendamiento({ data }: ContratoProps) {
           mensualidad adelantada y dentro de los cinco días que corresponda acuerdo con el contrato establecido,
           precisar en el domicilio del arrendador.
         </PdfText>
+
+        {depositoParrafo ? (
+          <PdfText style={styles.paragraph}>{depositoParrafo}</PdfText>
+        ) : null}
 
         <PdfText style={styles.paragraph}>
           El presente contrato da inicio el{' '}

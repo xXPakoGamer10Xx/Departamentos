@@ -36,7 +36,7 @@ function openConnection(): void {
     reconnectTimer = setTimeout(openConnection, 4000);
   };
 
-  const events = ['ticket_new', 'ticket_updated', 'payment_confirmed', 'comprobante_subido'];
+  const events = ['ticket_new', 'ticket_updated', 'payment_confirmed', 'payment_rejected', 'comprobante_subido'];
   for (const evt of events) {
     es.addEventListener(evt, (e: any) => {
       try { dispatch(evt, JSON.parse(e.data)); } catch {}

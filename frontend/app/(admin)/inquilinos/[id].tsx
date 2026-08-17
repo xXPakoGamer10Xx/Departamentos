@@ -44,7 +44,8 @@ export default function InquilinoDetailScreen() {
     try {
       setDownloading(true);
       const baseUrl = api.getContratoPdfUrl(id as string);
-      const token = api.getToken();
+      const tokenRes = await api.generarTokenPdf(id as string);
+      const token = tokenRes.data?.token;
 
       if (Platform.OS === 'web') {
         const url = `${baseUrl}?token=${encodeURIComponent(token || '')}`;

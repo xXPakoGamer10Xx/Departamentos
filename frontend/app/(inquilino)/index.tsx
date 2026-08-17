@@ -74,6 +74,13 @@ export default function InquilinoHome() {
     showWebNotification('✅ ¡Pago confirmado!', 'Tu pago de este mes fue confirmado');
   });
 
+  useSSEEvent('payment_rejected', (data) => {
+    if (data.pago) setPago((prev: any) => ({ ...prev, ...data.pago }));
+    const razon = data.pago?.comentario_admin ? `Razón: ${data.pago.comentario_admin}` : 'Por favor envía un nuevo comprobante.';
+    showWebNotification('❌ Comprobante rechazado', razon);
+    Alert.alert('❌ Comprobante rechazado', razon);
+  });
+
   const generarQr = useCallback(async () => {
     if (!inquilino?.id) return;
     setGenerando(true);

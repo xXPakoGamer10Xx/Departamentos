@@ -9,13 +9,14 @@ function parseDiaPago(fechaPago: string): number | null {
 
 function diasHastaFecha(targetDay: number): number {
   const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
   const anio = hoy.getFullYear();
   const mes = hoy.getMonth();
   let target = new Date(anio, mes, targetDay);
   if (target < hoy) {
     target = new Date(anio, mes + 1, targetDay);
   }
-  const diff = Math.round((target.getTime() - hoy.setHours(0, 0, 0, 0)) / 86400000);
+  const diff = Math.round((target.getTime() - hoy.getTime()) / 86400000);
   return diff;
 }
 

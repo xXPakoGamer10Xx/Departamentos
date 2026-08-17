@@ -35,6 +35,18 @@ export default function PagoDetalleScreen() {
   const [showRechazarModal, setShowRechazarModal] = useState(false);
   const [rechazarComentario, setRechazarComentario] = useState('');
 
+  // Abonos (pagos parciales)
+  const [abonos, setAbonos] = useState<any[]>([]);
+  const [totalAbonado, setTotalAbonado] = useState(0);
+  const [saldoPendiente, setSaldoPendiente] = useState<number | null>(null);
+  const [showAbonoModal, setShowAbonoModal] = useState(false);
+  const [editingAbonoId, setEditingAbonoId] = useState<string | null>(null);
+  const [abonoMonto, setAbonoMonto] = useState('');
+  const [abonoFecha, setAbonoFecha] = useState('');
+  const [abonoNota, setAbonoNota] = useState('');
+  const [savingAbono, setSavingAbono] = useState(false);
+  const [abonoError, setAbonoError] = useState('');
+
   // Historial
   const [historial, setHistorial] = useState<any[]>([]);
   const [loadingHistorial, setLoadingHistorial] = useState(false);
@@ -55,12 +67,22 @@ export default function PagoDetalleScreen() {
       api.getInquilinoById(id),
       api.getConfig(),
       api.getEstadoPago(id),
-    ]).then(([inqRes, cfgRes, estadoRes]) => {
+    ]).then(async ([inqRes, cfgRes, estadoRes]) => {
       setInquilino(inqRes.data);
       setConfig(cfgRes.data || {});
       setPago(estadoRes.data || null);
       setCuotas(estadoRes.cuotas || []);
       setTotalExtra(estadoRes.total_extra || 0);
+      setTotalAbonado((estadoRes as any).total_abonado || 0);
+      setSaldoPendiente((estadoRes as any).saldo_pendiente ?? null);
+      if (estadoRes.data?.id) {
+        try {
+          const abonosRes = await api.getAbonosPago(estadoRes.data.id);
+          setAbonos(abonosRes.data || []);
+        } catch { setAbonos([]); }
+      } else {
+        setAbonos([]);
+      }
     }).catch(() => {}).finally(() => setLoading(false));
   }, [id]);
 
@@ -94,19 +116,18 @@ export default function PagoDetalleScreen() {
     if (!pago) return;
     setConfirmando(true);
     try {
-      let res: any;
       if (pago.qr_token) {
-        res = await api.confirmarPago(pago.qr_token);
+        await api.confirmarPago(pago.qr_token);
       } else {
-        res = await api.confirmarPagoPorId(pago.id);
+        await api.confirmarPagoPorId(pago.id);
       }
-      setPago(res.data);
+      cargar();
     } catch (e) {
       console.error(e);
     } finally {
       setConfirmando(false);
     }
-  }, [pago]);
+  }, [pago, cargar]);
 
   const rechazarPago = useCallback(async () => {
     if (!pago) return;
@@ -146,16 +167,14 @@ export default function PagoDetalleScreen() {
     if (!inquilino) return;
     setMarcandoPagado(true);
     try {
-      const res = await api.marcarPagadoAdmin(inquilino.id);
-      setPago(res.data);
-      setCuotas([]);
-      setTotalExtra(0);
+      await api.marcarPagadoAdmin(inquilino.id);
+      cargar();
     } catch (e) {
       console.error(e);
     } finally {
       setMarcandoPagado(false);
     }
-  }, [inquilino]);
+  }, [inquilino, cargar]);
 
   const removeCuota = useCallback(async (cuotaId: string, monto: number) => {
     try {
@@ -164,6 +183,59 @@ export default function PagoDetalleScreen() {
       setTotalExtra(prev => Math.max(0, prev - monto));
     } catch { /* ignore */ }
   }, []);
+
+  const abrirNuevoAbono = useCallback(() => {
+    setEditingAbonoId(null);
+    setAbonoMonto('');
+    setAbonoFecha(new Date().toISOString().slice(0, 10));
+    setAbonoNota('');
+    setAbonoError('');
+    setShowAbonoModal(true);
+  }, []);
+
+  const abrirEditarAbono = useCallback((abono: any) => {
+    setEditingAbonoId(abono.id);
+    setAbonoMonto(String(abono.monto));
+    setAbonoFecha(String(abono.fecha).slice(0, 10));
+    setAbonoNota(abono.nota || '');
+    setAbonoError('');
+    setShowAbonoModal(true);
+  }, []);
+
+  const guardarAbono = useCallback(async () => {
+    const monto = parseFloat(abonoMonto);
+    if (!monto || monto <= 0) { setAbonoError('Ingresa un monto válido mayor a cero'); return; }
+    if (abonoFecha && !/^\d{4}-\d{2}-\d{2}$/.test(abonoFecha)) {
+      setAbonoError('La fecha debe tener el formato AAAA-MM-DD'); return;
+    }
+    setSavingAbono(true);
+    setAbonoError('');
+    try {
+      if (editingAbonoId) {
+        await api.editarAbono(editingAbonoId, { monto, fecha: abonoFecha || undefined, nota: abonoNota.trim() || undefined });
+      } else {
+        await api.registrarAbono({
+          inquilino_id: id!,
+          monto,
+          fecha: abonoFecha || undefined,
+          nota: abonoNota.trim() || undefined,
+        });
+      }
+      setShowAbonoModal(false);
+      cargar();
+    } catch (e: any) {
+      setAbonoError(e.message || 'No se pudo guardar el abono');
+    } finally {
+      setSavingAbono(false);
+    }
+  }, [id, editingAbonoId, abonoMonto, abonoFecha, abonoNota, cargar]);
+
+  const eliminarAbono = useCallback(async (abonoId: string) => {
+    try {
+      await api.eliminarAbono(abonoId);
+      cargar();
+    } catch { /* ignore */ }
+  }, [cargar]);
 
   const fmtRenta = (n: number) =>
     `$${Number(n).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`;
@@ -238,6 +310,14 @@ export default function PagoDetalleScreen() {
               <Text style={styles.pagadoText}>Pagado</Text>
             </View>
           )}
+          {!pago?.confirmado && totalAbonado > 0 && (
+            <View style={[styles.pagadoBadge, { backgroundColor: '#F59E0B20' }]}>
+              <Ionicons name="time" size={16} color="#F59E0B" />
+              <Text style={[styles.pagadoText, { color: '#F59E0B' }]}>
+                Parcial · Abonado {fmtRenta(totalAbonado)}{saldoPendiente != null ? ` · Falta ${fmtRenta(saldoPendiente)}` : ''}
+              </Text>
+            </View>
+          )}
           {!pago?.confirmado && pago?.rechazado && (
             <View style={[styles.pagadoBadge, { backgroundColor: '#EF444420' }]}>
               <Ionicons name="close-circle" size={16} color="#EF4444" />
@@ -252,21 +332,62 @@ export default function PagoDetalleScreen() {
           )}
         </View>
 
-        {/* Botón marcar pagado manualmente */}
+        {/* Botones: registrar abono / marcar pagado manualmente */}
         {!pago?.confirmado && (
-          <TouchableOpacity
-            style={[styles.confirmBtn, { backgroundColor: '#34C759', opacity: marcandoPagado ? 0.7 : 1 }]}
-            onPress={marcarPagadoManual}
-            disabled={marcandoPagado}
-          >
-            {marcandoPagado
-              ? <ActivityIndicator color="#fff" size="small" />
-              : <Ionicons name="checkmark-circle" size={20} color="#fff" />
-            }
-            <Text style={styles.confirmBtnText}>
-              {marcandoPagado ? 'Marcando…' : 'Marcar como pagado'}
-            </Text>
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <TouchableOpacity
+              style={[styles.confirmBtn, { flex: 1, marginTop: 0, backgroundColor: theme.primary }]}
+              onPress={abrirNuevoAbono}
+            >
+              <Ionicons name="cash-outline" size={20} color="#fff" />
+              <Text style={styles.confirmBtnText}>Registrar abono</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.confirmBtn, { flex: 1, marginTop: 0, backgroundColor: '#34C759', opacity: marcandoPagado ? 0.7 : 1 }]}
+              onPress={marcarPagadoManual}
+              disabled={marcandoPagado}
+            >
+              {marcandoPagado
+                ? <ActivityIndicator color="#fff" size="small" />
+                : <Ionicons name="checkmark-circle" size={20} color="#fff" />
+              }
+              <Text style={styles.confirmBtnText}>
+                {marcandoPagado ? 'Marcando…' : 'Marcar como pagado'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Historial de abonos de este periodo */}
+        {abonos.length > 0 && (
+          <View>
+            <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Historial de abonos</Text>
+            {abonos.map(a => (
+              <View key={a.id} style={[styles.cuotaRow, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)', borderColor: theme.border }]}>
+                <Ionicons name="cash-outline" size={14} color="#34C759" />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.cuotaConcepto, { color: theme.text }]}>
+                    {fmtRenta(a.monto)} · {new Date(a.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  </Text>
+                  {(a.nota || a.registrado_por_nombre) && (
+                    <Text style={{ color: theme.textSecondary, fontSize: 11, marginTop: 2 }} numberOfLines={1}>
+                      {[a.nota, a.registrado_por_nombre ? `por ${a.registrado_por_nombre}` : null].filter(Boolean).join(' · ')}
+                    </Text>
+                  )}
+                </View>
+                {!pago?.confirmado && (
+                  <>
+                    <TouchableOpacity onPress={() => abrirEditarAbono(a)}>
+                      <Ionicons name="create-outline" size={16} color={theme.textSecondary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => eliminarAbono(a.id)}>
+                      <Ionicons name="trash-outline" size={16} color={theme.danger} />
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
+            ))}
+          </View>
         )}
 
         {/* Cargos extra */}
@@ -668,6 +789,55 @@ export default function PagoDetalleScreen() {
               </TouchableOpacity>
               <TouchableOpacity style={[styles.modalConfirmBtn, { backgroundColor: theme.primary, opacity: savingCuota ? 0.7 : 1 }]} onPress={addCuota} disabled={savingCuota}>
                 {savingCuota ? <ActivityIndicator size="small" color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '700' }}>Agregar</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+      {/* Modal registrar/editar abono */}
+      <Modal visible={showAbonoModal} transparent animationType="fade" onRequestClose={() => setShowAbonoModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, { backgroundColor: isDark ? '#1E2235' : '#fff' }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>
+              {editingAbonoId ? 'Editar abono' : 'Registrar abono'}
+            </Text>
+            <Text style={[styles.modalLabel, { color: theme.textSecondary }]}>Monto ($)</Text>
+            <TextInput
+              style={[styles.modalInput, { color: theme.text, borderColor: abonoError ? theme.danger : theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }]}
+              value={abonoMonto}
+              onChangeText={t => { setAbonoMonto(t.replace(/[^0-9.]/g, '')); setAbonoError(''); }}
+              placeholder="500.00"
+              placeholderTextColor={theme.textSecondary}
+              keyboardType="decimal-pad"
+              autoFocus
+            />
+            <Text style={[styles.modalLabel, { color: theme.textSecondary }]}>Fecha (AAAA-MM-DD)</Text>
+            <TextInput
+              style={[styles.modalInput, { color: theme.text, borderColor: abonoError ? theme.danger : theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }]}
+              value={abonoFecha}
+              onChangeText={t => { setAbonoFecha(t); setAbonoError(''); }}
+              placeholder="2026-08-16"
+              placeholderTextColor={theme.textSecondary}
+              maxLength={10}
+            />
+            <Text style={[styles.modalLabel, { color: theme.textSecondary }]}>Nota (opcional)</Text>
+            <TextInput
+              style={[styles.modalInput, { color: theme.text, borderColor: theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }]}
+              value={abonoNota}
+              onChangeText={setAbonoNota}
+              placeholder="Ej: Pago en efectivo, adelanto..."
+              placeholderTextColor={theme.textSecondary}
+              maxLength={200}
+            />
+            {abonoError ? (
+              <Text style={[styles.cuotaErr, { color: theme.danger }]}>{abonoError}</Text>
+            ) : null}
+            <View style={styles.modalBtns}>
+              <TouchableOpacity style={[styles.modalCancelBtn, { borderColor: theme.border }]} onPress={() => setShowAbonoModal(false)} disabled={savingAbono}>
+                <Text style={{ color: theme.text, fontWeight: '600' }}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalConfirmBtn, { backgroundColor: theme.primary, opacity: savingAbono ? 0.7 : 1 }]} onPress={guardarAbono} disabled={savingAbono}>
+                {savingAbono ? <ActivityIndicator size="small" color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '700' }}>Guardar</Text>}
               </TouchableOpacity>
             </View>
           </View>

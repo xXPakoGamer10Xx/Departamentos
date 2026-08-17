@@ -38,7 +38,8 @@ export default function ContractPreviewScreen() {
     setOpening(true);
     try {
       const url = api.getContratoPdfUrl(id as string);
-      const token = api.getToken();
+      const tokenRes = await api.generarTokenPdf(id as string);
+      const token = tokenRes.data?.token;
 
       if (Platform.OS === 'web') {
         window.open(`${url}?token=${encodeURIComponent(token || '')}`, '_blank');

@@ -113,7 +113,10 @@ class ApiService {
     this.request<any>('PUT', `/inquilinos/${inquilinoId}/vincular-usuario`, { usuario_id: usuarioId });
 
   getContratoPdfUrl = (id: string) => `${this.baseUrl}/inquilinos/${id}/pdf`;
-  
+
+  generarTokenPdf = (id: string) =>
+    this.request<{ token: string }>('POST', `/inquilinos/${id}/pdf-token`);
+
   getToken = () => this.token;
   getBaseUrl = () => this.baseUrl;
   registerPushToken = (token: string) =>
@@ -270,6 +273,24 @@ class ApiService {
 
   getComprobantesPendientes = () =>
     this.request<any[]>('GET', '/pagos/comprobantes-pendientes');
+
+  registrarAbono = (data: { inquilino_id: string; periodo?: string; monto: number; fecha?: string; metodo?: string; nota?: string; comprobante_url?: string }) =>
+    this.request<{ abono: any; pago: any; totalAbonado: number; saldoPendiente: number }>('POST', '/pagos/abono', data);
+
+  getAbonosPago = (pago_id: string) =>
+    this.request<any[]>('GET', `/pagos/abonos/${pago_id}`);
+
+  editarAbono = (abono_id: string, data: { monto?: number; fecha?: string; metodo?: string; nota?: string }) =>
+    this.request<{ abono: any; pago: any; totalAbonado: number; saldoPendiente: number }>('PUT', `/pagos/abono/${abono_id}`, data);
+
+  eliminarAbono = (abono_id: string) =>
+    this.request<{ pago: any; totalAbonado: number; saldoPendiente: number }>('DELETE', `/pagos/abono/${abono_id}`);
+
+  getSaldoInquilino = (inquilino_id: string) =>
+    this.request<{ deuda_total: number; detalle: any[] }>('GET', `/pagos/saldo/${inquilino_id}`);
+
+  getSaldosInquilinos = () =>
+    this.request<{ inquilino_id: string; deuda_total: number }[]>('GET', '/pagos/saldos');
 
   // Invite codes
   generarCodigoInvitacion = (rol: string, expira_dias: number | null) =>

@@ -1,4 +1,5 @@
 import { Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
 import { pool } from '../config/database';
 import { AppError } from '../middleware/error.middleware';
 import { AuthRequest } from '../middleware/auth.middleware';
@@ -172,7 +173,7 @@ export async function createInquilino(req: AuthRequest, res: Response, next: Nex
         final_fiador ? toTitleCase(final_fiador) : null,
         final_tel || null,
         final_tel_fiador || null,
-        observaciones ? toTitleCase(observaciones) : null,
+        observaciones || null,
         JSON.stringify(inventario || []),
         final_deposito_tipo,
         JSON.stringify(final_deposito_fechas),
@@ -240,7 +241,7 @@ export async function updateInquilino(req: AuthRequest, res: Response, next: Nex
         body.fiador_nombre !== undefined ? toTitleCase(body.fiador_nombre || body.fiador || '') : (body.fiador_nombre === null ? null : current.fiador_nombre),
         body.tel_arrendatario || body.telArrendatario || current.tel_arrendatario,
         body.fiador_telefono || body.telFiador || current.fiador_telefono,
-        body.observaciones !== undefined ? toTitleCase(body.observaciones || '') : (body.observaciones === null ? null : current.observaciones),
+        body.observaciones !== undefined ? (body.observaciones || '') : (body.observaciones === null ? null : current.observaciones),
         body.inventario !== undefined ? JSON.stringify(body.inventario) : current.inventario,
         body.estado ?? current.estado,
         body.deposito_tipo || body.depositoTipo || current.deposito_tipo || 'ninguno',
@@ -250,6 +251,31 @@ export async function updateInquilino(req: AuthRequest, res: Response, next: Nex
         id,
       ]
     );
+
+    // Sincronizar estado de departamentos si cambió el depto asignado o el estado del inquilino
+    const deptoAnterior = current.depto_numero;
+    const deptoNuevo = result.rows[0].depto_numero;
+    const estadoNuevo = result.rows[0].estado;
+
+    if (deptoAnterior !== deptoNuevo || current.estado !== estadoNuevo) {
+      const otrosActivosAnterior = await pool.query(
+        `SELECT id FROM inquilinos WHERE admin_id = $1 AND depto_numero = $2 AND estado = 'activo' AND id != $3`,
+        [req.user!.id, deptoAnterior, id]
+      );
+      if (otrosActivosAnterior.rows.length === 0) {
+        await pool.query(
+          `UPDATE departamentos SET estado = 'disponible' WHERE admin_id = $1 AND numero = $2`,
+          [req.user!.id, deptoAnterior]
+        );
+      }
+
+      if (estadoNuevo === 'activo') {
+        await pool.query(
+          `UPDATE departamentos SET estado = 'ocupado' WHERE admin_id = $1 AND numero = $2`,
+          [req.user!.id, deptoNuevo]
+        );
+      }
+    }
 
     // Auditoría
     if ((req as any).audit) {
@@ -362,6 +388,27 @@ export async function extraerIne(req: AuthRequest, res: Response, next: NextFunc
     }
 
     res.json({ success: true, data: datos });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// POST /api/inquilinos/:id/pdf-token — emite un token de corta duración y scope
+// limitado, exclusivo para descargar el PDF de ESTE inquilino. Evita exponer
+// el JWT de sesión completo (7 días, privilegios de admin) en la URL del PDF.
+export async function generarTokenPdf(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { id } = req.params;
+    const check = await pool.query(`SELECT id FROM inquilinos WHERE admin_id = $1 AND id = $2`, [req.user!.id, id]);
+    if (!check.rows[0]) throw new AppError('Inquilino no encontrado', 404);
+
+    const token = jwt.sign(
+      { scope: 'pdf_download', inquilino_id: id, admin_id: req.user!.id },
+      process.env.JWT_SECRET!,
+      { expiresIn: '2m' }
+    );
+
+    res.json({ success: true, data: { token } });
   } catch (err) {
     next(err);
   }

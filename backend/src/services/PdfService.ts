@@ -84,6 +84,10 @@ export function buildDocxVars(data: Record<string, any>): Record<string, string>
     renta_letra:         data.renta_letra        ?? '',
     deposito:            formatCurrency(data.deposito),
     deposito_numero:     String(data.deposito ?? ''),
+    deposito_tipo:       data.deposito_tipo ?? 'ninguno',
+    deposito_fechas:     Array.isArray(data.deposito_fechas) && data.deposito_fechas.length
+                           ? (data.deposito_fechas as string[]).map(formatMXDate).join(', ')
+                           : '',
     fecha_inicio:        formatMXDate(data.fecha_inicio),
     fecha_termino:       formatMXDate(data.fecha_termino),
     fecha_pago:          data.fecha_pago         ?? '',

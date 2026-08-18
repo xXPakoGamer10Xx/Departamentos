@@ -173,11 +173,47 @@ async function checkDepositoReminders(): Promise<void> {
   }
 }
 
+async function checkPromesaPagoReminders(): Promise<void> {
+  try {
+    const diasObjetivo = [1, 0];
+
+    const { rows: pagos } = await pool.query(
+      `SELECT p.id, p.fecha_promesa, p.periodo, i.admin_id, i.nombre_completo, i.depto_numero
+       FROM pagos p JOIN inquilinos i ON i.id = p.inquilino_id
+       WHERE p.confirmado = false AND p.fecha_promesa IS NOT NULL`
+    );
+
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+
+    for (const pago of pagos) {
+      if (!pago.admin_id) continue;
+
+      const targetDate = new Date(`${pago.fecha_promesa}T12:00:00`);
+      targetDate.setHours(0, 0, 0, 0);
+
+      const diasRestantes = Math.round((targetDate.getTime() - hoy.getTime()) / 86400000);
+      if (!diasObjetivo.includes(diasRestantes)) continue;
+
+      const subKey = `promesa_${pago.id}_dias_${diasRestantes}`;
+      if (await yaNotificadoHoy(pago.admin_id, 'promesa', subKey)) continue;
+
+      const titulo = diasRestantes === 0 ? '🤝 Hoy prometió pagar' : '🤝 Recordatorio de promesa de pago';
+      const msg = diasRestantes === 0
+        ? `Hoy es la fecha en que ${pago.nombre_completo} (Depto ${pago.depto_numero}) dijo que pagaría ${pago.periodo}`
+        : `Mañana es la fecha en que ${pago.nombre_completo} (Depto ${pago.depto_numero}) dijo que pagaría ${pago.periodo}`;
+      await createAndSendNotification(pago.admin_id, titulo, msg, 'promesa');
+    }
+  } catch (err) {
+    console.error('[Scheduler] Error en checkPromesaPagoReminders:', err);
+  }
+}
+
 export function initScheduler(): void {
   // Ejecutar todos los días a las 9:00 AM
   cron.schedule('0 9 * * *', async () => {
     console.log('[Scheduler] Ejecutando recordatorios de pago y contratos...');
-    await Promise.all([checkRentaReminders(), checkContratoExpiration(), checkDepositoReminders()]);
+    await Promise.all([checkRentaReminders(), checkContratoExpiration(), checkDepositoReminders(), checkPromesaPagoReminders()]);
     console.log('[Scheduler] Recordatorios enviados.');
   }, { timezone: 'America/Mexico_City' });
 

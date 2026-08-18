@@ -769,6 +769,34 @@ export async function getSaldoInquilino(req: AuthRequest, res: Response, next: N
   }
 }
 
+// PUT /api/pagos/:pago_id/promesa — el admin anota la fecha en que el inquilino prometió pagar
+export async function setPromesaPago(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { pago_id } = req.params;
+    const { fecha_promesa } = req.body;
+
+    if (fecha_promesa !== null && fecha_promesa !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(fecha_promesa)) {
+      throw new AppError('La fecha debe tener el formato AAAA-MM-DD', 400);
+    }
+
+    const pagoRes = await pool.query(
+      `SELECT p.id FROM pagos p JOIN inquilinos i ON i.id = p.inquilino_id
+       WHERE p.id = $1 AND i.admin_id = $2`,
+      [pago_id, req.user!.id]
+    );
+    if (!pagoRes.rows[0]) throw new AppError('Pago no encontrado o no autorizado', 404);
+
+    const updated = await pool.query(
+      `UPDATE pagos SET fecha_promesa = $2 WHERE id = $1 RETURNING *`,
+      [pago_id, fecha_promesa || null]
+    );
+
+    res.json({ success: true, data: updated.rows[0] });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // GET /api/pagos/saldos — deuda total de todos los inquilinos activos (para la lista)
 export async function getSaldosInquilinos(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -777,7 +805,7 @@ export async function getSaldosInquilinos(req: AuthRequest, res: Response, next:
     const params = rol === 'admin' ? [req.user!.id] : [];
 
     const result = await pool.query(
-      `SELECT i.id AS inquilino_id,
+      `SELECT i.id AS inquilino_id, i.depto_numero, i.nombre_completo,
               COALESCE(SUM(GREATEST(i.renta + COALESCE(cx.total, 0) - COALESCE(ab.total, 0), 0)), 0) AS deuda_total
        FROM inquilinos i
        CROSS JOIN LATERAL generate_series(
@@ -797,6 +825,44 @@ export async function getSaldosInquilinos(req: AuthRequest, res: Response, next:
     );
 
     res.json({ success: true, data: result.rows });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// GET /api/pagos/saldos/resumen — deuda total agregada + desglose por departamento
+export async function getResumenDeuda(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const rol = req.user!.rol;
+    const whereAdmin = rol === 'admin' ? 'AND i.admin_id = $1' : '';
+    const params = rol === 'admin' ? [req.user!.id] : [];
+
+    const result = await pool.query(
+      `SELECT * FROM (
+         SELECT i.id AS inquilino_id, i.depto_numero, i.nombre_completo,
+                COALESCE(SUM(GREATEST(i.renta + COALESCE(cx.total, 0) - COALESCE(ab.total, 0), 0)), 0) AS deuda_total
+         FROM inquilinos i
+         CROSS JOIN LATERAL generate_series(
+           date_trunc('month', i.fecha_inicio), date_trunc('month', CURRENT_DATE), interval '1 month'
+         ) AS gs
+         LEFT JOIN LATERAL (
+           SELECT SUM(monto) AS total FROM cuotas_extra
+           WHERE inquilino_id = i.id AND periodo = to_char(gs, 'YYYY-MM')
+         ) cx ON true
+         LEFT JOIN LATERAL (
+           SELECT SUM(a.monto) AS total FROM pagos p JOIN abonos_pago a ON a.pago_id = p.id
+           WHERE p.inquilino_id = i.id AND p.periodo = to_char(gs, 'YYYY-MM')
+         ) ab ON true
+         WHERE i.estado = 'activo' ${whereAdmin}
+         GROUP BY i.id
+       ) sub`,
+      params
+    );
+
+    const porDepartamento = result.rows.filter(r => parseFloat(r.deuda_total) > 0);
+    const totalGeneral = result.rows.reduce((sum, r) => sum + parseFloat(r.deuda_total), 0);
+
+    res.json({ success: true, data: { total_general: totalGeneral, por_departamento: porDepartamento } });
   } catch (err) {
     next(err);
   }

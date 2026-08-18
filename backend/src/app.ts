@@ -16,6 +16,8 @@ import { pushRouter } from './routes/push.routes';
 import { eventsRouter } from './routes/events.routes';
 import { notificacionesRouter } from './routes/notificaciones.routes';
 import { inviteCodesRouter } from './routes/invite-codes.routes';
+import { depositosRouter } from './routes/depositos.routes';
+import { reportesRouter } from './routes/reportes.routes';
 import { errorHandler } from './middleware/error.middleware';
 import { requestLogger } from './middleware/logger.middleware';
 import { generalLimiter } from './middleware/rateLimit.middleware';
@@ -77,6 +79,8 @@ app.use('/api/push', pushRouter);
 app.use('/api/events', eventsRouter);
 app.use('/api/notificaciones', notificacionesRouter);
 app.use('/api/invite-codes', inviteCodesRouter);
+app.use('/api/depositos', depositosRouter);
+app.use('/api/reportes', reportesRouter);
 
 // Error handler global (debe ir al final)
 app.use(errorHandler);

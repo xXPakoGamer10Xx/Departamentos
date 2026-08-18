@@ -27,6 +27,7 @@ export default function DepartamentoDetailScreen() {
   const [cambiandoEstado, setCambiandoEstado] = useState(false);
   const [cuentas, setCuentas] = useState<any[]>([]);
   const [asignandoCuenta, setAsignandoCuenta] = useState(false);
+  const [deudaDepto, setDeudaDepto] = useState<number | null>(null);
   const inputRef = useRef<TextInput>(null);
 
   const cargar = useCallback((syncInventario = false) => {
@@ -44,6 +45,12 @@ export default function DepartamentoDetailScreen() {
       }))
       .finally(() => setLoading(false));
     api.getCuentasBancarias().then(r => setCuentas(r.data || [])).catch(() => {});
+    api.getResumenDeuda()
+      .then(r => {
+        const item = (r.data?.por_departamento || []).find(d => d.depto_numero === Number(numero));
+        setDeudaDepto(item ? item.deuda_total : 0);
+      })
+      .catch(() => {});
   }, [numero]);
 
   // Sincroniza al entrar/volver a la pantalla (incluye inventario)
@@ -232,6 +239,11 @@ export default function DepartamentoDetailScreen() {
           {depto.inquilino_actual.tel ? (
             <Text style={[styles.desc, { color: theme.textSecondary }]}>Tel: {depto.inquilino_actual.tel}</Text>
           ) : null}
+          {!!deudaDepto && deudaDepto > 0 && (
+            <Text style={{ color: theme.danger, fontWeight: '700', marginTop: 4 }}>
+              Debe ${Number(deudaDepto).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+            </Text>
+          )}
         </View>
       ) : null}
 

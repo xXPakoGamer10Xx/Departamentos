@@ -292,6 +292,32 @@ class ApiService {
   getSaldosInquilinos = () =>
     this.request<{ inquilino_id: string; deuda_total: number }[]>('GET', '/pagos/saldos');
 
+  getResumenDeuda = () =>
+    this.request<{ total_general: number; por_departamento: { inquilino_id: string; depto_numero: number; nombre_completo: string; deuda_total: number }[] }>('GET', '/pagos/saldos/resumen');
+
+  setPromesaPago = (pago_id: string, fecha_promesa: string | null) =>
+    this.request<any>('PUT', `/pagos/${pago_id}/promesa`, { fecha_promesa });
+
+  // Depósitos
+  getSaldoDeposito = (inquilino_id: string) =>
+    this.request<{ deposito_total: number; deposito_pagado: number; deposito_saldo: number }>('GET', `/depositos/${inquilino_id}/saldo`);
+
+  getAbonosDeposito = (inquilino_id: string) =>
+    this.request<any[]>('GET', `/depositos/${inquilino_id}/abonos`);
+
+  registrarAbonoDeposito = (data: { inquilino_id: string; monto: number; fecha?: string; metodo?: string; nota?: string; comprobante_url?: string }) =>
+    this.request<{ abono: any; deposito_pagado: number; deposito_saldo: number }>('POST', '/depositos/abono', data);
+
+  editarAbonoDeposito = (abono_id: string, data: { monto?: number; fecha?: string; metodo?: string; nota?: string }) =>
+    this.request<{ abono: any }>('PUT', `/depositos/abono/${abono_id}`, data);
+
+  eliminarAbonoDeposito = (abono_id: string) =>
+    this.request<void>('DELETE', `/depositos/abono/${abono_id}`);
+
+  // Reportes
+  getReporteAnual = (year: number) =>
+    this.request<{ year: number; renta_total: number; extra_total: number; deposito_total: number; total_general: number }>('GET', '/reportes/anual', undefined, { year: String(year) });
+
   // Invite codes
   generarCodigoInvitacion = (rol: string, expira_dias: number | null) =>
     this.request<any>('POST', '/invite-codes', { rol, expira_dias });

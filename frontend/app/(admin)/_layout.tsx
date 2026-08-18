@@ -149,6 +149,7 @@ export default function AdminLayout() {
           <Tabs.Screen name="scan" options={{ title: 'Escanear' }} />
           <Tabs.Screen name="departamentos" options={{ title: 'Departamentos' }} />
           <Tabs.Screen name="contratos" options={{ title: 'Contratos' }} />
+          <Tabs.Screen name="reportes" options={{ title: 'Reportes' }} />
           <Tabs.Screen name="configuracion" options={{ title: 'Ajustes' }} />
         </Tabs>
       </View>

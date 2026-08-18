@@ -164,6 +164,24 @@ SELECT p.id, p.monto,
 FROM pagos p
 WHERE p.confirmado = true
   AND NOT EXISTS (SELECT 1 FROM abonos_pago a WHERE a.pago_id = p.id);
+
+-- Fecha en la que el inquilino prometió pagar un periodo adeudado (nota del admin)
+ALTER TABLE pagos ADD COLUMN IF NOT EXISTS fecha_promesa DATE;
+
+-- Abonos parciales al depósito (independiente de la renta, sin fila en pagos)
+CREATE TABLE IF NOT EXISTS abonos_deposito (
+  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  inquilino_id    UUID NOT NULL REFERENCES inquilinos(id) ON DELETE CASCADE,
+  monto           NUMERIC(10,2) NOT NULL CHECK (monto > 0),
+  fecha           DATE NOT NULL DEFAULT CURRENT_DATE,
+  metodo          VARCHAR(20) NOT NULL DEFAULT 'efectivo',
+  nota            TEXT,
+  comprobante_url TEXT,
+  registrado_por  UUID REFERENCES usuarios(id) ON DELETE SET NULL,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_abonos_deposito_inquilino ON abonos_deposito(inquilino_id);
+CREATE INDEX IF NOT EXISTS idx_abonos_deposito_fecha ON abonos_deposito(fecha);
 `;
 
 export async function initDB(): Promise<void> {

@@ -60,6 +60,22 @@ export default function PagoDetalleScreen() {
   const [savingCuota, setSavingCuota] = useState(false);
   const [cuotaError, setCuotaError] = useState('');
 
+  // Promesa de pago
+  const [promesaFecha, setPromesaFecha] = useState('');
+  const [savingPromesa, setSavingPromesa] = useState(false);
+
+  // Depósito (separado de la renta)
+  const [depositoSaldo, setDepositoSaldo] = useState<{ deposito_total: number; deposito_pagado: number; deposito_saldo: number } | null>(null);
+  const [depositoAbonos, setDepositoAbonos] = useState<any[]>([]);
+  const [showDepositoModal, setShowDepositoModal] = useState(false);
+  const [editingDepositoAbonoId, setEditingDepositoAbonoId] = useState<string | null>(null);
+  const [depositoMonto, setDepositoMonto] = useState('');
+  const [depositoFecha, setDepositoFecha] = useState('');
+  const [depositoNota, setDepositoNota] = useState('');
+  const [savingDeposito, setSavingDeposito] = useState(false);
+  const [depositoError, setDepositoError] = useState('');
+  const [showDeposito, setShowDeposito] = useState(false);
+
   const cargar = useCallback((showLoader = false) => {
     if (!id) return;
     if (showLoader) setLoading(true);
@@ -67,7 +83,9 @@ export default function PagoDetalleScreen() {
       api.getInquilinoById(id),
       api.getConfig(),
       api.getEstadoPago(id),
-    ]).then(async ([inqRes, cfgRes, estadoRes]) => {
+      api.getSaldoDeposito(id),
+      api.getAbonosDeposito(id),
+    ]).then(async ([inqRes, cfgRes, estadoRes, depSaldoRes, depAbonosRes]) => {
       setInquilino(inqRes.data);
       setConfig(cfgRes.data || {});
       setPago(estadoRes.data || null);
@@ -75,6 +93,9 @@ export default function PagoDetalleScreen() {
       setTotalExtra(estadoRes.total_extra || 0);
       setTotalAbonado((estadoRes as any).total_abonado || 0);
       setSaldoPendiente((estadoRes as any).saldo_pendiente ?? null);
+      setPromesaFecha(estadoRes.data?.fecha_promesa ? String(estadoRes.data.fecha_promesa).slice(0, 10) : '');
+      setDepositoSaldo(depSaldoRes.data || null);
+      setDepositoAbonos(depAbonosRes.data || []);
       if (estadoRes.data?.id) {
         try {
           const abonosRes = await api.getAbonosPago(estadoRes.data.id);
@@ -237,6 +258,73 @@ export default function PagoDetalleScreen() {
     } catch { /* ignore */ }
   }, [cargar]);
 
+  const guardarPromesa = useCallback(async () => {
+    if (!pago?.id) return;
+    if (promesaFecha && !/^\d{4}-\d{2}-\d{2}$/.test(promesaFecha)) return;
+    setSavingPromesa(true);
+    try {
+      await api.setPromesaPago(pago.id, promesaFecha || null);
+      cargar();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSavingPromesa(false);
+    }
+  }, [pago, promesaFecha, cargar]);
+
+  const abrirNuevoDeposito = useCallback(() => {
+    setEditingDepositoAbonoId(null);
+    setDepositoMonto('');
+    setDepositoFecha(new Date().toISOString().slice(0, 10));
+    setDepositoNota('');
+    setDepositoError('');
+    setShowDepositoModal(true);
+  }, []);
+
+  const abrirEditarDeposito = useCallback((abono: any) => {
+    setEditingDepositoAbonoId(abono.id);
+    setDepositoMonto(String(abono.monto));
+    setDepositoFecha(String(abono.fecha).slice(0, 10));
+    setDepositoNota(abono.nota || '');
+    setDepositoError('');
+    setShowDepositoModal(true);
+  }, []);
+
+  const guardarDeposito = useCallback(async () => {
+    const monto = parseFloat(depositoMonto);
+    if (!monto || monto <= 0) { setDepositoError('Ingresa un monto válido mayor a cero'); return; }
+    if (depositoFecha && !/^\d{4}-\d{2}-\d{2}$/.test(depositoFecha)) {
+      setDepositoError('La fecha debe tener el formato AAAA-MM-DD'); return;
+    }
+    setSavingDeposito(true);
+    setDepositoError('');
+    try {
+      if (editingDepositoAbonoId) {
+        await api.editarAbonoDeposito(editingDepositoAbonoId, { monto, fecha: depositoFecha || undefined, nota: depositoNota.trim() || undefined });
+      } else {
+        await api.registrarAbonoDeposito({
+          inquilino_id: id!,
+          monto,
+          fecha: depositoFecha || undefined,
+          nota: depositoNota.trim() || undefined,
+        });
+      }
+      setShowDepositoModal(false);
+      cargar();
+    } catch (e: any) {
+      setDepositoError(e.message || 'No se pudo guardar el abono');
+    } finally {
+      setSavingDeposito(false);
+    }
+  }, [id, editingDepositoAbonoId, depositoMonto, depositoFecha, depositoNota, cargar]);
+
+  const eliminarDeposito = useCallback(async (abonoId: string) => {
+    try {
+      await api.eliminarAbonoDeposito(abonoId);
+      cargar();
+    } catch { /* ignore */ }
+  }, [cargar]);
+
   const fmtRenta = (n: number) =>
     `$${Number(n).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`;
 
@@ -331,6 +419,36 @@ export default function PagoDetalleScreen() {
             </View>
           )}
         </View>
+
+        {/* Promesa de pago */}
+        {!pago?.confirmado && pago?.id && (
+          <View style={[styles.promesaCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#fff', borderColor: theme.border }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Ionicons name="calendar-outline" size={16} color={theme.primary} />
+              <Text style={[styles.sectionLabel, { color: theme.textSecondary, marginBottom: 0 }]}>¿Cuándo dijo que paga?</Text>
+            </View>
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+              <TextInput
+                style={[styles.modalInput, { flex: 1, marginBottom: 0, color: theme.text, borderColor: theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }]}
+                value={promesaFecha}
+                onChangeText={setPromesaFecha}
+                placeholder="AAAA-MM-DD"
+                placeholderTextColor={theme.textSecondary}
+                maxLength={10}
+              />
+              <TouchableOpacity
+                style={[styles.promesaSaveBtn, { backgroundColor: theme.primary, opacity: savingPromesa ? 0.7 : 1 }]}
+                onPress={guardarPromesa}
+                disabled={savingPromesa}
+              >
+                {savingPromesa ? <ActivityIndicator size="small" color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>Guardar</Text>}
+              </TouchableOpacity>
+            </View>
+            <Text style={{ color: theme.textSecondary, fontSize: 11, marginTop: 6 }}>
+              Te avisamos un día antes y el día que llegue esa fecha.
+            </Text>
+          </View>
+        )}
 
         {/* Botones: registrar abono / marcar pagado manualmente */}
         {!pago?.confirmado && (
@@ -676,6 +794,14 @@ export default function PagoDetalleScreen() {
                           <Text style={[styles.verComprobanteBtnText, { color: theme.primary }]}>Ver comprobante</Text>
                         </TouchableOpacity>
                       )}
+                      {!confirmado && p.fecha_promesa && (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                          <Ionicons name="calendar-outline" size={12} color="#7C3AED" />
+                          <Text style={{ color: '#7C3AED', fontSize: 11, fontWeight: '600' }}>
+                            Prometió pagar: {String(p.fecha_promesa).slice(0, 10)}
+                          </Text>
+                        </View>
+                      )}
                     </View>
                   </View>
                 );
@@ -690,6 +816,74 @@ export default function PagoDetalleScreen() {
             </View>
           )}
         </View>
+
+        {/* ── Depósito (separado de la renta) ── */}
+        {!!depositoSaldo && depositoSaldo.deposito_total > 0 && (
+          <View>
+            <TouchableOpacity
+              style={[styles.historialToggle, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#fff', borderColor: theme.border }]}
+              onPress={() => setShowDeposito(v => !v)}
+            >
+              <Ionicons name="lock-closed-outline" size={18} color={theme.primary} />
+              <Text style={[styles.historialToggleText, { color: theme.primary }]}>
+                Depósito — {depositoSaldo.deposito_saldo > 0
+                  ? `Debe ${fmtRenta(depositoSaldo.deposito_saldo)}`
+                  : 'Pagado completo'}
+              </Text>
+              <Ionicons name={showDeposito ? 'chevron-up' : 'chevron-down'} size={16} color={theme.primary} style={{ marginLeft: 'auto' }} />
+            </TouchableOpacity>
+
+            {showDeposito && (
+              <View style={{ marginTop: 12, gap: 10 }}>
+                <View style={[styles.montoCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#fff', paddingVertical: 20 }]}>
+                  <Text style={[styles.montoLabel, { color: theme.textSecondary }]}>DEPÓSITO TOTAL</Text>
+                  <Text style={[styles.montoAmount, { color: theme.text, fontSize: 30 }]}>{fmtRenta(depositoSaldo.deposito_total)}</Text>
+                  <Text style={[styles.montoSub, { color: theme.textSecondary }]}>
+                    Pagado {fmtRenta(depositoSaldo.deposito_pagado)}
+                    {depositoSaldo.deposito_saldo > 0 ? ` · Falta ${fmtRenta(depositoSaldo.deposito_saldo)}` : ''}
+                  </Text>
+                </View>
+
+                {depositoSaldo.deposito_saldo > 0 && (
+                  <TouchableOpacity
+                    style={[styles.confirmBtn, { backgroundColor: theme.primary }]}
+                    onPress={abrirNuevoDeposito}
+                  >
+                    <Ionicons name="cash-outline" size={20} color="#fff" />
+                    <Text style={styles.confirmBtnText}>Registrar abono a depósito</Text>
+                  </TouchableOpacity>
+                )}
+
+                {depositoAbonos.length > 0 && (
+                  <View>
+                    <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Historial de abonos al depósito</Text>
+                    {depositoAbonos.map(a => (
+                      <View key={a.id} style={[styles.cuotaRow, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)', borderColor: theme.border }]}>
+                        <Ionicons name="cash-outline" size={14} color="#34C759" />
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.cuotaConcepto, { color: theme.text }]}>
+                            {fmtRenta(a.monto)} · {new Date(a.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          </Text>
+                          {(a.nota || a.registrado_por_nombre) && (
+                            <Text style={{ color: theme.textSecondary, fontSize: 11, marginTop: 2 }} numberOfLines={1}>
+                              {[a.nota, a.registrado_por_nombre ? `por ${a.registrado_por_nombre}` : null].filter(Boolean).join(' · ')}
+                            </Text>
+                          )}
+                        </View>
+                        <TouchableOpacity onPress={() => abrirEditarDeposito(a)}>
+                          <Ionicons name="create-outline" size={16} color={theme.textSecondary} />
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => eliminarDeposito(a.id)}>
+                          <Ionicons name="trash-outline" size={16} color={theme.danger} />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
+        )}
       </ScrollView>
 
       {/* Modal rechazar pago */}
@@ -843,6 +1037,55 @@ export default function PagoDetalleScreen() {
           </View>
         </View>
       </Modal>
+      {/* Modal registrar/editar abono a depósito */}
+      <Modal visible={showDepositoModal} transparent animationType="fade" onRequestClose={() => setShowDepositoModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, { backgroundColor: isDark ? '#1E2235' : '#fff' }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>
+              {editingDepositoAbonoId ? 'Editar abono a depósito' : 'Registrar abono a depósito'}
+            </Text>
+            <Text style={[styles.modalLabel, { color: theme.textSecondary }]}>Monto ($)</Text>
+            <TextInput
+              style={[styles.modalInput, { color: theme.text, borderColor: depositoError ? theme.danger : theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }]}
+              value={depositoMonto}
+              onChangeText={t => { setDepositoMonto(t.replace(/[^0-9.]/g, '')); setDepositoError(''); }}
+              placeholder="500.00"
+              placeholderTextColor={theme.textSecondary}
+              keyboardType="decimal-pad"
+              autoFocus
+            />
+            <Text style={[styles.modalLabel, { color: theme.textSecondary }]}>Fecha (AAAA-MM-DD)</Text>
+            <TextInput
+              style={[styles.modalInput, { color: theme.text, borderColor: depositoError ? theme.danger : theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }]}
+              value={depositoFecha}
+              onChangeText={t => { setDepositoFecha(t); setDepositoError(''); }}
+              placeholder="2026-08-16"
+              placeholderTextColor={theme.textSecondary}
+              maxLength={10}
+            />
+            <Text style={[styles.modalLabel, { color: theme.textSecondary }]}>Nota (opcional)</Text>
+            <TextInput
+              style={[styles.modalInput, { color: theme.text, borderColor: theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }]}
+              value={depositoNota}
+              onChangeText={setDepositoNota}
+              placeholder="Ej: Abono inicial, segundo pago..."
+              placeholderTextColor={theme.textSecondary}
+              maxLength={200}
+            />
+            {depositoError ? (
+              <Text style={[styles.cuotaErr, { color: theme.danger }]}>{depositoError}</Text>
+            ) : null}
+            <View style={styles.modalBtns}>
+              <TouchableOpacity style={[styles.modalCancelBtn, { borderColor: theme.border }]} onPress={() => setShowDepositoModal(false)} disabled={savingDeposito}>
+                <Text style={{ color: theme.text, fontWeight: '600' }}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalConfirmBtn, { backgroundColor: theme.primary, opacity: savingDeposito ? 0.7 : 1 }]} onPress={guardarDeposito} disabled={savingDeposito}>
+                {savingDeposito ? <ActivityIndicator size="small" color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '700' }}>Guardar</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -925,6 +1168,9 @@ const styles = StyleSheet.create({
   },
 
   sectionLabel: { fontSize: 12, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 8 },
+
+  promesaCard: { borderRadius: 16, padding: 16, borderWidth: 1 },
+  promesaSaveBtn: { paddingHorizontal: 18, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
 
   // Tarjeta bancaria
   bankCard: {

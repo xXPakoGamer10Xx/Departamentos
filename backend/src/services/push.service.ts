@@ -36,7 +36,7 @@ export async function createAndSendNotification(
   usuarioId: string,
   title: string,
   body: string,
-  tipo: 'renta' | 'cuota' | 'ticket' | 'pago'
+  tipo: 'renta' | 'cuota' | 'ticket' | 'pago' | 'promesa'
 ): Promise<void> {
   try {
     // 1. Guardar en base de datos para la web y panel histórico

@@ -42,6 +42,7 @@ export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
 
   const [stats, setStats] = useState<any>(null);
+  const [deudaTotal, setDeudaTotal] = useState(0);
   const [proximosPagos, setProximosPagos] = useState<any[]>([]);
   const [proximosVencer, setProximosVencer] = useState<any[]>([]);
   const [contratosVencidos, setContratosVencidos] = useState<any[]>([]);
@@ -52,9 +53,11 @@ export default function DashboardScreen() {
     Promise.all([
       api.getDepartamentosStats(),
       api.getInquilinos({ estado: 'activo' }),
+      api.getResumenDeuda(),
     ])
-      .then(([sRes, iRes]) => {
+      .then(([sRes, iRes, deudaRes]) => {
         setStats(sRes.data);
+        setDeudaTotal(deudaRes.data?.total_general || 0);
         const inquilinos: any[] = iRes.data || [];
         const hoy = new Date();
         const diaHoy = hoy.getDate();
@@ -129,6 +132,7 @@ export default function DashboardScreen() {
     { icon: 'home-outline', label: 'Nuevo Depto', color: theme.success, bgLight: Colors.light.successLight, bgDark: Colors.dark.successLight, onPress: () => router.push('/departamentos') },
     { icon: 'document-text-outline', label: 'Contratos', color: theme.accent, bgLight: '#F3E8FF', bgDark: 'rgba(139,92,246,0.18)', onPress: () => router.push('/contratos') },
     { icon: 'card-outline', label: 'Pagos', color: theme.info, bgLight: Colors.light.infoLight, bgDark: Colors.dark.infoLight, onPress: () => router.push('/pagos') },
+    { icon: 'bar-chart-outline', label: 'Reportes', color: theme.warning, bgLight: Colors.light.warningLight, bgDark: Colors.dark.warningLight, onPress: () => router.push('/reportes' as any) },
   ];
 
   if (loading) {
@@ -207,6 +211,18 @@ export default function DashboardScreen() {
             </View>
             <Text style={[styles.metricValue, { color: theme.text }]}>{formatMoney(ingresos)}</Text>
             <Text style={[styles.metricLabel, { color: theme.textSecondary }]}>Ingresos mensuales</Text>
+          </GlassCard>
+
+          {/* Deuda total */}
+          <GlassCard style={styles.metricCard} padding={Theme.spacing.xl}>
+            <View style={styles.metricTop}>
+              <View style={[styles.metricIcon, { backgroundColor: deudaTotal > 0 ? theme.dangerLight : theme.successLight }]}>
+                <Ionicons name="alert-circle" size={20} color={deudaTotal > 0 ? theme.danger : theme.success} />
+              </View>
+              {deudaTotal > 0 && <Badge label="Pendiente" variant="danger" size="sm" />}
+            </View>
+            <Text style={[styles.metricValue, { color: deudaTotal > 0 ? theme.danger : theme.text }]}>{formatMoney(deudaTotal)}</Text>
+            <Text style={[styles.metricLabel, { color: theme.textSecondary }]}>Deuda total</Text>
           </GlassCard>
 
           {/* Contratos */}

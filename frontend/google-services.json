@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "411379594062",
+    "project_id": "vertexrent-d11ee",
+    "storage_bucket": "vertexrent-d11ee.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:411379594062:android:c35af3a11c6c8dd085641f",
+        "android_client_info": {
+          "package_name": "com.vertexrent.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDx3Pxw0hBML6yfl_fz6ZHE8IjIObZhzws"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

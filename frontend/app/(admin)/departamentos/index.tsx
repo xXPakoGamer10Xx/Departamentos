@@ -526,11 +526,11 @@ const styles = StyleSheet.create({
   statValue: { fontSize: 22, fontWeight: '700', marginBottom: 2 },
   statLabel: { fontSize: 11, fontWeight: '600' },
   statDivider: { width: 1, height: '60%', alignSelf: 'center' },
-  grid: { 
-    paddingHorizontal: 20, 
-    paddingTop: 0, 
+  grid: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
     paddingBottom: 40,
-    gap: 20 
+    gap: 20
   },
   row: { gap: 20 },
   card: { 

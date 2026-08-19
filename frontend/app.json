@@ -19,6 +19,7 @@
     },
     "android": {
       "package": "com.vertexrent.app",
+      "googleServicesFile": "./google-services.json",
       "versionCode": 2,
       "adaptiveIcon": {
         "foregroundImage": "./assets/icono.png",

@@ -69,11 +69,11 @@ export default function PagoDetalleScreen() {
   const [promesaAno, setPromesaAno] = useState('');
   const [savingPromesa, setSavingPromesa] = useState(false);
   const [promesaError, setPromesaError] = useState('');
+  const [promesaGuardada, setPromesaGuardada] = useState(false);
   const [showMobileDatePicker, setShowMobileDatePicker] = useState(false);
 
   const diaRef = useRef<any>(null);
   const mesRef = useRef<any>(null);
-  const anoRef = useRef<any>(null);
   const webDatePickerRef = useRef<any>(null);
 
   // Depósito (separado de la renta)
@@ -114,6 +114,17 @@ export default function PagoDetalleScreen() {
     const dt = new Date(yearNum, monthNum - 1, dayNum);
     if (dt.getFullYear() !== yearNum || dt.getMonth() !== monthNum - 1 || dt.getDate() !== dayNum) return null;
     return `${yearNum}-${String(monthNum).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+  };
+
+  // El año no se pide en el formulario: se infiere solo. Si el día/mes ya pasó
+  // este año, se asume que la promesa es para el año siguiente.
+  const inferAno = (dia: string, mes: string): string => {
+    const dayNum = parseInt(dia, 10);
+    const monthNum = parseInt(mes, 10);
+    const now = new Date();
+    const hoy = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const candidato = new Date(now.getFullYear(), monthNum - 1, dayNum);
+    return String(candidato < hoy ? now.getFullYear() + 1 : now.getFullYear());
   };
 
   const getPromesaPreview = () => {
@@ -342,13 +353,14 @@ export default function PagoDetalleScreen() {
 
   const handleDiaChange = (text: string) => {
     setPromesaError('');
+    setPromesaGuardada(false);
     const clean = text.trim();
     const dmy = clean.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
     if (dmy) {
       setPromesaDia(dmy[1].padStart(2, '0'));
       setPromesaMes(dmy[2].padStart(2, '0'));
       setPromesaAno(dmy[3]);
-      anoRef.current?.focus();
+      mesRef.current?.blur();
       return;
     }
     const ymd = clean.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -356,12 +368,13 @@ export default function PagoDetalleScreen() {
       setPromesaDia(ymd[3]);
       setPromesaMes(ymd[2]);
       setPromesaAno(ymd[1]);
-      anoRef.current?.focus();
+      mesRef.current?.blur();
       return;
     }
 
     const digits = text.replace(/\D/g, '').slice(0, 2);
     setPromesaDia(digits);
+    if (digits.length === 2 && promesaMes.length === 2) setPromesaAno(inferAno(digits, promesaMes));
 
     if (digits.length === 2) {
       mesRef.current?.focus();
@@ -373,31 +386,23 @@ export default function PagoDetalleScreen() {
 
   const handleMesChange = (text: string) => {
     setPromesaError('');
+    setPromesaGuardada(false);
     const clean = text.trim();
     const dmy = clean.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
     if (dmy) {
       setPromesaDia(dmy[1].padStart(2, '0'));
       setPromesaMes(dmy[2].padStart(2, '0'));
       setPromesaAno(dmy[3]);
-      anoRef.current?.focus();
       return;
     }
 
     const digits = text.replace(/\D/g, '').slice(0, 2);
     setPromesaMes(digits);
-
-    if (digits.length === 2) {
-      anoRef.current?.focus();
-    } else if (digits.length === 1 && parseInt(digits, 10) > 1) {
+    if (digits.length === 2 && promesaDia.length === 2) setPromesaAno(inferAno(promesaDia, digits));
+    else if (digits.length === 1 && parseInt(digits, 10) > 1) {
       setPromesaMes(`0${digits}`);
-      anoRef.current?.focus();
+      if (promesaDia.length === 2) setPromesaAno(inferAno(promesaDia, `0${digits}`));
     }
-  };
-
-  const handleAnoChange = (text: string) => {
-    setPromesaError('');
-    const digits = text.replace(/\D/g, '').slice(0, 4);
-    setPromesaAno(digits);
   };
 
   const setFechaRapida = (diasDesdeHoy: number) => {
@@ -410,6 +415,7 @@ export default function PagoDetalleScreen() {
     setPromesaMes(mm);
     setPromesaAno(yyyy);
     setPromesaError('');
+    setPromesaGuardada(false);
   };
 
   const abrirSelectorFecha = () => {
@@ -440,6 +446,8 @@ export default function PagoDetalleScreen() {
       try {
         await api.setPromesaPago(pago.id, null);
         cargar();
+        setPromesaGuardada(true);
+        setTimeout(() => setPromesaGuardada(false), 2500);
       } catch (e: any) {
         setPromesaError(e.message || 'No se pudo borrar la fecha');
       } finally {
@@ -450,7 +458,7 @@ export default function PagoDetalleScreen() {
 
     const iso = getIsoFromParts(d, m, y);
     if (!iso) {
-      setPromesaError('Ingresa una fecha válida: Día (01-31), Mes (01-12) y Año (4 dígitos)');
+      setPromesaError('Ingresa una fecha válida: Día (01-31) y Mes (01-12)');
       return;
     }
 
@@ -459,6 +467,8 @@ export default function PagoDetalleScreen() {
     try {
       await api.setPromesaPago(pago.id, iso);
       cargar();
+      setPromesaGuardada(true);
+      setTimeout(() => setPromesaGuardada(false), 2500);
     } catch (e: any) {
       setPromesaError(e.message || 'No se pudo guardar la fecha');
     } finally {
@@ -710,10 +720,10 @@ export default function PagoDetalleScreen() {
               />
             )}
 
-            {/* Campos separados: Día / Mes / Año */}
+            {/* Campos separados: Día / Mes (el año se infiere solo) */}
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 }}>
               {/* Día */}
-              <View style={[styles.dateSegmentBox, { borderColor: promesaError && !promesaDia ? theme.danger : theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)' }]}>
+              <View style={[styles.dateSegmentBox, { flex: 0.7, borderColor: promesaError && !promesaDia ? theme.danger : theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)' }]}>
                 <Text style={[styles.dateSegmentLabel, { color: theme.textSecondary }]}>DÍA</Text>
                 <TextInput
                   ref={diaRef}
@@ -732,7 +742,7 @@ export default function PagoDetalleScreen() {
               <Text style={{ fontSize: 18, fontWeight: '700', color: theme.textSecondary }}>/</Text>
 
               {/* Mes */}
-              <View style={[styles.dateSegmentBox, { borderColor: promesaError && !promesaMes ? theme.danger : theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)' }]}>
+              <View style={[styles.dateSegmentBox, { flex: 0.7, borderColor: promesaError && !promesaMes ? theme.danger : theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)' }]}>
                 <Text style={[styles.dateSegmentLabel, { color: theme.textSecondary }]}>MES</Text>
                 <TextInput
                   ref={mesRef}
@@ -751,31 +761,9 @@ export default function PagoDetalleScreen() {
                 />
               </View>
 
-              <Text style={{ fontSize: 18, fontWeight: '700', color: theme.textSecondary }}>/</Text>
-
-              {/* Año */}
-              <View style={[styles.dateSegmentBox, { flex: 1.3, borderColor: promesaError && !promesaAno ? theme.danger : theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)' }]}>
-                <Text style={[styles.dateSegmentLabel, { color: theme.textSecondary }]}>AÑO</Text>
-                <TextInput
-                  ref={anoRef}
-                  style={[styles.dateSegmentInput, { color: theme.text }]}
-                  value={promesaAno}
-                  onChangeText={handleAnoChange}
-                  onKeyPress={(e) => {
-                    if (e.nativeEvent.key === 'Backspace' && !promesaAno) mesRef.current?.focus();
-                  }}
-                  placeholder="AAAA"
-                  placeholderTextColor={theme.textSecondary + '70'}
-                  maxLength={4}
-                  keyboardType="numeric"
-                  textAlign="center"
-                  selectTextOnFocus
-                />
-              </View>
-
               {/* Botón Guardar */}
               <TouchableOpacity
-                style={[styles.promesaSaveBtn, { backgroundColor: theme.primary, opacity: savingPromesa ? 0.7 : 1 }]}
+                style={[styles.promesaSaveBtn, { backgroundColor: promesaGuardada ? theme.success ?? '#22C55E' : theme.primary, opacity: savingPromesa ? 0.7 : 1, flex: 1 }]}
                 onPress={guardarPromesa}
                 disabled={savingPromesa}
               >
@@ -783,8 +771,8 @@ export default function PagoDetalleScreen() {
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                    <Ionicons name="checkmark" size={16} color="#fff" />
-                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>Guardar</Text>
+                    <Ionicons name={promesaGuardada ? 'checkmark-done' : 'checkmark'} size={16} color="#fff" />
+                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>{promesaGuardada ? 'Guardado' : 'Guardar'}</Text>
                   </View>
                 )}
               </TouchableOpacity>
@@ -798,6 +786,7 @@ export default function PagoDetalleScreen() {
                     setPromesaMes('');
                     setPromesaAno('');
                     setPromesaError('');
+                    setPromesaGuardada(false);
                   }}
                   accessibilityLabel="Limpiar fecha"
                 >

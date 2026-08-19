@@ -8,7 +8,8 @@ import { Colors } from '../../../constants/Colors';
 import { Theme } from '../../../constants/Theme';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useSSEEvent } from '../../../hooks/useSSE';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Print from 'expo-print';
@@ -62,10 +63,18 @@ export default function PagoDetalleScreen() {
   const [savingCuota, setSavingCuota] = useState(false);
   const [cuotaError, setCuotaError] = useState('');
 
-  // Promesa de pago
-  const [promesaFecha, setPromesaFecha] = useState('');
+  // Promesa de pago (separada en Día, Mes, Año)
+  const [promesaDia, setPromesaDia] = useState('');
+  const [promesaMes, setPromesaMes] = useState('');
+  const [promesaAno, setPromesaAno] = useState('');
   const [savingPromesa, setSavingPromesa] = useState(false);
   const [promesaError, setPromesaError] = useState('');
+  const [showMobileDatePicker, setShowMobileDatePicker] = useState(false);
+
+  const diaRef = useRef<any>(null);
+  const mesRef = useRef<any>(null);
+  const anoRef = useRef<any>(null);
+  const webDatePickerRef = useRef<any>(null);
 
   // Depósito (separado de la renta)
   const [depositoSaldo, setDepositoSaldo] = useState<{ deposito_total: number; deposito_pagado: number; deposito_saldo: number } | null>(null);
@@ -95,43 +104,44 @@ export default function PagoDetalleScreen() {
     return str;
   };
 
-  const parseToYYYYMMDD = (dateStr?: string | null): string | null => {
-    if (!dateStr || !dateStr.trim()) return null;
-    const clean = dateStr.trim();
+  const getIsoFromParts = (d: string, m: string, y: string): string | null => {
+    if (!d && !m && !y) return null;
+    if (!d || !m || !y || y.length < 4) return null;
+    const dayNum = parseInt(d, 10);
+    const monthNum = parseInt(m, 10);
+    const yearNum = parseInt(y, 10);
+    if (monthNum < 1 || monthNum > 12 || dayNum < 1 || dayNum > 31 || yearNum < 1900 || yearNum > 2100) return null;
+    const dt = new Date(yearNum, monthNum - 1, dayNum);
+    if (dt.getFullYear() !== yearNum || dt.getMonth() !== monthNum - 1 || dt.getDate() !== dayNum) return null;
+    return `${yearNum}-${String(monthNum).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+  };
 
-    // DD/MM/AAAA o DD-MM-AAAA
-    const dmyMatch = clean.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-    if (dmyMatch) {
-      const d = parseInt(dmyMatch[1], 10);
-      const m = parseInt(dmyMatch[2], 10);
-      const y = parseInt(dmyMatch[3], 10);
-      if (m >= 1 && m <= 12 && d >= 1 && d <= 31 && y >= 1900 && y <= 2100) {
-        const dt = new Date(y, m - 1, d);
-        if (dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d) {
-          const dd = String(d).padStart(2, '0');
-          const mm = String(m).padStart(2, '0');
-          return `${y}-${mm}-${dd}`;
-        }
-      }
-      return 'INVALID';
-    }
+  const getPromesaPreview = () => {
+    const iso = getIsoFromParts(promesaDia, promesaMes, promesaAno);
+    if (!iso) return null;
+    const [y, m, d] = iso.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+    dt.setHours(0, 0, 0, 0);
+    const diffDays = Math.round((dt.getTime() - hoy.getTime()) / 86400000);
 
-    // AAAA-MM-DD
-    const ymdMatch = clean.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (ymdMatch) {
-      const y = parseInt(ymdMatch[1], 10);
-      const m = parseInt(ymdMatch[2], 10);
-      const d = parseInt(ymdMatch[3], 10);
-      if (m >= 1 && m <= 12 && d >= 1 && d <= 31 && y >= 1900 && y <= 2100) {
-        const dt = new Date(y, m - 1, d);
-        if (dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d) {
-          return `${ymdMatch[1]}-${ymdMatch[2]}-${ymdMatch[3]}`;
-        }
-      }
-      return 'INVALID';
-    }
+    const raw = dt.toLocaleDateString('es-MX', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
+    const cap = raw.charAt(0).toUpperCase() + raw.slice(1);
 
-    return 'INVALID';
+    let badge = '';
+    if (diffDays === 0) badge = ' · Hoy';
+    else if (diffDays === 1) badge = ' · Mañana';
+    else if (diffDays === -1) badge = ' · Ayer';
+    else if (diffDays > 1) badge = ` · en ${diffDays} días`;
+    else if (diffDays < -1) badge = ` · hace ${Math.abs(diffDays)} días`;
+
+    return `${cap}${badge}`;
   };
 
   const cargar = useCallback((showLoader = false) => {
@@ -151,7 +161,22 @@ export default function PagoDetalleScreen() {
       setTotalExtra(estadoRes.total_extra || 0);
       setTotalAbonado((estadoRes as any).total_abonado || 0);
       setSaldoPendiente((estadoRes as any).saldo_pendiente ?? null);
-      setPromesaFecha(estadoRes.data?.fecha_promesa ? formatToDDMMAAAA(estadoRes.data.fecha_promesa) : '');
+      if (estadoRes.data?.fecha_promesa) {
+        const match = String(estadoRes.data.fecha_promesa).match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (match) {
+          setPromesaDia(match[3]);
+          setPromesaMes(match[2]);
+          setPromesaAno(match[1]);
+        } else {
+          setPromesaDia('');
+          setPromesaMes('');
+          setPromesaAno('');
+        }
+      } else {
+        setPromesaDia('');
+        setPromesaMes('');
+        setPromesaAno('');
+      }
       setPromesaError('');
       setDepositoSaldo(depSaldoRes.data || null);
       setDepositoAbonos(depAbonosRes.data || []);
@@ -315,41 +340,101 @@ export default function PagoDetalleScreen() {
     } catch { /* ignore */ }
   }, [cargar]);
 
-  const handlePromesaChange = (text: string) => {
+  const handleDiaChange = (text: string) => {
     setPromesaError('');
-    if (text.length < promesaFecha.length) {
-      setPromesaFecha(text);
+    const clean = text.trim();
+    const dmy = clean.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+    if (dmy) {
+      setPromesaDia(dmy[1].padStart(2, '0'));
+      setPromesaMes(dmy[2].padStart(2, '0'));
+      setPromesaAno(dmy[3]);
+      anoRef.current?.focus();
       return;
     }
-    const digits = text.replace(/\D/g, '').slice(0, 8);
-    if (digits.length <= 2) {
-      setPromesaFecha(digits);
-    } else if (digits.length <= 4) {
-      setPromesaFecha(`${digits.slice(0, 2)}/${digits.slice(2)}`);
+    const ymd = clean.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (ymd) {
+      setPromesaDia(ymd[3]);
+      setPromesaMes(ymd[2]);
+      setPromesaAno(ymd[1]);
+      anoRef.current?.focus();
+      return;
+    }
+
+    const digits = text.replace(/\D/g, '').slice(0, 2);
+    setPromesaDia(digits);
+
+    if (digits.length === 2) {
+      mesRef.current?.focus();
+    } else if (digits.length === 1 && parseInt(digits, 10) > 3) {
+      setPromesaDia(`0${digits}`);
+      mesRef.current?.focus();
+    }
+  };
+
+  const handleMesChange = (text: string) => {
+    setPromesaError('');
+    const clean = text.trim();
+    const dmy = clean.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+    if (dmy) {
+      setPromesaDia(dmy[1].padStart(2, '0'));
+      setPromesaMes(dmy[2].padStart(2, '0'));
+      setPromesaAno(dmy[3]);
+      anoRef.current?.focus();
+      return;
+    }
+
+    const digits = text.replace(/\D/g, '').slice(0, 2);
+    setPromesaMes(digits);
+
+    if (digits.length === 2) {
+      anoRef.current?.focus();
+    } else if (digits.length === 1 && parseInt(digits, 10) > 1) {
+      setPromesaMes(`0${digits}`);
+      anoRef.current?.focus();
+    }
+  };
+
+  const handleAnoChange = (text: string) => {
+    setPromesaError('');
+    const digits = text.replace(/\D/g, '').slice(0, 4);
+    setPromesaAno(digits);
+  };
+
+  const setFechaRapida = (diasDesdeHoy: number) => {
+    const target = new Date();
+    target.setDate(target.getDate() + diasDesdeHoy);
+    const dd = String(target.getDate()).padStart(2, '0');
+    const mm = String(target.getMonth() + 1).padStart(2, '0');
+    const yyyy = String(target.getFullYear());
+    setPromesaDia(dd);
+    setPromesaMes(mm);
+    setPromesaAno(yyyy);
+    setPromesaError('');
+  };
+
+  const abrirSelectorFecha = () => {
+    if (Platform.OS === 'web') {
+      if (webDatePickerRef.current?.showPicker) {
+        try {
+          webDatePickerRef.current.showPicker();
+        } catch {
+          webDatePickerRef.current?.click();
+        }
+      } else {
+        webDatePickerRef.current?.click();
+      }
     } else {
-      setPromesaFecha(`${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`);
+      setShowMobileDatePicker(true);
     }
   };
 
   const guardarPromesa = useCallback(async () => {
     if (!pago?.id) return;
-    if (promesaFecha.trim()) {
-      const iso = parseToYYYYMMDD(promesaFecha);
-      if (!iso || iso === 'INVALID') {
-        setPromesaError('Ingresa una fecha válida: DD/MM/AAAA (ej. 25/08/2026)');
-        return;
-      }
-      setSavingPromesa(true);
-      setPromesaError('');
-      try {
-        await api.setPromesaPago(pago.id, iso);
-        cargar();
-      } catch (e: any) {
-        setPromesaError(e.message || 'No se pudo guardar la fecha');
-      } finally {
-        setSavingPromesa(false);
-      }
-    } else {
+    const d = promesaDia.trim();
+    const m = promesaMes.trim();
+    const y = promesaAno.trim();
+
+    if (!d && !m && !y) {
       setSavingPromesa(true);
       setPromesaError('');
       try {
@@ -360,8 +445,26 @@ export default function PagoDetalleScreen() {
       } finally {
         setSavingPromesa(false);
       }
+      return;
     }
-  }, [pago, promesaFecha, cargar]);
+
+    const iso = getIsoFromParts(d, m, y);
+    if (!iso) {
+      setPromesaError('Ingresa una fecha válida: Día (01-31), Mes (01-12) y Año (4 dígitos)');
+      return;
+    }
+
+    setSavingPromesa(true);
+    setPromesaError('');
+    try {
+      await api.setPromesaPago(pago.id, iso);
+      cargar();
+    } catch (e: any) {
+      setPromesaError(e.message || 'No se pudo guardar la fecha');
+    } finally {
+      setSavingPromesa(false);
+    }
+  }, [pago, promesaDia, promesaMes, promesaAno, cargar]);
 
   const abrirNuevoDeposito = useCallback(() => {
     setEditingDepositoAbonoId(null);
@@ -552,40 +655,205 @@ export default function PagoDetalleScreen() {
         {/* Promesa de pago */}
         {!pago?.confirmado && pago?.id && (
           <View style={[styles.promesaCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#fff', borderColor: theme.border }]}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Ionicons name="calendar-outline" size={16} color={theme.primary} />
-              <Text style={[styles.sectionLabel, { color: theme.textSecondary, marginBottom: 0 }]}>¿Cuándo dijo que paga?</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Ionicons name="calendar-outline" size={16} color={theme.primary} />
+                <Text style={[styles.sectionLabel, { color: theme.textSecondary, marginBottom: 0 }]}>¿Cuándo dijo que paga?</Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.calendarioBtn, { borderColor: theme.primary + '50', backgroundColor: isDark ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.08)' }]}
+                onPress={abrirSelectorFecha}
+              >
+                <Ionicons name="calendar" size={13} color={theme.primary} />
+                <Text style={{ fontSize: 11, fontWeight: '700', color: theme.primary }}>Abrir calendario</Text>
+              </TouchableOpacity>
             </View>
-            <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
-              <TextInput
-                style={[
-                  styles.modalInput,
-                  {
-                    flex: 1,
-                    marginBottom: 0,
-                    color: theme.text,
-                    borderColor: promesaError ? theme.danger : theme.border,
-                    backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
-                  },
-                ]}
-                value={promesaFecha}
-                onChangeText={handlePromesaChange}
-                placeholder="DD/MM/AAAA"
-                placeholderTextColor={theme.textSecondary}
-                maxLength={10}
-                keyboardType="numeric"
+
+            {/* Input oculto para abrir el selector nativo del navegador en Web */}
+            {Platform.OS === 'web' && (
+              <input
+                ref={webDatePickerRef}
+                type="date"
+                style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 0, height: 0 }}
+                value={getIsoFromParts(promesaDia, promesaMes, promesaAno) || ''}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    const [y, m, d] = e.target.value.split('-');
+                    setPromesaDia(d);
+                    setPromesaMes(m);
+                    setPromesaAno(y);
+                    setPromesaError('');
+                  }
+                }}
               />
+            )}
+
+            {/* Selector nativo móvil */}
+            {showMobileDatePicker && (
+              <DateTimePicker
+                value={
+                  getIsoFromParts(promesaDia, promesaMes, promesaAno)
+                    ? new Date(`${getIsoFromParts(promesaDia, promesaMes, promesaAno)}T12:00:00`)
+                    : new Date()
+                }
+                mode="date"
+                display="default"
+                onChange={(event: DateTimePickerEvent, date?: Date) => {
+                  setShowMobileDatePicker(false);
+                  if (event.type === 'set' && date) {
+                    setPromesaDia(String(date.getDate()).padStart(2, '0'));
+                    setPromesaMes(String(date.getMonth() + 1).padStart(2, '0'));
+                    setPromesaAno(String(date.getFullYear()));
+                    setPromesaError('');
+                  }
+                }}
+              />
+            )}
+
+            {/* Campos separados: Día / Mes / Año */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 }}>
+              {/* Día */}
+              <View style={[styles.dateSegmentBox, { borderColor: promesaError && !promesaDia ? theme.danger : theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)' }]}>
+                <Text style={[styles.dateSegmentLabel, { color: theme.textSecondary }]}>DÍA</Text>
+                <TextInput
+                  ref={diaRef}
+                  style={[styles.dateSegmentInput, { color: theme.text }]}
+                  value={promesaDia}
+                  onChangeText={handleDiaChange}
+                  placeholder="DD"
+                  placeholderTextColor={theme.textSecondary + '70'}
+                  maxLength={10}
+                  keyboardType="numeric"
+                  textAlign="center"
+                  selectTextOnFocus
+                />
+              </View>
+
+              <Text style={{ fontSize: 18, fontWeight: '700', color: theme.textSecondary }}>/</Text>
+
+              {/* Mes */}
+              <View style={[styles.dateSegmentBox, { borderColor: promesaError && !promesaMes ? theme.danger : theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)' }]}>
+                <Text style={[styles.dateSegmentLabel, { color: theme.textSecondary }]}>MES</Text>
+                <TextInput
+                  ref={mesRef}
+                  style={[styles.dateSegmentInput, { color: theme.text }]}
+                  value={promesaMes}
+                  onChangeText={handleMesChange}
+                  onKeyPress={(e) => {
+                    if (e.nativeEvent.key === 'Backspace' && !promesaMes) diaRef.current?.focus();
+                  }}
+                  placeholder="MM"
+                  placeholderTextColor={theme.textSecondary + '70'}
+                  maxLength={10}
+                  keyboardType="numeric"
+                  textAlign="center"
+                  selectTextOnFocus
+                />
+              </View>
+
+              <Text style={{ fontSize: 18, fontWeight: '700', color: theme.textSecondary }}>/</Text>
+
+              {/* Año */}
+              <View style={[styles.dateSegmentBox, { flex: 1.3, borderColor: promesaError && !promesaAno ? theme.danger : theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)' }]}>
+                <Text style={[styles.dateSegmentLabel, { color: theme.textSecondary }]}>AÑO</Text>
+                <TextInput
+                  ref={anoRef}
+                  style={[styles.dateSegmentInput, { color: theme.text }]}
+                  value={promesaAno}
+                  onChangeText={handleAnoChange}
+                  onKeyPress={(e) => {
+                    if (e.nativeEvent.key === 'Backspace' && !promesaAno) mesRef.current?.focus();
+                  }}
+                  placeholder="AAAA"
+                  placeholderTextColor={theme.textSecondary + '70'}
+                  maxLength={4}
+                  keyboardType="numeric"
+                  textAlign="center"
+                  selectTextOnFocus
+                />
+              </View>
+
+              {/* Botón Guardar */}
               <TouchableOpacity
                 style={[styles.promesaSaveBtn, { backgroundColor: theme.primary, opacity: savingPromesa ? 0.7 : 1 }]}
                 onPress={guardarPromesa}
                 disabled={savingPromesa}
               >
-                {savingPromesa ? <ActivityIndicator size="small" color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>Guardar</Text>}
+                {savingPromesa ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Ionicons name="checkmark" size={16} color="#fff" />
+                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>Guardar</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+
+              {/* Botón Limpiar si hay fecha */}
+              {(!!promesaDia || !!promesaMes || !!promesaAno) && (
+                <TouchableOpacity
+                  style={[styles.promesaClearBtn, { borderColor: theme.border }]}
+                  onPress={() => {
+                    setPromesaDia('');
+                    setPromesaMes('');
+                    setPromesaAno('');
+                    setPromesaError('');
+                  }}
+                  accessibilityLabel="Limpiar fecha"
+                >
+                  <Ionicons name="close" size={16} color={theme.textSecondary} />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Accesos rápidos */}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+              <TouchableOpacity
+                style={[styles.quickChip, { borderColor: theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }]}
+                onPress={() => setFechaRapida(0)}
+              >
+                <Text style={[styles.quickChipText, { color: theme.text }]}>Hoy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.quickChip, { borderColor: theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }]}
+                onPress={() => setFechaRapida(1)}
+              >
+                <Text style={[styles.quickChipText, { color: theme.text }]}>Mañana</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.quickChip, { borderColor: theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }]}
+                onPress={() => setFechaRapida(3)}
+              >
+                <Text style={[styles.quickChipText, { color: theme.text }]}>En 3 días</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.quickChip, { borderColor: theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }]}
+                onPress={() => setFechaRapida(7)}
+              >
+                <Text style={[styles.quickChipText, { color: theme.text }]}>En 1 semana</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.quickChip, { borderColor: theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }]}
+                onPress={() => setFechaRapida(15)}
+              >
+                <Text style={[styles.quickChipText, { color: theme.text }]}>En 15 días</Text>
               </TouchableOpacity>
             </View>
+
+            {/* Vista previa en texto claro */}
+            {getPromesaPreview() ? (
+              <View style={[styles.promesaPreviewBadge, { backgroundColor: isDark ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.08)', borderColor: theme.primary + '30' }]}>
+                <Ionicons name="calendar" size={13} color={theme.primary} />
+                <Text style={{ color: theme.primary, fontSize: 12, fontWeight: '700', flex: 1 }}>
+                  {getPromesaPreview()}
+                </Text>
+              </View>
+            ) : null}
+
             {promesaError ? (
               <Text style={{ color: theme.danger, fontSize: 12, marginTop: 4 }}>{promesaError}</Text>
             ) : null}
+
             <Text style={{ color: theme.textSecondary, fontSize: 11, marginTop: 6 }}>
               Te avisamos un día antes y el día que llegue esa fecha.
             </Text>
@@ -1312,7 +1580,60 @@ const styles = StyleSheet.create({
   sectionLabel: { fontSize: 12, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 8 },
 
   promesaCard: { borderRadius: 16, padding: 16, borderWidth: 1 },
-  promesaSaveBtn: { paddingHorizontal: 18, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  promesaSaveBtn: { paddingHorizontal: 14, borderRadius: 10, justifyContent: 'center', alignItems: 'center', height: 46 },
+  promesaClearBtn: { width: 36, height: 46, borderRadius: 10, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
+  calendarioBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  dateSegmentBox: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 46,
+  },
+  dateSegmentLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    marginBottom: 1,
+  },
+  dateSegmentInput: {
+    fontSize: 15,
+    fontWeight: '700',
+    padding: 0,
+    margin: 0,
+    width: '100%',
+  },
+  quickChip: {
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  quickChipText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  promesaPreviewBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginTop: 8,
+  },
 
   // Tarjeta bancaria
   bankCard: {

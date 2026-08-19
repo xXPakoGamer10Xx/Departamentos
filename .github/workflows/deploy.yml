@@ -16,8 +16,9 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_PORT }}
           script: |
+            set -euo pipefail
             cd /home/server/Departamentos
-            git pull origin $(git rev-parse --abbrev-ref HEAD)
+            git pull --ff-only origin $(git rev-parse --abbrev-ref HEAD)
             docker compose build backend
             docker compose up -d backend
             echo "Deploy completado: $(date)"

@@ -1613,6 +1613,7 @@ const styles = StyleSheet.create({
     padding: 0,
     margin: 0,
     width: '100%',
+    textAlign: 'center',
   },
   quickChip: {
     paddingHorizontal: 9,

@@ -378,7 +378,9 @@ export async function getHistorialPagos(req: AuthRequest, res: Response, next: N
     const result = await pool.query(
       `SELECT p.*,
               i.fecha_pago, i.nombre_completo, i.depto_numero,
-              u.nombre_completo AS escaneado_por_nombre
+              u.nombre_completo AS escaneado_por_nombre,
+              COALESCE((SELECT c.valor FROM configuracion c
+                        WHERE c.admin_id = i.admin_id AND c.clave = 'dias_gracia_retraso'), '0') AS dias_gracia
        FROM pagos p
        JOIN inquilinos i ON i.id = p.inquilino_id
        LEFT JOIN usuarios u ON u.id = p.escaneado_por
@@ -393,10 +395,12 @@ export async function getHistorialPagos(req: AuthRequest, res: Response, next: N
         const confirmadoDate = new Date(p.confirmado_en);
         const [anio, mes] = p.periodo.split('-').map(Number);
         const diaPago = parseInt(p.fecha_pago, 10);
-        const fechaLimite = new Date(anio, mes - 1, diaPago, 23, 59, 59);
+        const diasGracia = parseInt(p.dias_gracia, 10) || 0;
+        const fechaLimite = new Date(anio, mes - 1, diaPago + diasGracia, 23, 59, 59);
         a_tiempo = confirmadoDate <= fechaLimite;
       }
-      return { ...p, a_tiempo };
+      const { dias_gracia, ...pago } = p;
+      return { ...pago, a_tiempo };
     });
 
     res.json({ success: true, data: pagos });
@@ -773,10 +777,25 @@ export async function getSaldoInquilino(req: AuthRequest, res: Response, next: N
 export async function setPromesaPago(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     const { pago_id } = req.params;
-    const { fecha_promesa } = req.body;
+    let { fecha_promesa } = req.body;
 
-    if (fecha_promesa !== null && fecha_promesa !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(fecha_promesa)) {
-      throw new AppError('La fecha debe tener el formato AAAA-MM-DD', 400);
+    if (fecha_promesa !== null && fecha_promesa !== undefined && fecha_promesa !== '') {
+      fecha_promesa = String(fecha_promesa).trim();
+
+      // Convertir DD/MM/AAAA o DD-MM-AAAA a AAAA-MM-DD si es necesario
+      const dmyMatch = fecha_promesa.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+      if (dmyMatch) {
+        const d = dmyMatch[1].padStart(2, '0');
+        const m = dmyMatch[2].padStart(2, '0');
+        const y = dmyMatch[3];
+        fecha_promesa = `${y}-${m}-${d}`;
+      }
+
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha_promesa)) {
+        throw new AppError('La fecha debe tener el formato DD/MM/AAAA o AAAA-MM-DD', 400);
+      }
+    } else {
+      fecha_promesa = null;
     }
 
     const pagoRes = await pool.query(
@@ -788,7 +807,7 @@ export async function setPromesaPago(req: AuthRequest, res: Response, next: Next
 
     const updated = await pool.query(
       `UPDATE pagos SET fecha_promesa = $2 WHERE id = $1 RETURNING *`,
-      [pago_id, fecha_promesa || null]
+      [pago_id, fecha_promesa]
     );
 
     res.json({ success: true, data: updated.rows[0] });

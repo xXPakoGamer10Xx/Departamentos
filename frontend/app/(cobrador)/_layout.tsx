@@ -4,6 +4,7 @@ import { Platform, useColorScheme, View, StyleSheet, TouchableOpacity } from 're
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePushNotifications } from '../../hooks/usePushNotifications';
 import { connectSSE, disconnectSSE } from '../../services/sseClient';
+import { resubscribeWebPushIfGranted } from '../../services/webNotifications';
 import api from '../../services/api';
 import { Colors } from '../../constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
@@ -56,6 +57,7 @@ export default function CobradorLayout() {
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
+    void resubscribeWebPushIfGranted();
     const token = api.getToken();
     if (token) connectSSE(token, api.getBaseUrl());
     return () => disconnectSSE();

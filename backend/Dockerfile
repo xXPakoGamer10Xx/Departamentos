@@ -6,6 +6,8 @@ RUN npm ci
 COPY frontend/ ./
 # Configuramos la API URL para que apunte al mismo dominio
 ENV EXPO_PUBLIC_API_URL=/api
+# Llave pública VAPID para Web Push (pública por diseño, va embebida en el bundle del cliente)
+ENV EXPO_PUBLIC_VAPID_PUBLIC_KEY=BHyeq9PZ1co5YK671ZOWXLfUn2VwPvRMPFjZVpWf3EB_WbgXAhTlIKfGuAhbZnkipi2Mgr9yGqOtcaHQcOxMIt8
 RUN npx expo export -p web
 
 # ---- Build Backend ----

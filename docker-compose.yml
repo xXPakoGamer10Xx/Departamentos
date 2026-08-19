@@ -47,6 +47,10 @@ services:
       GOOGLE_AI_API_KEY: ${GOOGLE_AI_API_KEY:-}
       BACKUP_DIR: /app/backups
       BACKUP_CRON: "0 4 * * *"
+      # Web Push (notificaciones del navegador) — par de llaves VAPID.
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:soporte@vertexrent.app}
     ports:
       - "127.0.0.1:3001:3001"
     volumes:

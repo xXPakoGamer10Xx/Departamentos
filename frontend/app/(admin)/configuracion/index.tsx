@@ -11,9 +11,10 @@ import { GlassCard } from '../../../components/ui/GlassCard';
 import RichHtmlEditor from '../../../components/ui/RichHtmlEditor';
 import { DEFAULT_CONTRATO_HTML } from '../../../components/ui/contractVariables';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import api from '../../../services/api';
 import { getItem, setItem, removeItem } from '../../../services/storage';
+import { activateWebPush } from '../../../services/webNotifications';
 
 const TOKEN_KEY = 'auth_token';
 const USER_KEY = 'auth_user';
@@ -45,6 +46,7 @@ export default function ConfiguracionScreen() {
   const initials = displayName.split(' ').slice(0, 2).map((w: string) => w[0]).join('').toUpperCase();
 
   const [notifEnabled, setNotifEnabled] = useState(getNotifPref());
+  const [notifBlocked, setNotifBlocked] = useState(false);
   const [config, setConfig] = useState<Record<string, string>>({});
   const [loadingConfig, setLoadingConfig] = useState(true);
   const [backups, setBackups] = useState<any[]>([]);
@@ -63,6 +65,7 @@ export default function ConfiguracionScreen() {
     arrendador_direccion: { maxLength: 200 },
     admin_invite_code:    { maxLength: 64 },
     app_url:              { maxLength: 200 },
+    dias_gracia_retraso:  { maxLength: 2, numericOnly: true },
   };
 
   // Backups modal
@@ -136,15 +139,23 @@ export default function ConfiguracionScreen() {
       .finally(() => setLoadingConfig(false));
   }, []));
 
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && 'Notification' in window) {
+      setNotifBlocked(Notification.permission === 'denied');
+    }
+  }, []);
+
   const handleNotifToggle = async (val: boolean) => {
-    if (val && Platform.OS === 'web' && 'Notification' in window) {
-      const perm = await Notification.requestPermission();
-      if (perm !== 'granted') {
+    if (val && Platform.OS === 'web') {
+      const activated = await activateWebPush();
+      if (typeof window !== 'undefined' && 'Notification' in window) {
+        setNotifBlocked(Notification.permission === 'denied');
+      }
+      if (!activated) {
         setNotifEnabled(false);
         setNotifPref(false);
         return;
       }
-      new Notification('VertexRent', { body: 'Notificaciones activadas ✓', icon: '/favicon.ico' });
     }
     setNotifEnabled(val);
     setNotifPref(val);
@@ -775,9 +786,13 @@ export default function ConfiguracionScreen() {
             <SettingRow
               icon="notifications"
               title="Notificaciones Push"
-              subtitle={notifEnabled ? 'Activadas' : 'Desactivadas'}
+              subtitle={
+                notifBlocked
+                  ? 'Bloqueadas por el navegador — actívalas en Ajustes del sitio (ícono 🔒 junto a la URL)'
+                  : notifEnabled ? 'Activadas' : 'Desactivadas'
+              }
               hasSwitch
-              switchValue={notifEnabled}
+              switchValue={notifEnabled && !notifBlocked}
               onSwitchChange={handleNotifToggle}
             />
           </GlassCard>
@@ -796,6 +811,15 @@ export default function ConfiguracionScreen() {
               title="Dirección de la Propiedad"
               subtitle={loadingConfig ? 'Cargando…' : (config['arrendador_direccion'] || 'Sin configurar')}
               onPress={() => openEdit('arrendador_direccion', 'Dirección de la Propiedad')}
+            />
+            <SettingRow
+              icon="time"
+              iconColor={theme.warning}
+              title="Días de gracia para retraso"
+              subtitle={loadingConfig
+                ? 'Cargando…'
+                : `${config['dias_gracia_retraso'] || '0'} día${(config['dias_gracia_retraso'] || '0') === '1' ? '' : 's'} después de la fecha de pago`}
+              onPress={() => openEdit('dias_gracia_retraso', 'Días de gracia para retraso')}
             />
             <SettingRow
               icon="document-text"

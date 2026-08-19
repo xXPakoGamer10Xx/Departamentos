@@ -3,7 +3,7 @@ import { Tabs } from 'expo-router';
 import { useColorScheme, View, Platform, StyleSheet, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { usePushNotifications } from '../../hooks/usePushNotifications';
 import { connectSSE, disconnectSSE } from '../../services/sseClient';
-import { requestWebNotificationPermission, showWebNotification } from '../../services/webNotifications';
+import { resubscribeWebPushIfGranted, showWebNotification } from '../../services/webNotifications';
 import { useSSEEvent } from '../../hooks/useSSE';
 import api from '../../services/api';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -61,7 +61,7 @@ export default function AdminLayout() {
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
-    requestWebNotificationPermission();
+    void resubscribeWebPushIfGranted();
     const token = api.getToken();
     if (token) connectSSE(token, api.getBaseUrl());
     return () => disconnectSSE();

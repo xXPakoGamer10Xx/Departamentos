@@ -189,7 +189,10 @@ async function checkPromesaPagoReminders(): Promise<void> {
     for (const pago of pagos) {
       if (!pago.admin_id) continue;
 
-      const targetDate = new Date(`${pago.fecha_promesa}T12:00:00`);
+      const fechaIso = pago.fecha_promesa instanceof Date
+        ? pago.fecha_promesa.toISOString().slice(0, 10)
+        : String(pago.fecha_promesa).slice(0, 10);
+      const targetDate = new Date(`${fechaIso}T12:00:00`);
       targetDate.setHours(0, 0, 0, 0);
 
       const diasRestantes = Math.round((targetDate.getTime() - hoy.getTime()) / 86400000);

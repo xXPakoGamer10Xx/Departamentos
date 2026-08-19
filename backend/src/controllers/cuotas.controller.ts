@@ -3,6 +3,7 @@ import { pool } from '../config/database';
 import { AppError } from '../middleware/error.middleware';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { createAndSendNotification } from '../services/push.service';
+import { recalcularPago } from '../services/saldo.service';
 
 function getCurrentPeriodo(): string {
   const now = new Date();
@@ -69,6 +70,17 @@ export async function createCuota(req: AuthRequest, res: Response, next: NextFun
       [inquilino_id, concepto.trim(), Number(monto), periodo, req.user!.id]
     );
 
+    // Si ya existe un registro de pago (sin confirmar) para este periodo, sumarle
+    // el cargo — si no, el monto guardado queda desactualizado y los abonos
+    // posteriores restan contra un total que no incluye este cargo.
+    const pagoRes = await pool.query(
+      `UPDATE pagos SET monto = monto + $1 WHERE inquilino_id = $2 AND periodo = $3 AND confirmado = false RETURNING id`,
+      [Number(monto), inquilino_id, periodo]
+    );
+    if (pagoRes.rows[0]) {
+      await recalcularPago(pagoRes.rows[0].id);
+    }
+
     // Enviar notificación al inquilino si está vinculado
     if (inquilino.usuario_id) {
       const formattedMonto = Number(monto).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
@@ -93,10 +105,22 @@ export async function deleteCuota(req: AuthRequest, res: Response, next: NextFun
     const result = await pool.query(
       `DELETE FROM cuotas_extra c
        USING inquilinos i
-       WHERE c.id = $1 AND c.inquilino_id = i.id AND i.admin_id = $2 AND c.estado = 'pendiente' RETURNING c.id`,
+       WHERE c.id = $1 AND c.inquilino_id = i.id AND i.admin_id = $2 AND c.estado = 'pendiente'
+       RETURNING c.id, c.inquilino_id, c.periodo, c.monto`,
       [id, req.user!.id]
     );
     if (!result.rows[0]) throw new AppError('Cuota no encontrada o ya fue pagada', 404);
+    const cuota = result.rows[0];
+
+    // Reflejar la baja del cargo en el pago del periodo, si aún no está confirmado.
+    const pagoRes = await pool.query(
+      `UPDATE pagos SET monto = GREATEST(monto - $1, 0) WHERE inquilino_id = $2 AND periodo = $3 AND confirmado = false RETURNING id`,
+      [Number(cuota.monto), cuota.inquilino_id, cuota.periodo]
+    );
+    if (pagoRes.rows[0]) {
+      await recalcularPago(pagoRes.rows[0].id);
+    }
+
     res.json({ success: true });
   } catch (err) {
     next(err);

@@ -182,6 +182,17 @@ CREATE TABLE IF NOT EXISTS abonos_deposito (
 );
 CREATE INDEX IF NOT EXISTS idx_abonos_deposito_inquilino ON abonos_deposito(inquilino_id);
 CREATE INDEX IF NOT EXISTS idx_abonos_deposito_fecha ON abonos_deposito(fecha);
+
+-- Suscripciones Web Push (navegador) — independientes de los tokens de Expo (app nativa)
+CREATE TABLE IF NOT EXISTS web_push_subscriptions (
+  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  usuario_id  UUID NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+  endpoint    TEXT NOT NULL UNIQUE,
+  p256dh      TEXT NOT NULL,
+  auth        TEXT NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_web_push_subscriptions_usuario ON web_push_subscriptions(usuario_id);
 `;
 
 export async function initDB(): Promise<void> {

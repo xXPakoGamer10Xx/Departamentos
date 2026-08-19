@@ -119,11 +119,17 @@ export async function updateConfig(req: AuthRequest, res: Response, next: NextFu
       'banco_nombre', 'banco_clabe', 'banco_titular',
       'admin_invite_code', 'app_url',
       'contrato_docx_template', 'contrato_docx_nombre',
-      'contrato_html_template',
+      'contrato_html_template', 'dias_gracia_retraso',
     ];
 
     for (const [clave, rawValor] of Object.entries(updates)) {
       if (!allowed.includes(clave)) continue;
+      if (clave === 'dias_gracia_retraso') {
+        const dias = parseInt(rawValor, 10);
+        if (!Number.isInteger(dias) || dias < 0 || dias > 90) {
+          throw new AppError('Los días de gracia deben ser un número entre 0 y 90', 400);
+        }
+      }
       // Sanitiza el HTML del contrato: elimina <script>/<style> y atributos on*
       const valor = clave === 'contrato_html_template'
         ? sanitizeHtml(rawValor)

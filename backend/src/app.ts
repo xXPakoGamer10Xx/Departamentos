@@ -30,6 +30,38 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const IS_PROD = process.env.NODE_ENV === 'production';
 
+const SERVICE_WORKER_JS = `
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
+
+self.addEventListener('push', (event) => {
+  let payload = {};
+  try { payload = event.data ? event.data.json() : {}; } catch (e) {}
+  const title = payload.title || 'VertexRent';
+  const body = payload.body || '';
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body,
+      icon: '/favicon.ico',
+      badge: '/favicon.ico',
+      data: payload.data || {},
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if ('focus' in client) return client.focus();
+      }
+      if (self.clients.openWindow) return self.clients.openWindow('/');
+    })
+  );
+});
+`;
+
 // Detrás de nginx/reverse-proxy: necesario para que rate-limit lea la IP real.
 app.set('trust proxy', 1);
 
@@ -62,6 +94,16 @@ app.use('/api', generalLimiter);
 // Health check — mínimo, sin exponer entorno/versión a no autenticados.
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
+});
+
+// Service Worker para Web Push — se sirve desde el backend (mismo origen que la
+// SPA) en vez del build estático del frontend, porque `expo export -p web` no
+// copia un directorio `public/` tal cual. Debe vivir en la raíz del sitio para
+// tener scope sobre toda la app.
+app.get('/sw.js', (_req, res) => {
+  res.type('application/javascript');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.send(SERVICE_WORKER_JS);
 });
 
 // Rutas de la API

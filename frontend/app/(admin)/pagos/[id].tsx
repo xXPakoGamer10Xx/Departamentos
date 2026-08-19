@@ -11,7 +11,9 @@ import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { useEffect, useState, useCallback } from 'react';
 import { useSSEEvent } from '../../../hooks/useSSE';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Print from 'expo-print';
 import api from '../../../services/api';
+import { buildReciboHtml } from '../../../utils/recibo';
 
 export default function PagoDetalleScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -63,6 +65,7 @@ export default function PagoDetalleScreen() {
   // Promesa de pago
   const [promesaFecha, setPromesaFecha] = useState('');
   const [savingPromesa, setSavingPromesa] = useState(false);
+  const [promesaError, setPromesaError] = useState('');
 
   // Depósito (separado de la renta)
   const [depositoSaldo, setDepositoSaldo] = useState<{ deposito_total: number; deposito_pagado: number; deposito_saldo: number } | null>(null);
@@ -75,6 +78,61 @@ export default function PagoDetalleScreen() {
   const [savingDeposito, setSavingDeposito] = useState(false);
   const [depositoError, setDepositoError] = useState('');
   const [showDeposito, setShowDeposito] = useState(false);
+
+  const getFechaLocalISO = () => {
+    const d = new Date();
+    const offsetMs = d.getTimezoneOffset() * 60000;
+    return new Date(d.getTime() - offsetMs).toISOString().slice(0, 10);
+  };
+
+  const formatToDDMMAAAA = (isoDate?: any): string => {
+    if (!isoDate) return '';
+    const str = typeof isoDate === 'string' ? isoDate.trim() : new Date(isoDate).toISOString().slice(0, 10);
+    const match = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      return `${match[3]}/${match[2]}/${match[1]}`;
+    }
+    return str;
+  };
+
+  const parseToYYYYMMDD = (dateStr?: string | null): string | null => {
+    if (!dateStr || !dateStr.trim()) return null;
+    const clean = dateStr.trim();
+
+    // DD/MM/AAAA o DD-MM-AAAA
+    const dmyMatch = clean.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+    if (dmyMatch) {
+      const d = parseInt(dmyMatch[1], 10);
+      const m = parseInt(dmyMatch[2], 10);
+      const y = parseInt(dmyMatch[3], 10);
+      if (m >= 1 && m <= 12 && d >= 1 && d <= 31 && y >= 1900 && y <= 2100) {
+        const dt = new Date(y, m - 1, d);
+        if (dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d) {
+          const dd = String(d).padStart(2, '0');
+          const mm = String(m).padStart(2, '0');
+          return `${y}-${mm}-${dd}`;
+        }
+      }
+      return 'INVALID';
+    }
+
+    // AAAA-MM-DD
+    const ymdMatch = clean.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (ymdMatch) {
+      const y = parseInt(ymdMatch[1], 10);
+      const m = parseInt(ymdMatch[2], 10);
+      const d = parseInt(ymdMatch[3], 10);
+      if (m >= 1 && m <= 12 && d >= 1 && d <= 31 && y >= 1900 && y <= 2100) {
+        const dt = new Date(y, m - 1, d);
+        if (dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d) {
+          return `${ymdMatch[1]}-${ymdMatch[2]}-${ymdMatch[3]}`;
+        }
+      }
+      return 'INVALID';
+    }
+
+    return 'INVALID';
+  };
 
   const cargar = useCallback((showLoader = false) => {
     if (!id) return;
@@ -93,7 +151,8 @@ export default function PagoDetalleScreen() {
       setTotalExtra(estadoRes.total_extra || 0);
       setTotalAbonado((estadoRes as any).total_abonado || 0);
       setSaldoPendiente((estadoRes as any).saldo_pendiente ?? null);
-      setPromesaFecha(estadoRes.data?.fecha_promesa ? String(estadoRes.data.fecha_promesa).slice(0, 10) : '');
+      setPromesaFecha(estadoRes.data?.fecha_promesa ? formatToDDMMAAAA(estadoRes.data.fecha_promesa) : '');
+      setPromesaError('');
       setDepositoSaldo(depSaldoRes.data || null);
       setDepositoAbonos(depAbonosRes.data || []);
       if (estadoRes.data?.id) {
@@ -172,17 +231,16 @@ export default function PagoDetalleScreen() {
     setSavingCuota(true);
     setCuotaError('');
     try {
-      const res = await api.createCuota({ inquilino_id: id!, concepto: cuotaConcepto.trim(), monto });
-      setCuotas(prev => [...prev, res.data]);
-      setTotalExtra(prev => prev + monto);
+      await api.createCuota({ inquilino_id: id!, concepto: cuotaConcepto.trim(), monto });
       setCuotaConcepto(''); setCuotaMonto('');
       setShowCuota(false);
+      cargar();
     } catch (e: any) {
       setCuotaError(e.message || 'No se pudo agregar el cargo');
     } finally {
       setSavingCuota(false);
     }
-  }, [id, cuotaConcepto, cuotaMonto]);
+  }, [id, cuotaConcepto, cuotaMonto, cargar]);
 
   const marcarPagadoManual = useCallback(async () => {
     if (!inquilino) return;
@@ -197,18 +255,17 @@ export default function PagoDetalleScreen() {
     }
   }, [inquilino, cargar]);
 
-  const removeCuota = useCallback(async (cuotaId: string, monto: number) => {
+  const removeCuota = useCallback(async (cuotaId: string) => {
     try {
       await api.deleteCuota(cuotaId);
-      setCuotas(prev => prev.filter(c => c.id !== cuotaId));
-      setTotalExtra(prev => Math.max(0, prev - monto));
+      cargar();
     } catch { /* ignore */ }
-  }, []);
+  }, [cargar]);
 
   const abrirNuevoAbono = useCallback(() => {
     setEditingAbonoId(null);
     setAbonoMonto('');
-    setAbonoFecha(new Date().toISOString().slice(0, 10));
+    setAbonoFecha(getFechaLocalISO());
     setAbonoNota('');
     setAbonoError('');
     setShowAbonoModal(true);
@@ -258,24 +315,58 @@ export default function PagoDetalleScreen() {
     } catch { /* ignore */ }
   }, [cargar]);
 
+  const handlePromesaChange = (text: string) => {
+    setPromesaError('');
+    if (text.length < promesaFecha.length) {
+      setPromesaFecha(text);
+      return;
+    }
+    const digits = text.replace(/\D/g, '').slice(0, 8);
+    if (digits.length <= 2) {
+      setPromesaFecha(digits);
+    } else if (digits.length <= 4) {
+      setPromesaFecha(`${digits.slice(0, 2)}/${digits.slice(2)}`);
+    } else {
+      setPromesaFecha(`${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`);
+    }
+  };
+
   const guardarPromesa = useCallback(async () => {
     if (!pago?.id) return;
-    if (promesaFecha && !/^\d{4}-\d{2}-\d{2}$/.test(promesaFecha)) return;
-    setSavingPromesa(true);
-    try {
-      await api.setPromesaPago(pago.id, promesaFecha || null);
-      cargar();
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setSavingPromesa(false);
+    if (promesaFecha.trim()) {
+      const iso = parseToYYYYMMDD(promesaFecha);
+      if (!iso || iso === 'INVALID') {
+        setPromesaError('Ingresa una fecha válida: DD/MM/AAAA (ej. 25/08/2026)');
+        return;
+      }
+      setSavingPromesa(true);
+      setPromesaError('');
+      try {
+        await api.setPromesaPago(pago.id, iso);
+        cargar();
+      } catch (e: any) {
+        setPromesaError(e.message || 'No se pudo guardar la fecha');
+      } finally {
+        setSavingPromesa(false);
+      }
+    } else {
+      setSavingPromesa(true);
+      setPromesaError('');
+      try {
+        await api.setPromesaPago(pago.id, null);
+        cargar();
+      } catch (e: any) {
+        setPromesaError(e.message || 'No se pudo borrar la fecha');
+      } finally {
+        setSavingPromesa(false);
+      }
     }
   }, [pago, promesaFecha, cargar]);
 
   const abrirNuevoDeposito = useCallback(() => {
     setEditingDepositoAbonoId(null);
     setDepositoMonto('');
-    setDepositoFecha(new Date().toISOString().slice(0, 10));
+    setDepositoFecha(getFechaLocalISO());
     setDepositoNota('');
     setDepositoError('');
     setShowDepositoModal(true);
@@ -333,6 +424,41 @@ export default function PagoDetalleScreen() {
     return now.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' }).toUpperCase();
   };
 
+  const handleImprimirRecibo = useCallback(() => {
+    if (!inquilino) return;
+    const rentaBase = parseFloat(String(inquilino.renta)) || 0;
+    const saldoRenta = pago?.confirmado
+      ? 0
+      : pago
+        ? (saldoPendiente ?? 0)
+        : rentaBase + totalExtra;
+
+    const html = buildReciboHtml({
+      arrendadorNombre: config.arrendador_nombre || 'Administración',
+      nombreInquilino: inquilino.nombre_completo,
+      deptoNumero: inquilino.depto_numero,
+      periodoLabel: getPeriodoLabel(),
+      renta: rentaBase,
+      cargosExtra: cuotas.map((c: any) => ({ concepto: c.concepto, monto: parseFloat(c.monto) || 0 })),
+      abonosRenta: abonos.map((a: any) => ({ monto: parseFloat(a.monto) || 0, fecha: a.fecha })),
+      saldoRentaPendiente: saldoRenta,
+      depositoPendiente: depositoSaldo?.deposito_saldo || 0,
+    });
+
+    if (Platform.OS === 'web') {
+      const blob = new Blob([html], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      const win = window.open(url, '_blank');
+      if (!win) { URL.revokeObjectURL(url); return; }
+      setTimeout(() => {
+        win.print();
+        URL.revokeObjectURL(url);
+      }, 300);
+    } else {
+      Print.printAsync({ html }).catch(() => {});
+    }
+  }, [inquilino, config, cuotas, abonos, pago, saldoPendiente, totalExtra, depositoSaldo]);
+
   if (loading) {
     return (
       <View style={[styles.container, styles.center, { backgroundColor: theme.background }]}>
@@ -371,6 +497,9 @@ export default function PagoDetalleScreen() {
             {inquilino.nombre_completo} · Depto {inquilino.depto_numero}
           </Text>
         </View>
+        <TouchableOpacity onPress={handleImprimirRecibo} style={styles.backBtn} accessibilityLabel="Imprimir recibo">
+          <Ionicons name="print-outline" size={22} color={theme.text} />
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -429,12 +558,22 @@ export default function PagoDetalleScreen() {
             </View>
             <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
               <TextInput
-                style={[styles.modalInput, { flex: 1, marginBottom: 0, color: theme.text, borderColor: theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }]}
+                style={[
+                  styles.modalInput,
+                  {
+                    flex: 1,
+                    marginBottom: 0,
+                    color: theme.text,
+                    borderColor: promesaError ? theme.danger : theme.border,
+                    backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
+                  },
+                ]}
                 value={promesaFecha}
-                onChangeText={setPromesaFecha}
-                placeholder="AAAA-MM-DD"
+                onChangeText={handlePromesaChange}
+                placeholder="DD/MM/AAAA"
                 placeholderTextColor={theme.textSecondary}
                 maxLength={10}
+                keyboardType="numeric"
               />
               <TouchableOpacity
                 style={[styles.promesaSaveBtn, { backgroundColor: theme.primary, opacity: savingPromesa ? 0.7 : 1 }]}
@@ -444,6 +583,9 @@ export default function PagoDetalleScreen() {
                 {savingPromesa ? <ActivityIndicator size="small" color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>Guardar</Text>}
               </TouchableOpacity>
             </View>
+            {promesaError ? (
+              <Text style={{ color: theme.danger, fontSize: 12, marginTop: 4 }}>{promesaError}</Text>
+            ) : null}
             <Text style={{ color: theme.textSecondary, fontSize: 11, marginTop: 6 }}>
               Te avisamos un día antes y el día que llegue esa fecha.
             </Text>
@@ -529,7 +671,7 @@ export default function PagoDetalleScreen() {
                   <Ionicons name="receipt-outline" size={14} color={theme.textSecondary} />
                   <Text style={[styles.cuotaConcepto, { color: theme.text }]} numberOfLines={1}>{c.concepto}</Text>
                   <Text style={[styles.cuotaMonto, { color: '#EF4444' }]}>+{fmtRenta(c.monto)}</Text>
-                  <TouchableOpacity onPress={() => removeCuota(c.id, parseFloat(c.monto))}>
+                  <TouchableOpacity onPress={() => removeCuota(c.id)}>
                     <Ionicons name="trash-outline" size={16} color={theme.danger} />
                   </TouchableOpacity>
                 </View>
@@ -798,7 +940,7 @@ export default function PagoDetalleScreen() {
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
                           <Ionicons name="calendar-outline" size={12} color="#7C3AED" />
                           <Text style={{ color: '#7C3AED', fontSize: 11, fontWeight: '600' }}>
-                            Prometió pagar: {String(p.fecha_promesa).slice(0, 10)}
+                            Prometió pagar: {formatToDDMMAAAA(p.fecha_promesa)}
                           </Text>
                         </View>
                       )}

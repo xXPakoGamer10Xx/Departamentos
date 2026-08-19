@@ -122,6 +122,9 @@ class ApiService {
   registerPushToken = (token: string) =>
     this.request<void>('POST', '/push/token', { token });
 
+  subscribeWebPush = (subscription: { endpoint: string; keys: { p256dh: string; auth: string } }) =>
+    this.request<void>('POST', '/push/web-subscribe', subscription);
+
   // Notificaciones
   getNotificaciones = () =>
     this.request<any[]>('GET', '/notificaciones');

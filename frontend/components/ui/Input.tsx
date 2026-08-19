@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { forwardRef, useState } from 'react';
 import {
   View,
   TextInput,
@@ -20,7 +20,10 @@ export interface InputProps extends TextInputProps {
   isPassword?: boolean;
 }
 
-export function Input({ label, error, icon, isPassword, style, ...props }: InputProps) {
+export const Input = forwardRef<TextInput, InputProps>(function Input(
+  { label, error, icon, isPassword, style, ...props },
+  ref
+) {
   const isDark = useColorScheme() === 'dark';
   const theme = isDark ? Colors.dark : Colors.light;
 
@@ -70,6 +73,7 @@ export function Input({ label, error, icon, isPassword, style, ...props }: Input
           />
         )}
         <TextInput
+          ref={ref}
           style={[
             styles.input,
             { color: theme.text },
@@ -110,7 +114,7 @@ export function Input({ label, error, icon, isPassword, style, ...props }: Input
       )}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {

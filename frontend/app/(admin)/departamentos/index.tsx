@@ -1,13 +1,13 @@
 import {
   StyleSheet, View, Text, FlatList, TouchableOpacity,
   useColorScheme, Platform, ActivityIndicator, Alert,
-  Modal, KeyboardAvoidingView, useWindowDimensions, ScrollView,
+  Modal, KeyboardAvoidingView, useWindowDimensions, ScrollView, TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../../../constants/Colors';
 import { Theme } from '../../../constants/Theme';
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { useRouter } from 'expo-router';
 import api from '../../../services/api';
@@ -37,6 +37,7 @@ export default function DepartamentosScreen() {
   const [confirmDeptoCanDelete, setConfirmDeptoCanDelete] = useState(false);
   const [eliminandoDepto, setEliminandoDepto] = useState(false);
   const [deleteDeptoError, setDeleteDeptoError] = useState('');
+  const nuevoItemInvRef = useRef<TextInput>(null);
 
   const cargar = async (showLoader = true) => {
     try {
@@ -67,6 +68,8 @@ export default function DepartamentosScreen() {
     if (!item) return;
     setNuevoInventario(prev => [...prev, item]);
     setNuevoItemInv('');
+    // Mantener el foco para seguir agregando sin tocar la pantalla
+    setTimeout(() => nuevoItemInvRef.current?.focus(), 50);
   };
 
   const eliminarItemInv = (idx: number) => {
@@ -403,11 +406,13 @@ export default function DepartamentosScreen() {
               <View style={styles.invAddRow}>
                 <View style={{ flex: 1 }}>
                   <Input
+                    ref={nuevoItemInvRef}
                     placeholder="Ej: Refrigerador, cama..."
                     value={nuevoItemInv}
                     onChangeText={setNuevoItemInv}
                     onSubmitEditing={agregarItemInv}
-                    returnKeyType="done"
+                    returnKeyType="next"
+                    blurOnSubmit={false}
                     style={{ marginBottom: 0 }}
                   />
                 </View>

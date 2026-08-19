@@ -45,9 +45,19 @@ async function registerDevice() {
     const { status } = await Notifications.requestPermissionsAsync();
     if (status !== 'granted') return;
 
-    const tokenData = await Notifications.getExpoPushTokenAsync();
+    // En builds standalone (APK/EAS) expo-notifications no siempre puede
+    // deducir el projectId por su cuenta — hay que pasarlo explícito o
+    // getExpoPushTokenAsync() lanza y el registro queda silenciosamente
+    // sin hacerse en cada arranque de la app.
+    const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
+    if (!projectId) {
+      console.warn('[push] No se encontró el projectId de EAS — no se puede obtener el token');
+      return;
+    }
+
+    const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
     await api.registerPushToken(tokenData.data);
-  } catch {
-    // Push no disponible en este entorno — el polling de 20s cubre las actualizaciones
+  } catch (err) {
+    console.warn('[push] No se pudo registrar el dispositivo para notificaciones:', err);
   }
 }

@@ -161,6 +161,16 @@ export default function ConfiguracionScreen() {
     setNotifPref(val);
   };
 
+  const handleUsaQrToggle = async (val: boolean) => {
+    const prev = config['usa_qr_inquilinos'];
+    setConfig(c => ({ ...c, usa_qr_inquilinos: val ? 'true' : 'false' }));
+    try {
+      await api.updateConfig({ usa_qr_inquilinos: val ? 'true' : 'false' });
+    } catch {
+      setConfig(c => ({ ...c, usa_qr_inquilinos: prev }));
+    }
+  };
+
   const openEdit = (clave: string, label: string) => {
     setEditValue(config[clave] || '');
     setEditError('');
@@ -794,6 +804,20 @@ export default function ConfiguracionScreen() {
               hasSwitch
               switchValue={notifEnabled && !notifBlocked}
               onSwitchChange={handleNotifToggle}
+            />
+            <SettingRow
+              icon="qr-code"
+              title="¿Usas la app con tus inquilinos?"
+              subtitle={
+                loadingConfig
+                  ? 'Cargando…'
+                  : (config['usa_qr_inquilinos'] !== 'false'
+                      ? 'Sí — flujo de QR y Escanear activo'
+                      : 'No — solo registro manual de pagos')
+              }
+              hasSwitch
+              switchValue={config['usa_qr_inquilinos'] !== 'false'}
+              onSwitchChange={handleUsaQrToggle}
             />
           </GlassCard>
 

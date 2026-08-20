@@ -54,6 +54,7 @@ export default function PagoDetalleScreen() {
   const [historial, setHistorial] = useState<any[]>([]);
   const [loadingHistorial, setLoadingHistorial] = useState(false);
   const [showHistorial, setShowHistorial] = useState(false);
+  const [showCargosExtra, setShowCargosExtra] = useState(false);
   const [comprobanteModal, setComprobanteModal] = useState<string | null>(null);
 
   // Cuota extra modal
@@ -71,6 +72,7 @@ export default function PagoDetalleScreen() {
   const [promesaError, setPromesaError] = useState('');
   const [promesaGuardada, setPromesaGuardada] = useState(false);
   const [showMobileDatePicker, setShowMobileDatePicker] = useState(false);
+  const [editandoPromesa, setEditandoPromesa] = useState(false);
 
   const diaRef = useRef<any>(null);
   const mesRef = useRef<any>(null);
@@ -188,6 +190,7 @@ export default function PagoDetalleScreen() {
         setPromesaMes('');
         setPromesaAno('');
       }
+      setEditandoPromesa(!estadoRes.data?.fecha_promesa);
       setPromesaError('');
       setDepositoSaldo(depSaldoRes.data || null);
       setDepositoAbonos(depAbonosRes.data || []);
@@ -468,6 +471,7 @@ export default function PagoDetalleScreen() {
       await api.setPromesaPago(pago.id, iso);
       cargar();
       setPromesaGuardada(true);
+      setEditandoPromesa(false);
       setTimeout(() => setPromesaGuardada(false), 2500);
     } catch (e: any) {
       setPromesaError(e.message || 'No se pudo guardar la fecha');
@@ -594,6 +598,8 @@ export default function PagoDetalleScreen() {
   const esTransferencia = inquilino.metodo_pago === 'transferencia' || inquilino.metodo_pago === 'ambos';
   const esEfectivo = inquilino.metodo_pago === 'efectivo' || inquilino.metodo_pago === 'ambos';
   const esAmbos = inquilino.metodo_pago === 'ambos';
+  const usaQrInquilinos = config.usa_qr_inquilinos !== 'false';
+  const hayAbonoParcial = !pago?.confirmado && totalAbonado > 0 && saldoPendiente != null;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -622,30 +628,36 @@ export default function PagoDetalleScreen() {
       >
         {/* Monto */}
         <View style={[styles.montoCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#fff' }]}>
-          <Text style={[styles.montoLabel, { color: theme.textSecondary }]}>{getPeriodoLabel()}</Text>
-          <Text style={[styles.montoAmount, { color: theme.text }]}>
-            {fmtRenta(parseFloat(String(inquilino.renta)) + totalExtra)}
-          </Text>
-          {totalExtra > 0 ? (
-            <Text style={[styles.montoSub, { color: theme.textSecondary }]}>
-              Renta {fmtRenta(inquilino.renta)} + cargos {fmtRenta(totalExtra)} · Depto {inquilino.depto_numero}
-            </Text>
+          {hayAbonoParcial ? (
+            <>
+              <Text style={[styles.montoLabel, { color: theme.textSecondary }]}>FALTA POR PAGAR</Text>
+              <Text style={[styles.montoAmount, { color: '#F59E0B' }]}>
+                {fmtRenta(saldoPendiente!)}
+              </Text>
+              <Text style={[styles.montoSub, { color: theme.textSecondary }]}>
+                Total del mes {fmtRenta(parseFloat(String(inquilino.renta)) + totalExtra)} · Abonado {fmtRenta(totalAbonado)}
+              </Text>
+            </>
           ) : (
-            <Text style={[styles.montoSub, { color: theme.textSecondary }]}>Renta mensual · Depto {inquilino.depto_numero}</Text>
+            <>
+              <Text style={[styles.montoLabel, { color: theme.textSecondary }]}>{getPeriodoLabel()}</Text>
+              <Text style={[styles.montoAmount, { color: theme.text }]}>
+                {fmtRenta(parseFloat(String(inquilino.renta)) + totalExtra)}
+              </Text>
+              {totalExtra > 0 ? (
+                <Text style={[styles.montoSub, { color: theme.textSecondary }]}>
+                  Renta {fmtRenta(inquilino.renta)} + cargos {fmtRenta(totalExtra)} · Depto {inquilino.depto_numero}
+                </Text>
+              ) : (
+                <Text style={[styles.montoSub, { color: theme.textSecondary }]}>Renta mensual · Depto {inquilino.depto_numero}</Text>
+              )}
+            </>
           )}
 
           {pago?.confirmado && (
             <View style={styles.pagadoBadge}>
               <Ionicons name="checkmark-circle" size={16} color="#34C759" />
               <Text style={styles.pagadoText}>Pagado</Text>
-            </View>
-          )}
-          {!pago?.confirmado && totalAbonado > 0 && (
-            <View style={[styles.pagadoBadge, { backgroundColor: '#F59E0B20' }]}>
-              <Ionicons name="time" size={16} color="#F59E0B" />
-              <Text style={[styles.pagadoText, { color: '#F59E0B' }]}>
-                Parcial · Abonado {fmtRenta(totalAbonado)}{saldoPendiente != null ? ` · Falta ${fmtRenta(saldoPendiente)}` : ''}
-              </Text>
             </View>
           )}
           {!pago?.confirmado && pago?.rechazado && (
@@ -665,187 +677,202 @@ export default function PagoDetalleScreen() {
         {/* Promesa de pago */}
         {!pago?.confirmado && pago?.id && (
           <View style={[styles.promesaCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#fff', borderColor: theme.border }]}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Ionicons name="calendar-outline" size={16} color={theme.primary} />
-                <Text style={[styles.sectionLabel, { color: theme.textSecondary, marginBottom: 0 }]}>¿Cuándo dijo que paga?</Text>
-              </View>
+            {!editandoPromesa ? (
               <TouchableOpacity
-                style={[styles.calendarioBtn, { borderColor: theme.primary + '50', backgroundColor: isDark ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.08)' }]}
-                onPress={abrirSelectorFecha}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
+                onPress={() => setEditandoPromesa(true)}
               >
-                <Ionicons name="calendar" size={13} color={theme.primary} />
-                <Text style={{ fontSize: 11, fontWeight: '700', color: theme.primary }}>Abrir calendario</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Input oculto para abrir el selector nativo del navegador en Web */}
-            {Platform.OS === 'web' && (
-              <input
-                ref={webDatePickerRef}
-                type="date"
-                style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 0, height: 0 }}
-                value={getIsoFromParts(promesaDia, promesaMes, promesaAno) || ''}
-                onChange={(e) => {
-                  if (e.target.value) {
-                    const [y, m, d] = e.target.value.split('-');
-                    setPromesaDia(d);
-                    setPromesaMes(m);
-                    setPromesaAno(y);
-                    setPromesaError('');
-                  }
-                }}
-              />
-            )}
-
-            {/* Selector nativo móvil */}
-            {showMobileDatePicker && (
-              <DateTimePicker
-                value={
-                  getIsoFromParts(promesaDia, promesaMes, promesaAno)
-                    ? new Date(`${getIsoFromParts(promesaDia, promesaMes, promesaAno)}T12:00:00`)
-                    : new Date()
-                }
-                mode="date"
-                display="default"
-                onChange={(event: DateTimePickerEvent, date?: Date) => {
-                  setShowMobileDatePicker(false);
-                  if (event.type === 'set' && date) {
-                    setPromesaDia(String(date.getDate()).padStart(2, '0'));
-                    setPromesaMes(String(date.getMonth() + 1).padStart(2, '0'));
-                    setPromesaAno(String(date.getFullYear()));
-                    setPromesaError('');
-                  }
-                }}
-              />
-            )}
-
-            {/* Campos separados: Día / Mes (el año se infiere solo) */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 }}>
-              {/* Día */}
-              <View style={[styles.dateSegmentBox, { flex: 0.7, borderColor: promesaError && !promesaDia ? theme.danger : theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)' }]}>
-                <Text style={[styles.dateSegmentLabel, { color: theme.textSecondary }]}>DÍA</Text>
-                <TextInput
-                  ref={diaRef}
-                  style={[styles.dateSegmentInput, { color: theme.text }]}
-                  value={promesaDia}
-                  onChangeText={handleDiaChange}
-                  placeholder="DD"
-                  placeholderTextColor={theme.textSecondary + '70'}
-                  maxLength={10}
-                  keyboardType="numeric"
-                  textAlign="center"
-                  selectTextOnFocus
-                />
-              </View>
-
-              <Text style={{ fontSize: 18, fontWeight: '700', color: theme.textSecondary }}>/</Text>
-
-              {/* Mes */}
-              <View style={[styles.dateSegmentBox, { flex: 0.7, borderColor: promesaError && !promesaMes ? theme.danger : theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)' }]}>
-                <Text style={[styles.dateSegmentLabel, { color: theme.textSecondary }]}>MES</Text>
-                <TextInput
-                  ref={mesRef}
-                  style={[styles.dateSegmentInput, { color: theme.text }]}
-                  value={promesaMes}
-                  onChangeText={handleMesChange}
-                  onKeyPress={(e) => {
-                    if (e.nativeEvent.key === 'Backspace' && !promesaMes) diaRef.current?.focus();
-                  }}
-                  placeholder="MM"
-                  placeholderTextColor={theme.textSecondary + '70'}
-                  maxLength={10}
-                  keyboardType="numeric"
-                  textAlign="center"
-                  selectTextOnFocus
-                />
-              </View>
-
-              {/* Botón Guardar */}
-              <TouchableOpacity
-                style={[styles.promesaSaveBtn, { backgroundColor: promesaGuardada ? theme.success ?? '#22C55E' : theme.primary, opacity: savingPromesa ? 0.7 : 1, flex: 1 }]}
-                onPress={guardarPromesa}
-                disabled={savingPromesa}
-              >
-                {savingPromesa ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                    <Ionicons name={promesaGuardada ? 'checkmark-done' : 'checkmark'} size={16} color="#fff" />
-                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>{promesaGuardada ? 'Guardado' : 'Guardar'}</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-
-              {/* Botón Limpiar si hay fecha */}
-              {(!!promesaDia || !!promesaMes || !!promesaAno) && (
-                <TouchableOpacity
-                  style={[styles.promesaClearBtn, { borderColor: theme.border }]}
-                  onPress={() => {
-                    setPromesaDia('');
-                    setPromesaMes('');
-                    setPromesaAno('');
-                    setPromesaError('');
-                    setPromesaGuardada(false);
-                  }}
-                  accessibilityLabel="Limpiar fecha"
-                >
-                  <Ionicons name="close" size={16} color={theme.textSecondary} />
-                </TouchableOpacity>
-              )}
-            </View>
-
-            {/* Accesos rápidos */}
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
-              <TouchableOpacity
-                style={[styles.quickChip, { borderColor: theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }]}
-                onPress={() => setFechaRapida(0)}
-              >
-                <Text style={[styles.quickChipText, { color: theme.text }]}>Hoy</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.quickChip, { borderColor: theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }]}
-                onPress={() => setFechaRapida(1)}
-              >
-                <Text style={[styles.quickChipText, { color: theme.text }]}>Mañana</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.quickChip, { borderColor: theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }]}
-                onPress={() => setFechaRapida(3)}
-              >
-                <Text style={[styles.quickChipText, { color: theme.text }]}>En 3 días</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.quickChip, { borderColor: theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }]}
-                onPress={() => setFechaRapida(7)}
-              >
-                <Text style={[styles.quickChipText, { color: theme.text }]}>En 1 semana</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.quickChip, { borderColor: theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }]}
-                onPress={() => setFechaRapida(15)}
-              >
-                <Text style={[styles.quickChipText, { color: theme.text }]}>En 15 días</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Vista previa en texto claro */}
-            {getPromesaPreview() ? (
-              <View style={[styles.promesaPreviewBadge, { backgroundColor: isDark ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.08)', borderColor: theme.primary + '30' }]}>
-                <Ionicons name="calendar" size={13} color={theme.primary} />
-                <Text style={{ color: theme.primary, fontSize: 12, fontWeight: '700', flex: 1 }}>
-                  {getPromesaPreview()}
+                <Ionicons name="calendar" size={16} color={theme.primary} />
+                <Text style={{ flex: 1, color: theme.text, fontSize: 13, fontWeight: '600' }} numberOfLines={1}>
+                  Prometió pagar: {getPromesaPreview()}
                 </Text>
-              </View>
-            ) : null}
+                <Ionicons name="create-outline" size={16} color={theme.textSecondary} />
+              </TouchableOpacity>
+            ) : (
+              <>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Ionicons name="calendar-outline" size={16} color={theme.primary} />
+                    <Text style={[styles.sectionLabel, { color: theme.textSecondary, marginBottom: 0 }]}>¿Cuándo dijo que paga?</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.calendarioBtn, { borderColor: theme.primary + '50', backgroundColor: isDark ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.08)' }]}
+                    onPress={abrirSelectorFecha}
+                  >
+                    <Ionicons name="calendar" size={13} color={theme.primary} />
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: theme.primary }}>Abrir calendario</Text>
+                  </TouchableOpacity>
+                </View>
 
-            {promesaError ? (
-              <Text style={{ color: theme.danger, fontSize: 12, marginTop: 4 }}>{promesaError}</Text>
-            ) : null}
+                {/* Input oculto para abrir el selector nativo del navegador en Web */}
+                {Platform.OS === 'web' && (
+                  <input
+                    ref={webDatePickerRef}
+                    type="date"
+                    style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 0, height: 0 }}
+                    value={getIsoFromParts(promesaDia, promesaMes, promesaAno) || ''}
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        const [y, m, d] = e.target.value.split('-');
+                        setPromesaDia(d);
+                        setPromesaMes(m);
+                        setPromesaAno(y);
+                        setPromesaError('');
+                      }
+                    }}
+                  />
+                )}
 
-            <Text style={{ color: theme.textSecondary, fontSize: 11, marginTop: 6 }}>
-              Te avisamos un día antes y el día que llegue esa fecha.
-            </Text>
+                {/* Selector nativo móvil */}
+                {showMobileDatePicker && (
+                  <DateTimePicker
+                    value={
+                      getIsoFromParts(promesaDia, promesaMes, promesaAno)
+                        ? new Date(`${getIsoFromParts(promesaDia, promesaMes, promesaAno)}T12:00:00`)
+                        : new Date()
+                    }
+                    mode="date"
+                    display="default"
+                    onChange={(event: DateTimePickerEvent, date?: Date) => {
+                      setShowMobileDatePicker(false);
+                      if (event.type === 'set' && date) {
+                        setPromesaDia(String(date.getDate()).padStart(2, '0'));
+                        setPromesaMes(String(date.getMonth() + 1).padStart(2, '0'));
+                        setPromesaAno(String(date.getFullYear()));
+                        setPromesaError('');
+                      }
+                    }}
+                  />
+                )}
+
+                {/* Campos separados: Día / Mes (el año se infiere solo) */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 }}>
+                  {/* Día */}
+                  <View style={[styles.dateSegmentBox, { flex: 0.7, borderColor: promesaError && !promesaDia ? theme.danger : theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)' }]}>
+                    <Text style={[styles.dateSegmentLabel, { color: theme.textSecondary }]}>DÍA</Text>
+                    <TextInput
+                      ref={diaRef}
+                      style={[styles.dateSegmentInput, { color: theme.text }]}
+                      value={promesaDia}
+                      onChangeText={handleDiaChange}
+                      placeholder="DD"
+                      placeholderTextColor={theme.textSecondary + '70'}
+                      maxLength={10}
+                      keyboardType="numeric"
+                      textAlign="center"
+                      selectTextOnFocus
+                    />
+                  </View>
+
+                  <Text style={{ fontSize: 18, fontWeight: '700', color: theme.textSecondary }}>/</Text>
+
+                  {/* Mes */}
+                  <View style={[styles.dateSegmentBox, { flex: 0.7, borderColor: promesaError && !promesaMes ? theme.danger : theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)' }]}>
+                    <Text style={[styles.dateSegmentLabel, { color: theme.textSecondary }]}>MES</Text>
+                    <TextInput
+                      ref={mesRef}
+                      style={[styles.dateSegmentInput, { color: theme.text }]}
+                      value={promesaMes}
+                      onChangeText={handleMesChange}
+                      onKeyPress={(e) => {
+                        if (e.nativeEvent.key === 'Backspace' && !promesaMes) diaRef.current?.focus();
+                      }}
+                      placeholder="MM"
+                      placeholderTextColor={theme.textSecondary + '70'}
+                      maxLength={10}
+                      keyboardType="numeric"
+                      textAlign="center"
+                      selectTextOnFocus
+                    />
+                  </View>
+
+                  {/* Botón Guardar */}
+                  <TouchableOpacity
+                    style={[styles.promesaSaveBtn, { backgroundColor: promesaGuardada ? theme.success ?? '#22C55E' : theme.primary, opacity: savingPromesa ? 0.7 : 1, flex: 1 }]}
+                    onPress={guardarPromesa}
+                    disabled={savingPromesa}
+                  >
+                    {savingPromesa ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <Ionicons name={promesaGuardada ? 'checkmark-done' : 'checkmark'} size={16} color="#fff" />
+                        <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>{promesaGuardada ? 'Guardado' : 'Guardar'}</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+
+                  {/* Botón Limpiar si hay fecha */}
+                  {(!!promesaDia || !!promesaMes || !!promesaAno) && (
+                    <TouchableOpacity
+                      style={[styles.promesaClearBtn, { borderColor: theme.border }]}
+                      onPress={() => {
+                        setPromesaDia('');
+                        setPromesaMes('');
+                        setPromesaAno('');
+                        setPromesaError('');
+                        setPromesaGuardada(false);
+                      }}
+                      accessibilityLabel="Limpiar fecha"
+                    >
+                      <Ionicons name="close" size={16} color={theme.textSecondary} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {/* Accesos rápidos */}
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+                  <TouchableOpacity
+                    style={[styles.quickChip, { borderColor: theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }]}
+                    onPress={() => setFechaRapida(0)}
+                  >
+                    <Text style={[styles.quickChipText, { color: theme.text }]}>Hoy</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.quickChip, { borderColor: theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }]}
+                    onPress={() => setFechaRapida(1)}
+                  >
+                    <Text style={[styles.quickChipText, { color: theme.text }]}>Mañana</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.quickChip, { borderColor: theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }]}
+                    onPress={() => setFechaRapida(3)}
+                  >
+                    <Text style={[styles.quickChipText, { color: theme.text }]}>En 3 días</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.quickChip, { borderColor: theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }]}
+                    onPress={() => setFechaRapida(7)}
+                  >
+                    <Text style={[styles.quickChipText, { color: theme.text }]}>En 1 semana</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.quickChip, { borderColor: theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }]}
+                    onPress={() => setFechaRapida(15)}
+                  >
+                    <Text style={[styles.quickChipText, { color: theme.text }]}>En 15 días</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Vista previa en texto claro */}
+                {getPromesaPreview() ? (
+                  <View style={[styles.promesaPreviewBadge, { backgroundColor: isDark ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.08)', borderColor: theme.primary + '30' }]}>
+                    <Ionicons name="calendar" size={13} color={theme.primary} />
+                    <Text style={{ color: theme.primary, fontSize: 12, fontWeight: '700', flex: 1 }}>
+                      {getPromesaPreview()}
+                    </Text>
+                  </View>
+                ) : null}
+
+                {promesaError ? (
+                  <Text style={{ color: theme.danger, fontSize: 12, marginTop: 4 }}>{promesaError}</Text>
+                ) : null}
+
+                <Text style={{ color: theme.textSecondary, fontSize: 11, marginTop: 6 }}>
+                  Te avisamos un día antes y el día que llegue esa fecha.
+                </Text>
+              </>
+            )}
           </View>
         )}
 
@@ -872,68 +899,6 @@ export default function PagoDetalleScreen() {
                 {marcandoPagado ? 'Marcando…' : 'Marcar como pagado'}
               </Text>
             </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Historial de abonos de este periodo */}
-        {abonos.length > 0 && (
-          <View>
-            <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Historial de abonos</Text>
-            {abonos.map(a => (
-              <View key={a.id} style={[styles.cuotaRow, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)', borderColor: theme.border }]}>
-                <Ionicons name="cash-outline" size={14} color="#34C759" />
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.cuotaConcepto, { color: theme.text }]}>
-                    {fmtRenta(a.monto)} · {new Date(a.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
-                  </Text>
-                  {(a.nota || a.registrado_por_nombre) && (
-                    <Text style={{ color: theme.textSecondary, fontSize: 11, marginTop: 2 }} numberOfLines={1}>
-                      {[a.nota, a.registrado_por_nombre ? `por ${a.registrado_por_nombre}` : null].filter(Boolean).join(' · ')}
-                    </Text>
-                  )}
-                </View>
-                {!pago?.confirmado && (
-                  <>
-                    <TouchableOpacity onPress={() => abrirEditarAbono(a)}>
-                      <Ionicons name="create-outline" size={16} color={theme.textSecondary} />
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => eliminarAbono(a.id)}>
-                      <Ionicons name="trash-outline" size={16} color={theme.danger} />
-                    </TouchableOpacity>
-                  </>
-                )}
-              </View>
-            ))}
-          </View>
-        )}
-
-        {/* Cargos extra */}
-        {!pago?.confirmado && (
-          <View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Cargos extra</Text>
-              <TouchableOpacity
-                style={[styles.addCuotaBtn, { backgroundColor: theme.primary }]}
-                onPress={() => { setCuotaConcepto(''); setCuotaMonto(''); setCuotaError(''); setShowCuota(true); }}
-              >
-                <Ionicons name="add" size={14} color="#fff" />
-                <Text style={styles.addCuotaBtnText}>Agregar</Text>
-              </TouchableOpacity>
-            </View>
-            {cuotas.length === 0 ? (
-              <Text style={[styles.noCuotas, { color: theme.textSecondary }]}>Sin cargos adicionales este mes</Text>
-            ) : (
-              cuotas.map(c => (
-                <View key={c.id} style={[styles.cuotaRow, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)', borderColor: theme.border }]}>
-                  <Ionicons name="receipt-outline" size={14} color={theme.textSecondary} />
-                  <Text style={[styles.cuotaConcepto, { color: theme.text }]} numberOfLines={1}>{c.concepto}</Text>
-                  <Text style={[styles.cuotaMonto, { color: '#EF4444' }]}>+{fmtRenta(c.monto)}</Text>
-                  <TouchableOpacity onPress={() => removeCuota(c.id)}>
-                    <Ionicons name="trash-outline" size={16} color={theme.danger} />
-                  </TouchableOpacity>
-                </View>
-              ))
-            )}
           </View>
         )}
 
@@ -1069,22 +1034,26 @@ export default function PagoDetalleScreen() {
                 </View>
               ) : (
                 <>
-                  <Text style={[styles.qrHint, { color: theme.textSecondary }]}>
-                    {pago?.qr_token
-                      ? 'El inquilino ya generó su QR. Escanéalo desde la pestaña Escanear para aceptar el pago en efectivo.'
-                      : 'El inquilino genera su QR desde su app. Cuando lo tenga, escanéalo desde la pestaña Escanear para aceptar el pago en efectivo.'}
-                  </Text>
+                  {usaQrInquilinos && (
+                    <>
+                      <Text style={[styles.qrHint, { color: theme.textSecondary }]}>
+                        {pago?.qr_token
+                          ? 'El inquilino ya generó su QR. Escanéalo desde la pestaña Escanear para aceptar el pago en efectivo.'
+                          : 'El inquilino genera su QR desde su app. Cuando lo tenga, escanéalo desde la pestaña Escanear para aceptar el pago en efectivo.'}
+                      </Text>
+
+                      <TouchableOpacity
+                        style={[styles.confirmBtn, { backgroundColor: theme.primary }]}
+                        onPress={() => router.push('/(admin)/scan' as any)}
+                      >
+                        <Ionicons name="qr-code-outline" size={20} color="#fff" />
+                        <Text style={styles.confirmBtnText}>Ir a Escanear</Text>
+                      </TouchableOpacity>
+                    </>
+                  )}
 
                   <TouchableOpacity
-                    style={[styles.confirmBtn, { backgroundColor: theme.primary }]}
-                    onPress={() => router.push('/(admin)/scan' as any)}
-                  >
-                    <Ionicons name="qr-code-outline" size={20} color="#fff" />
-                    <Text style={styles.confirmBtnText}>Ir a Escanear</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.confirmBtn, { backgroundColor: isDark ? 'rgba(52,199,89,0.3)' : '#34C75960', opacity: confirmando ? 0.7 : 1, marginTop: 10 }]}
+                    style={[styles.confirmBtn, { backgroundColor: isDark ? 'rgba(52,199,89,0.3)' : '#34C75960', opacity: confirmando ? 0.7 : 1, marginTop: usaQrInquilinos ? 10 : 0 }]}
                     onPress={confirmarDirecto}
                     disabled={confirmando}
                   >
@@ -1093,11 +1062,11 @@ export default function PagoDetalleScreen() {
                       : <Ionicons name="checkmark-circle-outline" size={20} color={isDark ? '#34C759' : '#15803D'} />
                     }
                     <Text style={[styles.confirmBtnText, { color: isDark ? '#34C759' : '#15803D' }]}>
-                      {confirmando ? 'Confirmando…' : 'Marcar como pagado (Manual)'}
+                      {confirmando ? 'Confirmando…' : usaQrInquilinos ? 'Marcar como pagado (Manual)' : 'Marcar como pagado'}
                     </Text>
                   </TouchableOpacity>
 
-                  {!pago?.qr_token && (
+                  {usaQrInquilinos && !pago?.qr_token && (
                     <View style={[styles.qrPendiente, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)' }]}>
                       <Ionicons name="time-outline" size={32} color={theme.textSecondary} />
                       <Text style={[styles.qrPendienteText, { color: theme.textSecondary }]}>
@@ -1110,6 +1079,86 @@ export default function PagoDetalleScreen() {
             </View>
           </View>
         )}
+
+        {/* Historial de abonos de este periodo */}
+        {abonos.length > 0 && (
+          <View>
+            <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Historial de abonos</Text>
+            {abonos.map(a => (
+              <View key={a.id} style={[styles.cuotaRow, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)', borderColor: theme.border }]}>
+                <Ionicons name="cash-outline" size={14} color="#34C759" />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.cuotaConcepto, { color: theme.text }]}>
+                    {fmtRenta(a.monto)} · {new Date(a.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  </Text>
+                  {(a.nota || a.registrado_por_nombre) && (
+                    <Text style={{ color: theme.textSecondary, fontSize: 11, marginTop: 2 }} numberOfLines={1}>
+                      {[a.nota, a.registrado_por_nombre ? `por ${a.registrado_por_nombre}` : null].filter(Boolean).join(' · ')}
+                    </Text>
+                  )}
+                </View>
+                {!pago?.confirmado && (
+                  <>
+                    <TouchableOpacity onPress={() => abrirEditarAbono(a)}>
+                      <Ionicons name="create-outline" size={16} color={theme.textSecondary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => eliminarAbono(a.id)}>
+                      <Ionicons name="trash-outline" size={16} color={theme.danger} />
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Cargos extra */}
+        {!pago?.confirmado && (
+          <View>
+            <TouchableOpacity
+              style={[styles.historialToggle, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#fff', borderColor: theme.border }]}
+              onPress={() => setShowCargosExtra(v => !v)}
+            >
+              <Ionicons name="receipt-outline" size={18} color={theme.primary} />
+              <Text style={[styles.historialToggleText, { color: theme.primary }]}>Cargos extra</Text>
+              {cuotas.length > 0 && (
+                <View style={[styles.pagadoBadge, { backgroundColor: '#EF444420', marginLeft: 'auto', marginRight: 8 }]}>
+                  <Text style={[styles.pagadoText, { color: '#EF4444' }]}>
+                    {cuotas.length} · +{fmtRenta(totalExtra)}
+                  </Text>
+                </View>
+              )}
+              <Ionicons name={showCargosExtra ? 'chevron-up' : 'chevron-down'} size={16} color={theme.primary} style={cuotas.length > 0 ? undefined : { marginLeft: 'auto' }} />
+            </TouchableOpacity>
+
+            {showCargosExtra && (
+              <View style={{ marginTop: 12 }}>
+                <TouchableOpacity
+                  style={[styles.addCuotaBtn, { backgroundColor: theme.primary, alignSelf: 'flex-start', marginBottom: 8 }]}
+                  onPress={() => { setCuotaConcepto(''); setCuotaMonto(''); setCuotaError(''); setShowCuota(true); }}
+                >
+                  <Ionicons name="add" size={14} color="#fff" />
+                  <Text style={styles.addCuotaBtnText}>Agregar</Text>
+                </TouchableOpacity>
+                {cuotas.length === 0 ? (
+                  <Text style={[styles.noCuotas, { color: theme.textSecondary }]}>Sin cargos adicionales este mes</Text>
+                ) : (
+                  cuotas.map(c => (
+                    <View key={c.id} style={[styles.cuotaRow, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)', borderColor: theme.border }]}>
+                      <Ionicons name="receipt-outline" size={14} color={theme.textSecondary} />
+                      <Text style={[styles.cuotaConcepto, { color: theme.text }]} numberOfLines={1}>{c.concepto}</Text>
+                      <Text style={[styles.cuotaMonto, { color: '#EF4444' }]}>+{fmtRenta(c.monto)}</Text>
+                      <TouchableOpacity onPress={() => removeCuota(c.id)}>
+                        <Ionicons name="trash-outline" size={16} color={theme.danger} />
+                      </TouchableOpacity>
+                    </View>
+                  ))
+                )}
+              </View>
+            )}
+          </View>
+        )}
+
         {/* ── Historial de pagos ── */}
         <View>
           <TouchableOpacity
@@ -1224,23 +1273,44 @@ export default function PagoDetalleScreen() {
               onPress={() => setShowDeposito(v => !v)}
             >
               <Ionicons name="lock-closed-outline" size={18} color={theme.primary} />
-              <Text style={[styles.historialToggleText, { color: theme.primary }]}>
-                Depósito — {depositoSaldo.deposito_saldo > 0
-                  ? `Debe ${fmtRenta(depositoSaldo.deposito_saldo)}`
-                  : 'Pagado completo'}
-              </Text>
-              <Ionicons name={showDeposito ? 'chevron-up' : 'chevron-down'} size={16} color={theme.primary} style={{ marginLeft: 'auto' }} />
+              <Text style={[styles.historialToggleText, { color: theme.primary }]}>Depósito</Text>
+              <View style={[styles.pagadoBadge, {
+                backgroundColor: depositoSaldo.deposito_saldo > 0 ? '#F59E0B20' : '#34C75920',
+                marginLeft: 'auto', marginRight: 8,
+              }]}>
+                <Ionicons
+                  name={depositoSaldo.deposito_saldo > 0 ? 'time' : 'checkmark-circle'}
+                  size={14}
+                  color={depositoSaldo.deposito_saldo > 0 ? '#F59E0B' : '#34C759'}
+                />
+                <Text style={[styles.pagadoText, { color: depositoSaldo.deposito_saldo > 0 ? '#F59E0B' : '#34C759' }]}>
+                  {depositoSaldo.deposito_saldo > 0 ? `Falta ${fmtRenta(depositoSaldo.deposito_saldo)}` : 'Pagado completo'}
+                </Text>
+              </View>
+              <Ionicons name={showDeposito ? 'chevron-up' : 'chevron-down'} size={16} color={theme.primary} />
             </TouchableOpacity>
 
             {showDeposito && (
               <View style={{ marginTop: 12, gap: 10 }}>
                 <View style={[styles.montoCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#fff', paddingVertical: 20 }]}>
-                  <Text style={[styles.montoLabel, { color: theme.textSecondary }]}>DEPÓSITO TOTAL</Text>
-                  <Text style={[styles.montoAmount, { color: theme.text, fontSize: 30 }]}>{fmtRenta(depositoSaldo.deposito_total)}</Text>
-                  <Text style={[styles.montoSub, { color: theme.textSecondary }]}>
-                    Pagado {fmtRenta(depositoSaldo.deposito_pagado)}
-                    {depositoSaldo.deposito_saldo > 0 ? ` · Falta ${fmtRenta(depositoSaldo.deposito_saldo)}` : ''}
-                  </Text>
+                  {depositoSaldo.deposito_saldo > 0 ? (
+                    <>
+                      <Text style={[styles.montoLabel, { color: theme.textSecondary }]}>FALTA POR PAGAR (DEPÓSITO)</Text>
+                      <Text style={[styles.montoAmount, { color: '#F59E0B', fontSize: 30 }]}>{fmtRenta(depositoSaldo.deposito_saldo)}</Text>
+                      <Text style={[styles.montoSub, { color: theme.textSecondary }]}>
+                        Depósito total {fmtRenta(depositoSaldo.deposito_total)} · Pagado {fmtRenta(depositoSaldo.deposito_pagado)}
+                      </Text>
+                    </>
+                  ) : (
+                    <>
+                      <Text style={[styles.montoLabel, { color: theme.textSecondary }]}>DEPÓSITO</Text>
+                      <Text style={[styles.montoAmount, { color: theme.text, fontSize: 30 }]}>{fmtRenta(depositoSaldo.deposito_total)}</Text>
+                      <View style={styles.pagadoBadge}>
+                        <Ionicons name="checkmark-circle" size={16} color="#34C759" />
+                        <Text style={styles.pagadoText}>Pagado</Text>
+                      </View>
+                    </>
+                  )}
                 </View>
 
                 {depositoSaldo.deposito_saldo > 0 && (

@@ -120,6 +120,7 @@ export async function updateConfig(req: AuthRequest, res: Response, next: NextFu
       'admin_invite_code', 'app_url',
       'contrato_docx_template', 'contrato_docx_nombre',
       'contrato_html_template', 'dias_gracia_retraso',
+      'usa_qr_inquilinos',
     ];
 
     for (const [clave, rawValor] of Object.entries(updates)) {

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Tabs } from 'expo-router';
 import { useColorScheme, View, Platform, StyleSheet, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { usePushNotifications } from '../../hooks/usePushNotifications';
@@ -59,12 +59,20 @@ function DockButton({
 export default function AdminLayout() {
   usePushNotifications();
 
+  const [usaQrInquilinos, setUsaQrInquilinos] = useState(true);
+
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     void resubscribeWebPushIfGranted();
     const token = api.getToken();
     if (token) connectSSE(token, api.getBaseUrl());
     return () => disconnectSSE();
+  }, []);
+
+  useEffect(() => {
+    api.getConfig()
+      .then(r => setUsaQrInquilinos((r.data || {})['usa_qr_inquilinos'] !== 'false'))
+      .catch(() => {});
   }, []);
 
   useSSEEvent('comprobante_subido', (data) => {
@@ -113,6 +121,7 @@ export default function AdminLayout() {
                            route.name === d.name
                     );
                     if (!dockItem) return null;
+                    if (dockItem.name === 'scan' && !usaQrInquilinos) return null;
 
                     const isFocused = props.state.index === index;
                     const iconName = isFocused ? dockItem.iconFilled : dockItem.icon;

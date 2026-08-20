@@ -4,6 +4,7 @@ import { AppError } from '../middleware/error.middleware';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { createAndSendNotification } from '../services/push.service';
 import { recalcularPago } from '../services/saldo.service';
+import { getOrCrearPago } from './pagos.controller';
 
 function getCurrentPeriodo(): string {
   const now = new Date();
@@ -122,6 +123,46 @@ export async function deleteCuota(req: AuthRequest, res: Response, next: NextFun
     }
 
     res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// PUT /api/cuotas/:id/pagar — admin marca un cargo extra individual como pagado.
+// Registra un abono por el monto del cargo (para que el saldo del periodo
+// refleje el dinero recibido) y deja el cargo como historial, no lo borra.
+export async function pagarCuota(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { id } = req.params;
+
+    const cuotaRes = await pool.query(
+      `SELECT c.* FROM cuotas_extra c
+       JOIN inquilinos i ON i.id = c.inquilino_id
+       WHERE c.id = $1 AND i.admin_id = $2 AND c.estado = 'pendiente'`,
+      [id, req.user!.id]
+    );
+    if (!cuotaRes.rows[0]) throw new AppError('Cargo no encontrado o ya fue pagado', 404);
+    const cuota = cuotaRes.rows[0];
+
+    const inqRes = await pool.query(`SELECT * FROM inquilinos WHERE id = $1`, [cuota.inquilino_id]);
+    const inquilino = inqRes.rows[0];
+
+    const periodo = getCurrentPeriodo();
+    const pago = await getOrCrearPago(inquilino, periodo);
+    if (pago.confirmado) throw new AppError('Este periodo ya está pagado por completo', 400);
+
+    await pool.query(
+      `INSERT INTO abonos_pago (pago_id, monto, metodo, nota, registrado_por)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [pago.id, cuota.monto, inquilino.metodo_pago || 'efectivo', `Cargo pagado: ${cuota.concepto}`, req.user!.id]
+    );
+    await pool.query(
+      `UPDATE cuotas_extra SET estado = 'pagado', pagado_en = NOW() WHERE id = $1`,
+      [cuota.id]
+    );
+
+    const resultado = await recalcularPago(pago.id);
+    res.json({ success: true, data: resultado });
   } catch (err) {
     next(err);
   }

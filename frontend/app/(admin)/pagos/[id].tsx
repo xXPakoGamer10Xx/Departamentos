@@ -301,6 +301,17 @@ export default function PagoDetalleScreen() {
     } catch { /* ignore */ }
   }, [cargar]);
 
+  const [pagandoCuotaId, setPagandoCuotaId] = useState<string | null>(null);
+  const pagarCuotaHandler = useCallback(async (cuotaId: string) => {
+    setPagandoCuotaId(cuotaId);
+    try {
+      await api.pagarCuota(cuotaId);
+      cargar();
+    } catch { /* ignore */ } finally {
+      setPagandoCuotaId(null);
+    }
+  }, [cargar]);
+
   const abrirNuevoAbono = useCallback(() => {
     setEditingAbonoId(null);
     setAbonoMonto('');
@@ -556,7 +567,7 @@ export default function PagoDetalleScreen() {
       deptoNumero: inquilino.depto_numero,
       periodoLabel: getPeriodoLabel(),
       renta: rentaBase,
-      cargosExtra: cuotas.map((c: any) => ({ concepto: c.concepto, monto: parseFloat(c.monto) || 0 })),
+      cargosExtra: cuotas.filter((c: any) => c.estado !== 'pagado').map((c: any) => ({ concepto: c.concepto, monto: parseFloat(c.monto) || 0 })),
       abonosRenta: abonos.map((a: any) => ({ monto: parseFloat(a.monto) || 0, fecha: a.fecha })),
       saldoRentaPendiente: saldoRenta,
       depositoPendiente: depositoSaldo?.deposito_saldo || 0,
@@ -600,6 +611,7 @@ export default function PagoDetalleScreen() {
   const esAmbos = inquilino.metodo_pago === 'ambos';
   const usaQrInquilinos = config.usa_qr_inquilinos !== 'false';
   const hayAbonoParcial = !pago?.confirmado && totalAbonado > 0 && saldoPendiente != null;
+  const cuotasPendientes = cuotas.filter((c: any) => c.estado !== 'pagado');
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -1121,14 +1133,14 @@ export default function PagoDetalleScreen() {
             >
               <Ionicons name="receipt-outline" size={18} color={theme.primary} />
               <Text style={[styles.historialToggleText, { color: theme.primary }]}>Cargos extra</Text>
-              {cuotas.length > 0 && (
+              {cuotasPendientes.length > 0 && (
                 <View style={[styles.pagadoBadge, { backgroundColor: '#EF444420', marginLeft: 'auto', marginRight: 8 }]}>
                   <Text style={[styles.pagadoText, { color: '#EF4444' }]}>
-                    {cuotas.length} · +{fmtRenta(totalExtra)}
+                    {cuotasPendientes.length} · +{fmtRenta(totalExtra)}
                   </Text>
                 </View>
               )}
-              <Ionicons name={showCargosExtra ? 'chevron-up' : 'chevron-down'} size={16} color={theme.primary} style={cuotas.length > 0 ? undefined : { marginLeft: 'auto' }} />
+              <Ionicons name={showCargosExtra ? 'chevron-up' : 'chevron-down'} size={16} color={theme.primary} style={cuotasPendientes.length > 0 ? undefined : { marginLeft: 'auto' }} />
             </TouchableOpacity>
 
             {showCargosExtra && (
@@ -1143,11 +1155,28 @@ export default function PagoDetalleScreen() {
                 {cuotas.length === 0 ? (
                   <Text style={[styles.noCuotas, { color: theme.textSecondary }]}>Sin cargos adicionales este mes</Text>
                 ) : (
-                  cuotas.map(c => (
+                  cuotas.map(c => c.estado === 'pagado' ? (
+                    <View key={c.id} style={[styles.cuotaRow, { backgroundColor: isDark ? 'rgba(52,199,89,0.08)' : 'rgba(52,199,89,0.06)', borderColor: '#34C75930' }]}>
+                      <Ionicons name="checkmark-circle" size={14} color="#34C759" />
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.cuotaConcepto, { color: theme.text }]} numberOfLines={1}>{c.concepto}</Text>
+                        <Text style={{ color: theme.textSecondary, fontSize: 11, marginTop: 2 }}>
+                          Pagado{c.pagado_en ? ` · ${new Date(c.pagado_en).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}` : ''}
+                        </Text>
+                      </View>
+                      <Text style={[styles.cuotaMonto, { color: '#34C759' }]}>+{fmtRenta(c.monto)}</Text>
+                    </View>
+                  ) : (
                     <View key={c.id} style={[styles.cuotaRow, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)', borderColor: theme.border }]}>
                       <Ionicons name="receipt-outline" size={14} color={theme.textSecondary} />
                       <Text style={[styles.cuotaConcepto, { color: theme.text }]} numberOfLines={1}>{c.concepto}</Text>
                       <Text style={[styles.cuotaMonto, { color: '#EF4444' }]}>+{fmtRenta(c.monto)}</Text>
+                      <TouchableOpacity onPress={() => pagarCuotaHandler(c.id)} disabled={pagandoCuotaId === c.id} accessibilityLabel="Marcar cargo como pagado">
+                        {pagandoCuotaId === c.id
+                          ? <ActivityIndicator size="small" color="#34C759" />
+                          : <Ionicons name="checkmark-circle-outline" size={18} color="#34C759" />
+                        }
+                      </TouchableOpacity>
                       <TouchableOpacity onPress={() => removeCuota(c.id)}>
                         <Ionicons name="trash-outline" size={16} color={theme.danger} />
                       </TouchableOpacity>

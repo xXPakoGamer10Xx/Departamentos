@@ -529,13 +529,16 @@ export async function getEstadoPago(req: AuthRequest, res: Response, next: NextF
     const [pagoResult, cuotasResult] = await Promise.all([
       pool.query(`SELECT * FROM pagos WHERE inquilino_id = $1 AND periodo = $2`, [inquilino_id, periodo]),
       pool.query(
-        `SELECT id, concepto, monto, estado, created_at FROM cuotas_extra
-         WHERE inquilino_id = $1 AND estado = 'pendiente' ORDER BY created_at`,
-        [inquilino_id]
+        `SELECT id, concepto, monto, estado, created_at, pagado_en FROM cuotas_extra
+         WHERE inquilino_id = $1 AND (estado = 'pendiente' OR (estado = 'pagado' AND periodo = $2))
+         ORDER BY created_at`,
+        [inquilino_id, periodo]
       ),
     ]);
 
-    const totalExtra = cuotasResult.rows.reduce((sum, c) => sum + parseFloat(c.monto), 0);
+    const totalExtra = cuotasResult.rows
+      .filter(c => c.estado === 'pendiente')
+      .reduce((sum, c) => sum + parseFloat(c.monto), 0);
     const pago = pagoResult.rows[0] || null;
 
     let totalAbonado = 0;
@@ -562,7 +565,7 @@ export async function getEstadoPago(req: AuthRequest, res: Response, next: NextF
 }
 
 // Obtiene (o crea) el pago de un periodo con su monto = renta + cuotas extra pendientes
-async function getOrCrearPago(inquilino: any, periodo: string) {
+export async function getOrCrearPago(inquilino: any, periodo: string) {
   let pagoRes = await pool.query(
     `SELECT * FROM pagos WHERE inquilino_id = $1 AND periodo = $2`,
     [inquilino.id, periodo]

@@ -246,6 +246,9 @@ class ApiService {
   deleteCuota = (id: string) =>
     this.request<void>('DELETE', `/cuotas/${id}`);
 
+  pagarCuota = (id: string) =>
+    this.request<any>('PUT', `/cuotas/${id}/pagar`);
+
   // Pagos
   generarQrPago = (inquilino_id: string) =>
     this.request<any>('POST', `/pagos/generar-qr/${inquilino_id}`);

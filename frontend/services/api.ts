@@ -304,6 +304,12 @@ class ApiService {
   setPromesaPago = (pago_id: string, fecha_promesa: string | null) =>
     this.request<any>('PUT', `/pagos/${pago_id}/promesa`, { fecha_promesa });
 
+  getPromesasHistorial = (inquilino_id: string) =>
+    this.request<any[]>('GET', `/pagos/promesas/${inquilino_id}`);
+
+  eliminarPromesaHistorial = (id: string) =>
+    this.request<void>('DELETE', `/pagos/promesas/${id}`);
+
   // Depósitos
   getSaldoDeposito = (inquilino_id: string) =>
     this.request<{ deposito_total: number; deposito_pagado: number; deposito_saldo: number }>('GET', `/depositos/${inquilino_id}/saldo`);

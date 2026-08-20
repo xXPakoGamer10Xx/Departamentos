@@ -813,7 +813,67 @@ export async function setPromesaPago(req: AuthRequest, res: Response, next: Next
       [pago_id, fecha_promesa]
     );
 
+    // Cada vez que se guarda una fecha (no al borrarla) se agrega al historial
+    // de promesas, independiente del valor actual en pagos.fecha_promesa.
+    if (fecha_promesa) {
+      await pool.query(
+        `INSERT INTO promesas_pago (pago_id, fecha_promesa, creado_por) VALUES ($1, $2, $3)`,
+        [pago_id, fecha_promesa, req.user!.id]
+      );
+    }
+
     res.json({ success: true, data: updated.rows[0] });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// GET /api/pagos/promesas/:inquilino_id — historial de fechas de promesa
+export async function getPromesasHistorial(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { inquilino_id } = req.params;
+    const whereAdmin = req.user!.rol === 'admin' ? 'AND i.admin_id = $2' : 'AND i.usuario_id = $2';
+    const result = await pool.query(
+      `SELECT pp.id, pp.fecha_promesa, pp.created_at,
+              p.periodo, p.monto, p.confirmado, p.confirmado_en
+       FROM promesas_pago pp
+       JOIN pagos p ON p.id = pp.pago_id
+       JOIN inquilinos i ON i.id = p.inquilino_id
+       WHERE p.inquilino_id = $1 ${whereAdmin}
+       ORDER BY pp.created_at DESC`,
+      [inquilino_id, req.user!.id]
+    );
+
+    const data = result.rows.map(row => {
+      let estado: 'cumplida' | 'incumplida' | 'pendiente' = 'pendiente';
+      if (row.confirmado && row.confirmado_en) {
+        const pagadoDate = new Date(row.confirmado_en).toISOString().slice(0, 10);
+        const prometidaDate = new Date(row.fecha_promesa).toISOString().slice(0, 10);
+        estado = pagadoDate <= prometidaDate ? 'cumplida' : 'incumplida';
+      }
+      return { ...row, estado_cumplimiento: estado };
+    });
+
+    res.json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// DELETE /api/pagos/promesas/:id — quita una entrada del historial de promesas
+// (solo el registro visual; no modifica el pago ni la promesa activa).
+export async function eliminarPromesaHistorial(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(
+      `DELETE FROM promesas_pago pp
+       USING pagos p, inquilinos i
+       WHERE pp.id = $1 AND pp.pago_id = p.id AND p.inquilino_id = i.id AND i.admin_id = $2
+       RETURNING pp.id`,
+      [id, req.user!.id]
+    );
+    if (!result.rows[0]) throw new AppError('Registro no encontrado o no autorizado', 404);
+    res.json({ success: true });
   } catch (err) {
     next(err);
   }

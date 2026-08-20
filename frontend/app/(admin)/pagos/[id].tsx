@@ -57,6 +57,12 @@ export default function PagoDetalleScreen() {
   const [showCargosExtra, setShowCargosExtra] = useState(false);
   const [comprobanteModal, setComprobanteModal] = useState<string | null>(null);
 
+  // Historial de promesas de pago
+  const [promesasHistorial, setPromesasHistorial] = useState<any[]>([]);
+  const [loadingPromesasHistorial, setLoadingPromesasHistorial] = useState(false);
+  const [showPromesasHistorial, setShowPromesasHistorial] = useState(false);
+  const [eliminandoPromesaId, setEliminandoPromesaId] = useState<string | null>(null);
+
   // Cuota extra modal
   const [showCuota, setShowCuota] = useState(false);
   const [cuotaConcepto, setCuotaConcepto] = useState('');
@@ -230,6 +236,26 @@ export default function PagoDetalleScreen() {
     } catch { /* ignore */ }
     finally { setLoadingHistorial(false); }
   }, [id, loadingHistorial]);
+
+  const loadPromesasHistorial = useCallback(async () => {
+    if (!inquilino || loadingPromesasHistorial) return;
+    setLoadingPromesasHistorial(true);
+    try {
+      const r = await api.getPromesasHistorial(inquilino.id);
+      setPromesasHistorial(r.data || []);
+      setShowPromesasHistorial(true);
+    } catch { /* ignore */ }
+    finally { setLoadingPromesasHistorial(false); }
+  }, [inquilino, loadingPromesasHistorial]);
+
+  const eliminarPromesaHistorialHandler = useCallback(async (promesaId: string) => {
+    setEliminandoPromesaId(promesaId);
+    try {
+      await api.eliminarPromesaHistorial(promesaId);
+      setPromesasHistorial(prev => prev.filter(p => p.id !== promesaId));
+    } catch { /* ignore */ }
+    finally { setEliminandoPromesaId(null); }
+  }, []);
 
   const confirmarDirecto = useCallback(async () => {
     if (!pago) return;
@@ -484,12 +510,15 @@ export default function PagoDetalleScreen() {
       setPromesaGuardada(true);
       setEditandoPromesa(false);
       setTimeout(() => setPromesaGuardada(false), 2500);
+      if (showPromesasHistorial && inquilino) {
+        api.getPromesasHistorial(inquilino.id).then(r => setPromesasHistorial(r.data || [])).catch(() => {});
+      }
     } catch (e: any) {
       setPromesaError(e.message || 'No se pudo guardar la fecha');
     } finally {
       setSavingPromesa(false);
     }
-  }, [pago, promesaDia, promesaMes, promesaAno, cargar]);
+  }, [pago, promesaDia, promesaMes, promesaAno, cargar, showPromesasHistorial, inquilino]);
 
   const abrirNuevoDeposito = useCallback(() => {
     setEditingDepositoAbonoId(null);
@@ -1290,6 +1319,62 @@ export default function PagoDetalleScreen() {
             <View style={[styles.histEmpty, { borderColor: theme.border }]}>
               <Ionicons name="receipt-outline" size={28} color={theme.textSecondary} />
               <Text style={[styles.histEmptyText, { color: theme.textSecondary }]}>Sin pagos registrados</Text>
+            </View>
+          )}
+        </View>
+
+        {/* ── Historial de promesas de pago ── */}
+        <View>
+          <TouchableOpacity
+            style={[styles.historialToggle, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#fff', borderColor: theme.border }]}
+            onPress={() => showPromesasHistorial ? setShowPromesasHistorial(false) : loadPromesasHistorial()}
+          >
+            <Ionicons name="calendar-outline" size={18} color={theme.primary} />
+            <Text style={[styles.historialToggleText, { color: theme.primary }]}>
+              {showPromesasHistorial ? 'Ocultar promesas de pago' : 'Promesas de pago'}
+            </Text>
+            {loadingPromesasHistorial
+              ? <ActivityIndicator size="small" color={theme.primary} style={{ marginLeft: 'auto' }} />
+              : <Ionicons name={showPromesasHistorial ? 'chevron-up' : 'chevron-down'} size={16} color={theme.primary} style={{ marginLeft: 'auto' }} />
+            }
+          </TouchableOpacity>
+
+          {showPromesasHistorial && promesasHistorial.length > 0 && (
+            <View style={{ gap: 6, marginTop: 12 }}>
+              {promesasHistorial.map((pr: any) => {
+                const badgeColor = pr.estado_cumplimiento === 'cumplida' ? '#34C759' : pr.estado_cumplimiento === 'incumplida' ? '#EF4444' : '#F59E0B';
+                const badgeLabel = pr.estado_cumplimiento === 'cumplida' ? 'Cumplió' : pr.estado_cumplimiento === 'incumplida' ? 'No cumplió' : 'Pendiente';
+                const periodoLabel = (() => {
+                  const [a, m] = String(pr.periodo).split('-');
+                  return new Date(parseInt(a), parseInt(m) - 1, 1)
+                    .toLocaleDateString('es-MX', { month: 'short', year: 'numeric' });
+                })();
+                return (
+                  <View key={pr.id} style={[styles.cuotaRow, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)', borderColor: theme.border }]}>
+                    <Ionicons name="calendar" size={14} color={badgeColor} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.cuotaConcepto, { color: theme.text }]} numberOfLines={1}>
+                        {formatToDDMMAAAA(pr.fecha_promesa)} · {periodoLabel}
+                      </Text>
+                      <Text style={{ color: badgeColor, fontSize: 11, marginTop: 2, fontWeight: '600' }}>{badgeLabel}</Text>
+                    </View>
+                    <Text style={[styles.cuotaMonto, { color: theme.text }]}>{fmtRenta(pr.monto)}</Text>
+                    <TouchableOpacity onPress={() => eliminarPromesaHistorialHandler(pr.id)} disabled={eliminandoPromesaId === pr.id} accessibilityLabel="Eliminar del historial">
+                      {eliminandoPromesaId === pr.id
+                        ? <ActivityIndicator size="small" color={theme.danger} />
+                        : <Ionicons name="trash-outline" size={16} color={theme.danger} />
+                      }
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
+          {showPromesasHistorial && promesasHistorial.length === 0 && !loadingPromesasHistorial && (
+            <View style={[styles.histEmpty, { borderColor: theme.border }]}>
+              <Ionicons name="calendar-outline" size={28} color={theme.textSecondary} />
+              <Text style={[styles.histEmptyText, { color: theme.textSecondary }]}>Sin promesas de pago registradas</Text>
             </View>
           )}
         </View>

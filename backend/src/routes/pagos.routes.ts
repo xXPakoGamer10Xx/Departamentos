@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { generarQr, confirmarPago, getEstadoPago, getEstadosPagosActuales, getPagoByToken, subirComprobante, confirmarPagoAdmin, rechazarPagoAdmin, getComprobantesPendientes, getHistorialPagos, marcarPagadoAdmin, registrarAbono, getAbonosPago, editarAbono, eliminarAbono, getSaldoInquilino, getSaldosInquilinos, getResumenDeuda, setPromesaPago } from '../controllers/pagos.controller';
+import { generarQr, confirmarPago, getEstadoPago, getEstadosPagosActuales, getPagoByToken, subirComprobante, confirmarPagoAdmin, rechazarPagoAdmin, getComprobantesPendientes, getHistorialPagos, marcarPagadoAdmin, registrarAbono, getAbonosPago, editarAbono, eliminarAbono, getSaldoInquilino, getSaldosInquilinos, getResumenDeuda, setPromesaPago, getPromesasHistorial, eliminarPromesaHistorial } from '../controllers/pagos.controller';
 import { authMiddleware, adminOnly, cobradorOrAdmin, softAuth } from '../middleware/auth.middleware';
 import { tokenLimiter } from '../middleware/rateLimit.middleware';
 
@@ -31,3 +31,5 @@ pagosRouter.get('/saldos/resumen', cobradorOrAdmin, getResumenDeuda);
 pagosRouter.get('/saldos', cobradorOrAdmin, getSaldosInquilinos);
 pagosRouter.get('/saldo/:inquilino_id', getSaldoInquilino);
 pagosRouter.put('/:pago_id/promesa', adminOnly, setPromesaPago);
+pagosRouter.get('/promesas/:inquilino_id', getPromesasHistorial);
+pagosRouter.delete('/promesas/:id', adminOnly, eliminarPromesaHistorial);

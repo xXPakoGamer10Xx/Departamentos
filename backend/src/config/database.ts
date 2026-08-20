@@ -183,6 +183,25 @@ CREATE TABLE IF NOT EXISTS abonos_deposito (
 CREATE INDEX IF NOT EXISTS idx_abonos_deposito_inquilino ON abonos_deposito(inquilino_id);
 CREATE INDEX IF NOT EXISTS idx_abonos_deposito_fecha ON abonos_deposito(fecha);
 
+-- Historial de fechas de promesa de pago (cada vez que se guarda una fecha
+-- se agrega una fila, en vez de solo sobrescribir pagos.fecha_promesa).
+CREATE TABLE IF NOT EXISTS promesas_pago (
+  id             UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  pago_id        UUID NOT NULL REFERENCES pagos(id) ON DELETE CASCADE,
+  fecha_promesa  DATE NOT NULL,
+  creado_por     UUID REFERENCES usuarios(id) ON DELETE SET NULL,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_promesas_pago_pago ON promesas_pago(pago_id);
+
+-- Migración de datos: conservar en el historial la promesa vigente que ya
+-- estaba guardada en pagos.fecha_promesa antes de introducir este historial.
+INSERT INTO promesas_pago (pago_id, fecha_promesa, created_at)
+SELECT p.id, p.fecha_promesa, p.created_at
+FROM pagos p
+WHERE p.fecha_promesa IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM promesas_pago pp WHERE pp.pago_id = p.id);
+
 -- Suscripciones Web Push (navegador) — independientes de los tokens de Expo (app nativa)
 CREATE TABLE IF NOT EXISTS web_push_subscriptions (
   id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

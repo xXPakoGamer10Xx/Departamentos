@@ -9,7 +9,7 @@ module.exports = {
     userInterfaceStyle: 'automatic',
     newArchEnabled: false,
     splash: {
-      image: './assets/splash-icon.png',
+      image: './assets/icono.png',
       resizeMode: 'contain',
       backgroundColor: '#ffffff',
     },
@@ -48,10 +48,10 @@ module.exports = {
         'expo-splash-screen',
         {
           backgroundColor: '#ffffff',
-          image: './assets/splash-icon.png',
+          image: './assets/icono.png',
           dark: {
             backgroundColor: '#000000',
-            image: './assets/splash-icon.png',
+            image: './assets/icono.png',
           },
           imageWidth: 200,
         },

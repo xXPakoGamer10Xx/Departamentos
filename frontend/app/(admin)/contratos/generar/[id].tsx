@@ -75,30 +75,29 @@ export default function ContractPreviewScreen() {
     }
   };
 
-  const restablecerEditor = () => {
-    Alert.alert(
-      'Restablecer contrato',
-      '¿Quitar los cambios de este inquilino y volver a la plantilla general?',
-      [
+  const restablecerEditor = async () => {
+    const doReset = async () => {
+      setSavingEditor(true);
+      try {
+        await api.guardarContratoInquilino(id as string, null);
+        await cargarInquilino();
+        setShowEditor(false);
+      } catch (e: any) {
+        setEditorError(e.message || 'No se pudo restablecer');
+      } finally {
+        setSavingEditor(false);
+      }
+    };
+
+    const msg = '¿Quitar los cambios de este inquilino y volver a la plantilla general?';
+    if (Platform.OS === 'web') {
+      if (window.confirm(msg)) await doReset();
+    } else {
+      Alert.alert('Restablecer contrato', msg, [
         { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Restablecer',
-          style: 'destructive',
-          onPress: async () => {
-            setSavingEditor(true);
-            try {
-              await api.guardarContratoInquilino(id as string, null);
-              await cargarInquilino();
-              setShowEditor(false);
-            } catch (e: any) {
-              setEditorError(e.message || 'No se pudo restablecer');
-            } finally {
-              setSavingEditor(false);
-            }
-          },
-        },
-      ]
-    );
+        { text: 'Restablecer', style: 'destructive', onPress: doReset },
+      ]);
+    }
   };
 
   const previewEditorPdf = async () => {

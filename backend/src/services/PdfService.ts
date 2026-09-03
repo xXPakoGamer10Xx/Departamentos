@@ -76,6 +76,14 @@ function formatCurrency(n: number | null | undefined): string {
 }
 
 export function buildDocxVars(data: Record<string, any>): Record<string, string> {
+  const telArr = data.tel_arrendatario ? ` — Tel: ${data.tel_arrendatario}` : '';
+  const telFia = data.fiador_telefono ? ` — Tel: ${data.fiador_telefono}` : '';
+  const inventarioLista = Array.isArray(data.inventario) && data.inventario.length
+    ? (data.inventario as string[]).join(', ')
+    : Array.isArray(data.inventario_base)
+      ? (data.inventario_base as string[]).join(', ')
+      : '';
+
   return {
     fecha_actual:        new Date().toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' }),
     nombre_completo:     data.nombre_completo    ?? '',
@@ -99,10 +107,43 @@ export function buildDocxVars(data: Record<string, any>): Record<string, string>
     arrendador_nombre:   data.arrendador_nombre  ?? '',
     arrendador_direccion:data.arrendador_direccion ?? '',
     metodo_pago:         data.metodo_pago        ?? 'efectivo',
-    inventario:          Array.isArray(data.inventario_base)
-                           ? (data.inventario_base as string[]).join(', ')
-                           : '',
+    inventario:          inventarioLista,
+    // Líneas de firma listas para usar — quedan vacías (y su párrafo se elimina)
+    // cuando no hay datos, p. ej. si no hay fiador.
+    arrendatario_linea:  `ARRENDATARIO: ${data.nombre_completo ?? ''}${telArr}`,
+    arrendador_linea:    `ARRENDADORA: ${data.arrendador_nombre ?? ''}`,
+    fiador_linea:        data.fiador_nombre ? `FIADOR: ${data.fiador_nombre}${telFia}` : '',
   };
+}
+
+/**
+ * Quita de la plantilla, ya con las {{variables}} sustituidas, las secciones que
+ * quedaron vacías: un encabezado seguido de un bloque sin texto, párrafos vacíos
+ * sueltos y encabezados sin nada debajo. Así no aparece "OBSERVACIONES" (u otro
+ * título) huérfano cuando el inquilino no tiene ese dato.
+ */
+function tieneTexto(htmlFragment: string): boolean {
+  const t = htmlFragment.replace(/<[^>]+>/g, '').replace(/&[a-z]+;/gi, ' ');
+  return /[\p{L}\p{N}]/u.test(t);
+}
+
+export function pruneEmptySections(html: string): string {
+  // 1. Encabezado + bloque siguiente vacío → se elimina el par
+  html = html.replace(
+    /<(h[1-3])\b[^>]*>[\s\S]*?<\/\1>\s*<(p|div|li)\b[^>]*>([\s\S]*?)<\/\2>/gi,
+    (full, _h, _b, inner) => (tieneTexto(inner) ? full : ''),
+  );
+  // 2. Párrafos / bloques vacíos sueltos
+  html = html.replace(
+    /<(p|div|li)\b[^>]*>([\s\S]*?)<\/\1>/gi,
+    (full, _t, inner) => (tieneTexto(inner) ? full : ''),
+  );
+  // 3. Encabezado sin nada debajo (otro encabezado o fin del documento)
+  html = html.replace(
+    /<(h[1-3])\b[^>]*>[\s\S]*?<\/\1>\s*(?=(<h[1-3]\b)|\s*$)/gi,
+    '',
+  );
+  return html;
 }
 
 // ---------------------------------------------------------------------------
@@ -131,6 +172,10 @@ export class PdfService {
     for (const [key, value] of Object.entries(vars)) {
       html = html.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), value);
     }
+    // Variables que quedaron sin resolver (no existen) → vacías, para que sus
+    // secciones también se limpien en vez de imprimir "{{algo}}".
+    html = html.replace(/\{\{\s*[\w.]+\s*\}\}/g, '');
+    html = pruneEmptySections(html);
 
     const paragraphs = parseMammothHtml(html);
 
@@ -177,7 +222,7 @@ export class PdfService {
     const { value: html } = await mammoth.convertToHtml({ buffer: filledBuffer });
 
     // 4. Parsear HTML → estructura de párrafos
-    const paragraphs = parseMammothHtml(html);
+    const paragraphs = parseMammothHtml(pruneEmptySections(html));
 
     // 5. Renderizar PDF con react-pdf
     const element = React.createElement(ContratoPersonalizado, {

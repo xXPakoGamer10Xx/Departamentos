@@ -540,31 +540,35 @@ export default function ConfiguracionScreen() {
 
   const eliminarPlantilla = async () => {
     const { Alert } = await import('react-native');
-    Alert.alert(
-      'Eliminar plantilla',
-      '¿Seguro? Se usará la plantilla por defecto del sistema.',
-      [
+    const doBorrar = async () => {
+      setBorrandoPlantilla(true);
+      try {
+        await api.deleteContratoTemplate();
+        setConfig(prev => {
+          const next = { ...prev };
+          delete next['contrato_docx_template'];
+          delete next['contrato_docx_nombre'];
+          delete next['contrato_html_template'];
+          return next;
+        });
+        if (Platform.OS === 'web') window.alert('Plantilla eliminada — se usará la plantilla por defecto.');
+      } catch (e: any) {
+        const msg = e?.message || 'No se pudo eliminar la plantilla';
+        Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Error', msg);
+      } finally {
+        setBorrandoPlantilla(false);
+      }
+    };
+
+    const mensaje = '¿Seguro? Se usará la plantilla por defecto del sistema.';
+    if (Platform.OS === 'web') {
+      if (window.confirm(mensaje)) await doBorrar();
+    } else {
+      Alert.alert('Eliminar plantilla', mensaje, [
         { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
-          onPress: async () => {
-            setBorrandoPlantilla(true);
-            try {
-              await api.deleteContratoTemplate();
-              setConfig(prev => {
-                const next = { ...prev };
-                delete next['contrato_docx_template'];
-                delete next['contrato_docx_nombre'];
-                delete next['contrato_html_template'];
-                return next;
-              });
-            } catch { /* ignore */ }
-            finally { setBorrandoPlantilla(false); }
-          },
-        },
-      ]
-    );
+        { text: 'Eliminar', style: 'destructive', onPress: doBorrar },
+      ]);
+    }
   };
 
   // ── Editor de contrato ──────────────────────────────────────────────
@@ -1654,7 +1658,7 @@ export default function ConfiguracionScreen() {
                   {(config['contrato_html_template'] || config['contrato_docx_template']) && (
                     <TouchableOpacity
                       style={[styles.plantillaDeleteBtn, { borderColor: theme.danger + '40' }]}
-                      onPress={() => { setShowPlantilla(false); eliminarPlantilla(); }}
+                      onPress={eliminarPlantilla}
                       disabled={borrandoPlantilla}
                     >
                       {borrandoPlantilla

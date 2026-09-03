@@ -52,6 +52,6 @@ export const DEFAULT_CONTRATO_HTML = `<h1>CONTRATO DE ARRENDATARIO</h1>
 <p>{{observaciones}}</p>
 
 <p>Leído el presente contrato y enteradas las partes de su contenido, lo firman de conformidad.</p>
-<p><strong>ARRENDATARIO:</strong> {{nombre_completo}} — Tel: {{tel_arrendatario}}</p>
-<p><strong>ARRENDADORA:</strong> {{arrendador_nombre}}</p>
-<p><strong>FIADOR:</strong> {{fiador_nombre}} — Tel: {{fiador_telefono}}</p>`;
+<p><strong>{{arrendatario_linea}}</strong></p>
+<p><strong>{{arrendador_linea}}</strong></p>
+<p><strong>{{fiador_linea}}</strong></p>`;

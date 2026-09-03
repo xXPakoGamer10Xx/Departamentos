@@ -44,10 +44,11 @@ function parseInline(content: string): TextSegment[] {
 
 export function parseHtmlBlocks(html: string): ParsedBlock[] {
   const blocks: ParsedBlock[] = [];
-  const blockRe = /<(p|h1|h2|h3|li)[^>]*>([\s\S]*?)<\/\1>/gi;
+  const blockRe = /<(p|div|h1|h2|h3|li)[^>]*>([\s\S]*?)<\/\1>/gi;
   let m: RegExpExecArray | null;
   while ((m = blockRe.exec(html)) !== null) {
-    const tag = m[1].toLowerCase() as ParsedBlock['level'];
+    const raw = m[1].toLowerCase();
+    const tag = (raw === 'div' ? 'p' : raw) as ParsedBlock['level'];
     const segments = parseInline(m[2]);
     if (segments.length > 0) blocks.push({ level: tag, segments });
   }

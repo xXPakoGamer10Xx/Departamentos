@@ -15,6 +15,8 @@ interface Props {
 // avisar al padre, para que el HTML guardado siempre sea compatible con el PDF.
 const ALLOWED_TAGS = new Set(['P', 'H1', 'H2', 'H3', 'LI', 'UL', 'OL', 'STRONG', 'B', 'EM', 'I', 'BR']);
 
+const BLOCK_TAGS = new Set(['P', 'H1', 'H2', 'H3', 'UL', 'OL', 'LI']);
+
 function sanitizeNode(node: Node): void {
   const children = Array.from(node.childNodes);
   for (const child of children) {
@@ -24,6 +26,24 @@ function sanitizeNode(node: Node): void {
       continue;
     }
     const el = child as HTMLElement;
+
+    // El navegador crea <div> al pulsar Enter o al pegar. Sin esto el saneador
+    // lo quitaba y el texto quedaba "suelto" → el PDF (que solo entiende bloques
+    // <p>/<h*>) lo ignoraba o lo pegaba con el párrafo anterior. Lo convertimos
+    // en <p> salvo que contenga otros bloques dentro, en cuyo caso lo desenvuelve.
+    if (el.tagName === 'DIV') {
+      if (el.querySelector('p,div,h1,h2,h3,ul,ol,li')) {
+        while (el.firstChild) node.insertBefore(el.firstChild, el);
+        node.removeChild(el);
+      } else {
+        const p = document.createElement('p');
+        while (el.firstChild) p.appendChild(el.firstChild);
+        node.replaceChild(p, el);
+        sanitizeNode(p);
+      }
+      continue;
+    }
+
     sanitizeNode(el);
     if (!ALLOWED_TAGS.has(el.tagName)) {
       while (el.firstChild) node.insertBefore(el.firstChild, el);
@@ -34,10 +54,38 @@ function sanitizeNode(node: Node): void {
   }
 }
 
+// Envuelve en <p> los nodos de texto o inline que quedaron sueltos a nivel raíz,
+// para que el HTML guardado sea siempre una lista de bloques y no se "mueva" al
+// volver a editarlo.
+function wrapLooseText(container: HTMLElement): void {
+  let run: ChildNode[] = [];
+  const flush = (before: ChildNode | null) => {
+    if (!run.length) return;
+    const hasText = run.some(n => (n.textContent || '').trim().length > 0);
+    if (hasText) {
+      const p = document.createElement('p');
+      run.forEach(n => p.appendChild(n));
+      container.insertBefore(p, before);
+    } else {
+      run.forEach(n => n.parentNode?.removeChild(n));
+    }
+    run = [];
+  };
+  for (const n of Array.from(container.childNodes)) {
+    if (n.nodeType === Node.ELEMENT_NODE && BLOCK_TAGS.has((n as HTMLElement).tagName)) {
+      flush(n);
+    } else {
+      run.push(n);
+    }
+  }
+  flush(null);
+}
+
 function sanitizeHtml(html: string): string {
   const container = document.createElement('div');
   container.innerHTML = html;
   sanitizeNode(container);
+  wrapLooseText(container);
   return container.innerHTML;
 }
 

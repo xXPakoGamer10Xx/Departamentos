@@ -43,8 +43,8 @@ function parseInline(content: string): TextSegment[] {
 
 function parseMammothHtml(html: string): ParsedPara[] {
   const paragraphs: ParsedPara[] = [];
-  // Match block-level tags
-  const blockRe = /<(p|h1|h2|h3|li)[^>]*>([\s\S]*?)<\/\1>/gi;
+  // Match block-level tags (div incluido: algunos editores lo generan al escribir)
+  const blockRe = /<(p|div|h1|h2|h3|li)[^>]*>([\s\S]*?)<\/\1>/gi;
   let m: RegExpExecArray | null;
   while ((m = blockRe.exec(html)) !== null) {
     const tag  = m[1].toLowerCase();

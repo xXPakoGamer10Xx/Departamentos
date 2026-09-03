@@ -17,7 +17,7 @@ export const DEFAULT_CONTRATO_HTML = `<h1>CONTRATO DE ARRENDATARIO</h1>
 
 <p>El arrendatario pagará a la arrendadora a quien sus derechos representan, la suma de <strong>{{renta}}</strong> los días <strong>{{fecha_pago}}</strong>, en moneda nacional de curso legal por mensualidad adelantada y dentro de los cinco días que corresponda acuerdo con el contrato establecido, precisar en el domicilio del arrendador.</p>
 
-<p>El arrendatario entregará un depósito en garantía de <strong>{{deposito}}</strong>, pagadero en {{metodo_pago}} al inicio del presente contrato.</p>
+<p>El arrendatario entregará un depósito en garantía de <strong>{{deposito}}</strong>, pagadero en {{metodo_pago}} al inicio del presente contrato, con el carácter y los efectos previstos en la cláusula de Pena Convencional y Gastos de Restitución.</p>
 
 <p>El presente contrato da inicio el <strong>{{fecha_inicio}}</strong> y vence el <strong>{{fecha_termino}}</strong>.</p>
 
@@ -39,9 +39,11 @@ export const DEFAULT_CONTRATO_HTML = `<h1>CONTRATO DE ARRENDATARIO</h1>
 
 <p><strong>9.-</strong> El arrendatario garantiza el cumplimiento de este contrato con todos los bienes que integran su patrimonio. En caso de existir fiador, este firma mancomunada y solidariamente las obligaciones del arrendatario hasta la fecha en que el departamento haya sido recibido de conformidad por el arrendador.</p>
 
-<p><strong>10.-</strong> Es importante que al dejar el departamento se avise con un mínimo de 15 días. De no haber cumplido con el tiempo estipulado en este contrato, el depósito no funge como renta y esta garantía se pierde por incumplimiento. Si no desea continuar con el arrendamiento y avisa con 15 días de anticipación se recupera el depósito en especie, como renta actuando como el mes 13; no se hace devolución en efectivo.</p>
+<p><strong>10.-</strong> Es importante que al dejar el departamento se avise con un mínimo de 15 días de anticipación. La falta de este aviso se considera incumplimiento para todos los efectos de este contrato.</p>
 
-<p><strong>11.-</strong> Se anexan Normas de Convivencia: Mantener limpio el espacio del Depto. Evitar reuniones de más de 2 personas en horarios de descanso. No mascotas. Notificar oportunamente cualquier falla para poder solucionarla y determinar quién es responsable del pago. Formar parte de una comunidad con respeto. Evitar visitas en estado de ebriedad. En caso de ausencia evidente y prolongada sin comunicación previa, el arrendador podrá confirmar la continuación de la ocupación. No prestar llaves a terceras personas. Cuidar las salidas y entradas cerrando bien las puertas. El uso del lavadero es para toda la comunidad; úsalo con responsabilidad, retira tu ropa el mismo día, horario hasta las 6 pm.</p>
+<p><strong>11.- PENA CONVENCIONAL Y GASTOS DE RESTITUCIÓN.</strong> Las partes convienen que la suma entregada al inicio de este contrato tiene carácter de garantía de cumplimiento y acondicionamiento final, por lo que en ningún caso habrá devolución de dinero en efectivo ni podrá aplicarse como pago de mensualidades ordinarias de renta. En caso de desocupación anticipada o incumplimiento por parte del arrendatario, dicha cantidad quedará íntegramente a favor del arrendador como pena convencional. Al vencimiento natural del contrato, dicha suma se destinará a cubrir los gastos de pintura, mantenimiento y restauración del inmueble para devolverlo a su estado original, no existiendo saldo remanente exigible de devolución.</p>
+
+<p><strong>12.-</strong> Se anexan Normas de Convivencia: Mantener limpio el espacio del Depto. Evitar reuniones de más de 2 personas en horarios de descanso. No mascotas. Notificar oportunamente cualquier falla para poder solucionarla y determinar quién es responsable del pago. Formar parte de una comunidad con respeto. Evitar visitas en estado de ebriedad. En caso de ausencia evidente y prolongada sin comunicación previa, el arrendador podrá confirmar la continuación de la ocupación. No prestar llaves a terceras personas. Cuidar las salidas y entradas cerrando bien las puertas. El uso del lavadero es para toda la comunidad; úsalo con responsabilidad, retira tu ropa el mismo día, horario hasta las 6 pm.</p>
 
 <h2>INVENTARIO</h2>
 <p>{{inventario}}</p>

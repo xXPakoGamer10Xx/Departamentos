@@ -20,7 +20,7 @@ module.exports = {
     android: {
       package: 'com.vertexrent.app',
       googleServicesFile: './google-services.json',
-      versionCode: 2,
+      versionCode: 3,
       adaptiveIcon: {
         foregroundImage: './assets/icono.png',
         backgroundColor: '#007AFF',

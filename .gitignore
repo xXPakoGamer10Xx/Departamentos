@@ -7,6 +7,11 @@ backend/node_modules/
 backend/dist/
 frontend/.expo/
 frontend/web-build/
+frontend/build/
+frontend/android/
+frontend/ios/
+*.apk
+*.aab
 
 # Local environment and secret files
 .env

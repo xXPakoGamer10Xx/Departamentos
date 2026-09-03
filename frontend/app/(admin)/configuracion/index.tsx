@@ -1648,7 +1648,7 @@ export default function ConfiguracionScreen() {
                     <Text style={[styles.plantillaBannerSub, { color: theme.textSecondary }]}>
                       {(config['contrato_html_template'] || config['contrato_docx_template'])
                         ? 'La IA ya procesó tu contrato'
-                        : 'Sube tu contrato Word y la IA detectará dónde va cada dato'}
+                        : 'Edítalo aquí mismo, o sube tu contrato Word para que la IA inserte los datos'}
                     </Text>
                   </View>
                   {(config['contrato_html_template'] || config['contrato_docx_template']) && (
@@ -1695,7 +1695,7 @@ export default function ConfiguracionScreen() {
                     >
                       <Ionicons name="create-outline" size={18} color="#fff" />
                       <Text style={styles.primaryBtnText}>
-                        {tieneHtml ? 'Editar contrato en la app' : 'Escribir contrato desde cero'}
+                        {tieneHtml ? 'Editar la plantilla de contrato' : 'Editar el contrato actual'}
                       </Text>
                     </TouchableOpacity>
                   );

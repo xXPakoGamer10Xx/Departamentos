@@ -1,10 +1,13 @@
-// Variables disponibles para la plantilla de contrato. Deben coincidir con las
-// que el backend reemplaza en PdfService.buildDocxVars.
-export interface ContractVar { key: string; label: string }
-
-// Plantilla base para empezar a editar un contrato desde cero (sin subir Word).
-// Usa las mismas {{variables}} que reemplaza el backend al generar el PDF.
-// IMPORTANTE: mantener sincronizado con backend/src/templates/defaultContratoHtml.ts
+/**
+ * Contrato de arrendamiento por defecto, en HTML con {{variables}}.
+ *
+ * Es el mismo texto que renderiza ContratoArrendamiento.tsx, pero como HTML
+ * editable. Se usa como semilla cuando el admin abre el editor de contrato
+ * (global o por inquilino) y todavía no hay una plantilla propia.
+ *
+ * IMPORTANTE: mantener sincronizado con frontend/components/ui/contractVariables.ts
+ * (DEFAULT_CONTRATO_HTML). Las variables deben existir en PdfService.buildDocxVars.
+ */
 export const DEFAULT_CONTRATO_HTML = `<h1>CONTRATO DE ARRENDATARIO</h1>
 <p><strong>{{fecha_actual}}</strong></p>
 
@@ -50,23 +53,3 @@ export const DEFAULT_CONTRATO_HTML = `<h1>CONTRATO DE ARRENDATARIO</h1>
 <p><strong>ARRENDATARIO:</strong> {{nombre_completo}} — Tel: {{tel_arrendatario}}</p>
 <p><strong>ARRENDADORA:</strong> {{arrendador_nombre}}</p>
 <p><strong>FIADOR:</strong> {{fiador_nombre}} — Tel: {{fiador_telefono}}</p>`;
-
-export const CONTRACT_VARS: ContractVar[] = [
-  { key: 'fecha_actual',       label: 'Fecha de hoy' },
-  { key: 'nombre_completo',     label: 'Nombre inquilino' },
-  { key: 'depto_numero',        label: 'N° departamento' },
-  { key: 'renta',               label: 'Renta ($)' },
-  { key: 'renta_letra',         label: 'Renta (letra)' },
-  { key: 'deposito',            label: 'Depósito ($)' },
-  { key: 'fecha_inicio',        label: 'Fecha inicio' },
-  { key: 'fecha_termino',       label: 'Fecha término' },
-  { key: 'fecha_pago',          label: 'Día de pago' },
-  { key: 'tel_arrendatario',    label: 'Tel. inquilino' },
-  { key: 'fiador_nombre',       label: 'Fiador' },
-  { key: 'fiador_telefono',     label: 'Tel. fiador' },
-  { key: 'arrendador_nombre',   label: 'Arrendador' },
-  { key: 'arrendador_direccion',label: 'Dirección' },
-  { key: 'metodo_pago',         label: 'Forma de pago' },
-  { key: 'observaciones',       label: 'Observaciones' },
-  { key: 'inventario',          label: 'Inventario' },
-];

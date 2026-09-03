@@ -202,6 +202,10 @@ FROM pagos p
 WHERE p.fecha_promesa IS NOT NULL
   AND NOT EXISTS (SELECT 1 FROM promesas_pago pp WHERE pp.pago_id = p.id);
 
+-- Contrato editado por inquilino: si está lleno, el PDF se genera a partir de
+-- este HTML (con {{variables}}) en vez de la plantilla global o la de por defecto.
+ALTER TABLE inquilinos ADD COLUMN IF NOT EXISTS contrato_html TEXT;
+
 -- Suscripciones Web Push (navegador) — independientes de los tokens de Expo (app nativa)
 CREATE TABLE IF NOT EXISTS web_push_subscriptions (
   id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

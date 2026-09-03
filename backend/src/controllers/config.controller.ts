@@ -28,7 +28,7 @@ const DEMO_DATA = {
 };
 
 // Sanitiza HTML de plantillas: elimina scripts, estilos y manejadores de eventos.
-function sanitizeHtml(html: string): string {
+export function sanitizeHtml(html: string): string {
   if (typeof html !== 'string') return '';
   return html
     .replace(/<script[\s\S]*?<\/script>/gi, '')

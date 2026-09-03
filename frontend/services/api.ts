@@ -117,6 +117,16 @@ class ApiService {
   generarTokenPdf = (id: string) =>
     this.request<{ token: string }>('POST', `/inquilinos/${id}/pdf-token`);
 
+  // Editor de contrato por inquilino
+  getContratoEditable = (id: string) =>
+    this.request<{ html: string; origen: 'inquilino' | 'plantilla' | 'default'; personalizado: boolean }>(
+      'GET', `/inquilinos/${id}/contrato-editable`);
+
+  guardarContratoInquilino = (id: string, html: string | null) =>
+    this.request<{ personalizado: boolean }>('PUT', `/inquilinos/${id}/contrato`, { html });
+
+  getContratoPreviewInquilinoUrl = (id: string) => `${this.baseUrl}/inquilinos/${id}/contrato-preview`;
+
   getToken = () => this.token;
   getBaseUrl = () => this.baseUrl;
   registerPushToken = (token: string) =>

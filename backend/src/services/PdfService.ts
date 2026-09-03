@@ -77,6 +77,7 @@ function formatCurrency(n: number | null | undefined): string {
 
 export function buildDocxVars(data: Record<string, any>): Record<string, string> {
   return {
+    fecha_actual:        new Date().toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' }),
     nombre_completo:     data.nombre_completo    ?? '',
     depto_numero:        String(data.depto_numero ?? ''),
     renta:               formatCurrency(data.renta),

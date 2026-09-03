@@ -5,6 +5,8 @@ import { AppError } from '../middleware/error.middleware';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { toTitleCase } from '../utils/formatters';
 import { PdfService } from '../services/PdfService';
+import { sanitizeHtml } from './config.controller';
+import { DEFAULT_CONTRATO_HTML } from '../templates/defaultContratoHtml';
 import { v4 as uuidv4 } from 'uuid';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
@@ -414,46 +416,141 @@ export async function generarTokenPdf(req: AuthRequest, res: Response, next: Nex
   }
 }
 
+// Carga inquilino + config del admin + inventario del depto y arma el objeto
+// `data` que consumen las plantillas del PdfService.
+async function cargarContexto(adminId: string, inquilinoId: string) {
+  const result = await pool.query(`SELECT * FROM inquilinos WHERE admin_id = $1 AND id = $2`, [adminId, inquilinoId]);
+  if (!result.rows[0]) throw new AppError('Inquilino no encontrado', 404);
+  const inquilino = result.rows[0];
+
+  const [configRes, deptoRes] = await Promise.all([
+    pool.query(
+      `SELECT clave, valor FROM configuracion WHERE admin_id = $1
+       AND clave IN ('arrendador_nombre','arrendador_direccion',
+                     'contrato_docx_template','contrato_html_template')`,
+      [adminId]
+    ),
+    pool.query(`SELECT inventario_base FROM departamentos WHERE admin_id = $1 AND numero = $2`, [adminId, inquilino.depto_numero]),
+  ]);
+
+  const config: Record<string, string> = {};
+  for (const row of configRes.rows) config[row.clave] = row.valor;
+
+  const data = {
+    ...inquilino,
+    arrendador_nombre:    config['arrendador_nombre']    || 'Administración',
+    arrendador_direccion: config['arrendador_direccion'] || inquilino.ubicacion || '',
+    inventario_base:      deptoRes.rows[0]?.inventario_base || [],
+  };
+
+  return { inquilino, config, data };
+}
+
+async function renderContrato(inquilino: any, config: Record<string, string>, data: any): Promise<Buffer> {
+  // Prioridad: 1) contrato editado del inquilino  2) plantilla HTML global
+  //            3) plantilla DOCX global  4) plantilla por defecto
+  if (inquilino.contrato_html) {
+    return PdfService.generateFromHtmlTemplate(inquilino.contrato_html, data);
+  }
+  if (config['contrato_html_template']) {
+    return PdfService.generateFromHtmlTemplate(config['contrato_html_template'], data);
+  }
+  if (config['contrato_docx_template']) {
+    return PdfService.generateFromDocxTemplate(config['contrato_docx_template'], data);
+  }
+  return PdfService.generateContratoPdf(data);
+}
+
 // GET /api/inquilinos/:id/pdf
 export async function getContratoPdf(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { id } = req.params;
-    const result = await pool.query(`SELECT * FROM inquilinos WHERE admin_id = $1 AND id = $2`, [req.user!.id, id]);
-    if (!result.rows[0]) throw new AppError('Inquilino no encontrado', 404);
-    const inquilino = result.rows[0];
-
-    const [configRes, deptoRes] = await Promise.all([
-      pool.query(
-        `SELECT clave, valor FROM configuracion WHERE admin_id = $1
-         AND clave IN ('arrendador_nombre','arrendador_direccion',
-                       'contrato_docx_template','contrato_html_template')`,
-        [req.user!.id]
-      ),
-      pool.query(`SELECT inventario_base FROM departamentos WHERE admin_id = $1 AND numero = $2`, [req.user!.id, inquilino.depto_numero]),
-    ]);
-
-    const config: Record<string, string> = {};
-    for (const row of configRes.rows) config[row.clave] = row.valor;
-
-    const data = {
-      ...inquilino,
-      arrendador_nombre:    config['arrendador_nombre']    || 'Administración',
-      arrendador_direccion: config['arrendador_direccion'] || inquilino.ubicacion || '',
-      inventario_base:      deptoRes.rows[0]?.inventario_base || [],
-    };
-
-    // Prioridad: 1) HTML procesado por IA  2) DOCX subido manualmente  3) default
-    let pdfBuffer: Buffer;
-    if (config['contrato_html_template']) {
-      pdfBuffer = await PdfService.generateFromHtmlTemplate(config['contrato_html_template'], data);
-    } else if (config['contrato_docx_template']) {
-      pdfBuffer = await PdfService.generateFromDocxTemplate(config['contrato_docx_template'], data);
-    } else {
-      pdfBuffer = await PdfService.generateContratoPdf(data);
-    }
+    const { inquilino, config, data } = await cargarContexto(req.user!.id, req.params.id);
+    const pdfBuffer = await renderContrato(inquilino, config, data);
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="contrato_${inquilino.depto_numero}_${inquilino.nombre_completo.replace(/\s+/g, '_')}.pdf"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.end(pdfBuffer);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// GET /api/inquilinos/:id/contrato-editable
+// Devuelve el HTML que el admin editará para este inquilino. Si el inquilino aún
+// no tiene un contrato propio, se usa la plantilla global o la de por defecto
+// como punto de partida.
+export async function getContratoEditable(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { id } = req.params;
+    const inq = await pool.query(`SELECT contrato_html FROM inquilinos WHERE admin_id = $1 AND id = $2`, [req.user!.id, id]);
+    if (!inq.rows[0]) throw new AppError('Inquilino no encontrado', 404);
+
+    const cfg = await pool.query(
+      `SELECT valor FROM configuracion WHERE admin_id = $1 AND clave = 'contrato_html_template'`,
+      [req.user!.id]
+    );
+
+    let html: string;
+    let origen: 'inquilino' | 'plantilla' | 'default';
+    if (inq.rows[0].contrato_html) {
+      html = inq.rows[0].contrato_html;
+      origen = 'inquilino';
+    } else if (cfg.rows[0]?.valor) {
+      html = cfg.rows[0].valor;
+      origen = 'plantilla';
+    } else {
+      html = DEFAULT_CONTRATO_HTML;
+      origen = 'default';
+    }
+
+    res.json({ success: true, data: { html, origen, personalizado: !!inq.rows[0].contrato_html } });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// PUT /api/inquilinos/:id/contrato
+// Guarda el contrato editado del inquilino. Enviar html vacío/null lo restablece
+// a la plantilla.
+export async function guardarContratoInquilino(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { id } = req.params;
+    const anterior = await pool.query(`SELECT * FROM inquilinos WHERE admin_id = $1 AND id = $2`, [req.user!.id, id]);
+    if (!anterior.rows[0]) throw new AppError('Inquilino no encontrado', 404);
+
+    const raw = (req.body?.html ?? '') as string;
+    const valor = raw && raw.trim() ? sanitizeHtml(raw) : null;
+
+    const result = await pool.query(
+      `UPDATE inquilinos SET contrato_html = $1 WHERE admin_id = $2 AND id = $3 RETURNING *`,
+      [valor, req.user!.id, id]
+    );
+
+    if ((req as any).audit) {
+      await (req as any).audit(id, anterior.rows[0], result.rows[0]);
+    }
+
+    res.json({ success: true, data: { personalizado: !!valor } });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// POST /api/inquilinos/:id/contrato-preview
+// Genera un PDF con los datos reales del inquilino a partir del HTML recibido,
+// sin guardarlo. Para la vista previa en vivo del editor (web).
+export async function previewContratoInquilino(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { id } = req.params;
+    const html = (req.body?.html ?? '') as string;
+    if (!html.trim()) throw new AppError('html es requerido', 400);
+
+    const { data } = await cargarContexto(req.user!.id, id);
+    const pdfBuffer = await PdfService.generateFromHtmlTemplate(sanitizeHtml(html), data);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'inline; filename="preview_contrato.pdf"');
     res.setHeader('Content-Length', pdfBuffer.length);
     res.end(pdfBuffer);
   } catch (err) {

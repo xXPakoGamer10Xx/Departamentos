@@ -1,7 +1,8 @@
 import {
   StyleSheet, View, Text, ScrollView, TouchableOpacity,
-  useColorScheme, ActivityIndicator, Platform, useWindowDimensions, Alert,
+  useColorScheme, ActivityIndicator, Platform, useWindowDimensions, Alert, Modal,
 } from 'react-native';
+import RichHtmlEditor from '../../../../components/ui/RichHtmlEditor';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../../../../constants/Colors';
 import { Theme } from '../../../../constants/Theme';
@@ -27,12 +28,99 @@ export default function ContractPreviewScreen() {
   const [loading, setLoading] = useState(true);
   const [opening, setOpening] = useState(false);
 
-  useEffect(() => {
+  // Editor de contrato
+  const [showEditor, setShowEditor] = useState(false);
+  const [editorHtml, setEditorHtml] = useState('');
+  const [loadingEditor, setLoadingEditor] = useState(false);
+  const [savingEditor, setSavingEditor] = useState(false);
+  const [editorError, setEditorError] = useState('');
+
+  const cargarInquilino = () =>
     api.getInquilinoById(id as string)
       .then(r => setInquilino(r.data))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+      .catch(() => {});
+
+  useEffect(() => {
+    cargarInquilino().finally(() => setLoading(false));
   }, [id]);
+
+  const personalizado = !!inquilino?.contrato_html;
+
+  const abrirEditor = async () => {
+    setEditorError('');
+    setLoadingEditor(true);
+    setShowEditor(true);
+    try {
+      const res = await api.getContratoEditable(id as string);
+      setEditorHtml(res.data?.html || '');
+    } catch (e: any) {
+      setEditorError(e.message || 'No se pudo cargar el contrato');
+    } finally {
+      setLoadingEditor(false);
+    }
+  };
+
+  const guardarEditor = async () => {
+    if (!editorHtml.trim()) { setEditorError('El contrato está vacío'); return; }
+    setSavingEditor(true);
+    setEditorError('');
+    try {
+      await api.guardarContratoInquilino(id as string, editorHtml);
+      await cargarInquilino();
+      setShowEditor(false);
+    } catch (e: any) {
+      setEditorError(e.message || 'No se pudo guardar el contrato');
+    } finally {
+      setSavingEditor(false);
+    }
+  };
+
+  const restablecerEditor = () => {
+    Alert.alert(
+      'Restablecer contrato',
+      '¿Quitar los cambios de este inquilino y volver a la plantilla general?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Restablecer',
+          style: 'destructive',
+          onPress: async () => {
+            setSavingEditor(true);
+            try {
+              await api.guardarContratoInquilino(id as string, null);
+              await cargarInquilino();
+              setShowEditor(false);
+            } catch (e: any) {
+              setEditorError(e.message || 'No se pudo restablecer');
+            } finally {
+              setSavingEditor(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const previewEditorPdf = async () => {
+    if (Platform.OS !== 'web') {
+      setEditorError('La vista previa en vivo está disponible en la versión web. En la app, guarda y usa “Imprimir PDF”.');
+      return;
+    }
+    if (!editorHtml.trim()) { setEditorError('El contrato está vacío'); return; }
+    try {
+      const token = api.getToken();
+      const resp = await fetch(api.getContratoPreviewInquilinoUrl(id as string), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ html: editorHtml }),
+      });
+      if (!resp.ok) throw new Error('Error al generar la vista previa');
+      const blob = await resp.blob();
+      window.open(URL.createObjectURL(blob), '_blank');
+    } catch (e: any) {
+      setEditorError(e.message || 'No se pudo generar la vista previa');
+    }
+  };
 
   const handleAbrirPdf = async () => {
     setOpening(true);
@@ -115,6 +203,7 @@ export default function ContractPreviewScreen() {
           <Text style={[styles.title, { color: theme.text }]}>Vista Previa</Text>
           <Text style={[styles.subtitle, { color: theme.textSecondary }]} numberOfLines={1}>
             {inquilino.nombre_completo} · Depto {inquilino.depto_numero}
+            {personalizado ? '  ·  ✏️ editado' : ''}
           </Text>
         </View>
         <TouchableOpacity
@@ -177,16 +266,103 @@ export default function ContractPreviewScreen() {
 
           <View style={styles.divider} />
 
+          {/* Editar contrato */}
+          <TouchableOpacity style={styles.editBtn} onPress={abrirEditor}>
+            <Ionicons name="create-outline" size={18} color="#7C3AED" />
+            <Text style={styles.editBtnText}>
+              {personalizado ? 'Editar contrato de este inquilino' : 'Editar / personalizar este contrato'}
+            </Text>
+          </TouchableOpacity>
+
           {/* Print hint */}
           <View style={styles.printHint}>
             <Ionicons name="information-circle-outline" size={16} color="#94a3b8" />
             <Text style={styles.printHintText}>
+              {personalizado
+                ? 'Este inquilino usa un contrato editado. '
+                : ''}
               Presiona <Text style={{ fontWeight: '700' }}>Imprimir PDF</Text> para obtener el contrato completo con todas las cláusulas.
               {Platform.OS === 'web' ? ' Luego usa Ctrl+P / Cmd+P para imprimir.' : ''}
             </Text>
           </View>
         </View>
       </ScrollView>
+
+      {/* ── Modal: Editar contrato ─────────────────────────────────────── */}
+      <Modal visible={showEditor} transparent animationType="slide" onRequestClose={() => setShowEditor(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, { backgroundColor: theme.background }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: theme.border }]}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>Editar contrato</Text>
+              <TouchableOpacity onPress={() => setShowEditor(false)} disabled={savingEditor}>
+                <Ionicons name="close" size={24} color={theme.text} />
+              </TouchableOpacity>
+            </View>
+
+            {loadingEditor ? (
+              <View style={{ padding: 48, alignItems: 'center' }}>
+                <ActivityIndicator size="large" color={theme.primary} />
+              </View>
+            ) : (
+              <ScrollView
+                style={{ maxHeight: '78%' }}
+                contentContainerStyle={{ padding: 18 }}
+                keyboardShouldPersistTaps="handled"
+              >
+                <Text style={[styles.modalHint, { color: theme.textSecondary }]}>
+                  Cambia el texto y usa los botones para insertar variables como {'{{renta}}'} o {'{{nombre_completo}}'}.
+                  Al guardar, este contrato se usa solo para {inquilino.nombre_completo}; la plantilla general no cambia.
+                </Text>
+
+                <RichHtmlEditor html={editorHtml} onChange={setEditorHtml} isDark={isDark} theme={theme} />
+
+                {!!editorError && (
+                  <View style={[styles.editorErrorBox, { backgroundColor: theme.danger + '15', borderColor: theme.danger + '30' }]}>
+                    <Ionicons name="alert-circle-outline" size={15} color={theme.danger} />
+                    <Text style={[styles.editorErrorText, { color: theme.danger }]}>{editorError}</Text>
+                  </View>
+                )}
+
+                <TouchableOpacity
+                  style={[styles.editorPreviewBtn, { borderColor: '#0EA5E930', backgroundColor: '#0EA5E915' }]}
+                  onPress={previewEditorPdf}
+                >
+                  <Ionicons name="eye-outline" size={16} color="#0EA5E9" />
+                  <Text style={[styles.editorPreviewText, { color: '#0EA5E9' }]}>Ver PDF con los datos de este inquilino</Text>
+                </TouchableOpacity>
+
+                <View style={styles.editorActions}>
+                  {personalizado && (
+                    <TouchableOpacity
+                      style={[styles.editorBtn, { borderWidth: 1, borderColor: theme.danger + '50' }]}
+                      onPress={restablecerEditor}
+                      disabled={savingEditor}
+                    >
+                      <Text style={{ color: theme.danger, fontWeight: '600' }}>Restablecer</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity
+                    style={[styles.editorBtn, { borderWidth: 1, borderColor: theme.border }]}
+                    onPress={() => setShowEditor(false)}
+                    disabled={savingEditor}
+                  >
+                    <Text style={{ color: theme.text, fontWeight: '600' }}>Cancelar</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.editorBtn, { backgroundColor: '#7C3AED', opacity: savingEditor ? 0.7 : 1 }]}
+                    onPress={guardarEditor}
+                    disabled={savingEditor}
+                  >
+                    {savingEditor
+                      ? <ActivityIndicator size="small" color="#fff" />
+                      : <Text style={{ color: '#fff', fontWeight: '700' }}>Guardar ✓</Text>}
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -313,5 +489,40 @@ const styles = StyleSheet.create({
   },
   printHintText: {
     flex: 1, fontSize: 12, color: '#64748b', lineHeight: 18,
+  },
+
+  editBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    borderWidth: 1, borderColor: '#7C3AED40', backgroundColor: '#7C3AED10',
+    borderRadius: 12, paddingVertical: 13, marginBottom: 12,
+  },
+  editBtnText: { color: '#7C3AED', fontWeight: '700', fontSize: 14 },
+
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalBox: {
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    maxHeight: '94%', paddingBottom: 24,
+    alignSelf: 'center', width: '100%', maxWidth: 640,
+  },
+  modalHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    padding: 18, borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  modalTitle: { fontSize: 18, fontWeight: '800' },
+  modalHint: { fontSize: 13, lineHeight: 19, marginBottom: 14 },
+  editorErrorBox: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    borderWidth: 1, borderRadius: 10, padding: 10, marginTop: 12,
+  },
+  editorErrorText: { flex: 1, fontSize: 12 },
+  editorPreviewBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    borderWidth: 1, borderRadius: 10, paddingVertical: 11, marginTop: 12,
+  },
+  editorPreviewText: { fontWeight: '700', fontSize: 13 },
+  editorActions: { flexDirection: 'row', gap: 10, marginTop: 16 },
+  editorBtn: {
+    flex: 1, alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 13, borderRadius: 12,
   },
 });

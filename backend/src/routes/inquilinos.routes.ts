@@ -3,6 +3,7 @@ import {
   getMiDepto, getInquilinos, getInquilinoById, getContratoPdf, generarTokenPdf,
   createInquilino, updateInquilino, deleteInquilino, vincularUsuario,
   extraerIne,
+  getContratoEditable, guardarContratoInquilino, previewContratoInquilino,
 } from '../controllers/inquilinos.controller';
 import { authMiddleware, adminOnly, pdfAuth } from '../middleware/auth.middleware';
 import { auditLog } from '../middleware/audit.middleware';
@@ -17,6 +18,11 @@ inquilinosRouter.get('/:id/pdf', pdfAuth, adminOnly, getContratoPdf);
 inquilinosRouter.use(authMiddleware);
 
 inquilinosRouter.post('/:id/pdf-token', adminOnly, generarTokenPdf);
+
+// Editor de contrato por inquilino
+inquilinosRouter.get('/:id/contrato-editable', adminOnly, getContratoEditable);
+inquilinosRouter.put('/:id/contrato', adminOnly, auditLog('inquilinos', 'editar'), guardarContratoInquilino);
+inquilinosRouter.post('/:id/contrato-preview', adminOnly, previewContratoInquilino);
 
 // Must be before /:id to avoid being treated as an ID
 inquilinosRouter.get('/mi-depto', getMiDepto);

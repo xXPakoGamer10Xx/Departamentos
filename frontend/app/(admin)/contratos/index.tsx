@@ -55,6 +55,10 @@ export default function ContratosScreen() {
     router.push(`/(admin)/contratos/generar/${item.id}` as any);
   };
 
+  const editarContrato = (item: any) => {
+    router.push(`/(admin)/contratos/generar/${item.id}` as any);
+  };
+
   const filtered = inquilinos.filter(i =>
     i.nombre_completo?.toLowerCase().includes(search.toLowerCase()) ||
     String(i.depto_numero).includes(search)
@@ -153,22 +157,34 @@ export default function ContratosScreen() {
                   </View>
                 </View>
 
-                <TouchableOpacity
-                  style={[styles.generateBtn, { backgroundColor: theme.primary, opacity: isOpening ? 0.7 : 1 }]}
-                  onPress={() => abrirContrato(item)}
-                  disabled={isOpening}
-                >
-                  {isOpening ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <>
-                      <Ionicons name="document-text-outline" size={18} color="#fff" />
-                      <Text style={styles.generateBtnText}>
-                        {Platform.OS === 'web' ? 'Imprimir' : 'Ver PDF'}
-                      </Text>
-                    </>
-                  )}
-                </TouchableOpacity>
+                <View style={styles.cardActions}>
+                  <TouchableOpacity
+                    style={[styles.editBtn, { borderColor: '#7C3AED40', backgroundColor: '#7C3AED12' }]}
+                    onPress={() => editarContrato(item)}
+                  >
+                    <Ionicons
+                      name={item.contrato_html ? 'create' : 'create-outline'}
+                      size={18}
+                      color="#7C3AED"
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.generateBtn, { backgroundColor: theme.primary, opacity: isOpening ? 0.7 : 1 }]}
+                    onPress={() => abrirContrato(item)}
+                    disabled={isOpening}
+                  >
+                    {isOpening ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <>
+                        <Ionicons name="document-text-outline" size={18} color="#fff" />
+                        <Text style={styles.generateBtnText}>
+                          {Platform.OS === 'web' ? 'Imprimir' : 'Ver PDF'}
+                        </Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
               </View>
             </GlassCard>
           );
@@ -224,6 +240,11 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   cardMeta: { fontSize: 13, fontWeight: '500', opacity: 0.85, lineHeight: 18 },
   dot: { fontSize: 12 },
+  cardActions: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0 },
+  editBtn: {
+    width: 42, height: 42, borderRadius: 12, borderWidth: 1,
+    alignItems: 'center', justifyContent: 'center',
+  },
   generateBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12, flexShrink: 0,

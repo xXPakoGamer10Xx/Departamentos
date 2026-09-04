@@ -35,10 +35,10 @@ async function registerDevice() {
 
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('default', {
-        name: 'VertexRent',
+        name: 'NethRent',
         importance: Notifications.AndroidImportance.MAX,
         vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#6366F1',
+        lightColor: '#3B82F6',
       });
     }
 

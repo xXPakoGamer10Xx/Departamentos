@@ -25,7 +25,7 @@ export const GlassCard: React.FC<GlassCardProps> = ({
   border = true,
   padding = Theme.spacing.xl,
   elevated = true,
-  variant = 'default',
+  variant = 'flat',
   minHeight,
 }) => {
   const colorScheme = useColorScheme();
@@ -60,7 +60,10 @@ export const GlassCard: React.FC<GlassCardProps> = ({
   return (
     <View
       style={[
-        elevated && variant !== 'flat' && { borderRadius },
+        // El radio va SIEMPRE en el contenedor externo: si el caller le pasa
+        // un backgroundColor por `style`, sin esto las esquinas cuadradas
+        // asoman por detrás del contenido redondeado.
+        { borderRadius },
         getShadow(),
         minHeight ? { minHeight } : undefined,
         style,

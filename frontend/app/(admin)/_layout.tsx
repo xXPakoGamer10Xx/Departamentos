@@ -15,11 +15,11 @@ import { Sidebar } from '../../components/ui/Sidebar';
 import { TopBar } from '../../components/ui/TopBar';
 
 const DOCK_ITEMS = [
-  { name: 'index',         icon: 'grid',           iconFilled: 'grid',          color: '#5B8DEF' },
+  { name: 'index',         icon: 'grid',           iconFilled: 'grid',          color: '#3B82F6' },
   { name: 'inquilinos',    icon: 'people-outline',  iconFilled: 'people',        color: '#F59E0B' },
   { name: 'tickets',       icon: 'chatbox-ellipses-outline', iconFilled: 'chatbox-ellipses', color: '#EF4444' },
   { name: 'pagos',         icon: 'card-outline',    iconFilled: 'card',          color: '#10B981' },
-  { name: 'scan',          icon: 'qr-code-outline', iconFilled: 'qr-code',       color: '#8B5CF6' },
+  { name: 'scan',          icon: 'qr-code-outline', iconFilled: 'qr-code',       color: '#3B82F6' },
   { name: 'configuracion', icon: 'settings-outline', iconFilled: 'settings',    color: '#6B7280' },
 ];
 
@@ -109,7 +109,7 @@ export default function AdminLayout() {
                     {
                       borderColor: theme.glassBorder,
                       backgroundColor: isDark
-                        ? 'rgba(13,15,24,0.5)'
+                        ? 'rgba(14,19,33,0.55)'
                         : 'rgba(255,255,255,0.7)',
                     }
                   ]}

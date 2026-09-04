@@ -1,6 +1,6 @@
 module.exports = {
   expo: {
-    name: 'VertexRent',
+    name: 'NethRent',
     slug: 'nethrent',
     scheme: 'nethrent',
     version: '1.0.0',
@@ -23,7 +23,7 @@ module.exports = {
       versionCode: 3,
       adaptiveIcon: {
         foregroundImage: './assets/icono.png',
-        backgroundColor: '#007AFF',
+        backgroundColor: '#0E1321',
       },
       edgeToEdgeEnabled: true,
       predictiveBackGestureEnabled: false,
@@ -40,7 +40,7 @@ module.exports = {
         'expo-notifications',
         {
           icon: './assets/icono.png',
-          color: '#007AFF',
+          color: '#3B82F6',
           defaultChannel: 'default',
         },
       ],

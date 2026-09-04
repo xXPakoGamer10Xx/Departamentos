@@ -53,7 +53,7 @@ function TicketCard({ ticket, isDark, theme, onDelete }: { ticket: any; isDark: 
         </View>
         <Text style={[styles.cardDesc, { color: theme.textSecondary }]} numberOfLines={2}>{ticket.descripcion}</Text>
         {ticket.nota_admin ? (
-          <View style={[styles.notaBox, { backgroundColor: isDark ? 'rgba(99,102,241,0.1)' : 'rgba(99,102,241,0.07)', borderColor: theme.primary + '30' }]}>
+          <View style={[styles.notaBox, { backgroundColor: isDark ? 'rgba(59,130,246,0.1)' : 'rgba(59,130,246,0.07)', borderColor: theme.primary + '30' }]}>
             <Ionicons name="chatbubble-outline" size={12} color={theme.primary} />
             <Text style={[styles.notaText, { color: theme.text }]} numberOfLines={2}>{ticket.nota_admin}</Text>
           </View>
@@ -158,7 +158,7 @@ export default function InquilinoTickets() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <LinearGradient colors={isDark ? ['#0D0F18', '#161929'] : ['#F1F5F9', '#E8EDF5']} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={isDark ? ['#0E1321', '#1A1F2E'] : ['#F8FAFC', '#F1F5F9']} style={StyleSheet.absoluteFill} />
 
       <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>

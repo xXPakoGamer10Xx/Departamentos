@@ -187,7 +187,7 @@ export default function InquilinoHome() {
   if (loading) {
     return (
       <View style={[styles.container, styles.center, { backgroundColor: theme.background }]}>
-        <LinearGradient colors={isDark ? ['#0D0F18', '#161929'] : ['#F1F5F9', '#E8EDF5']} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={isDark ? ['#0E1321', '#1A1F2E'] : ['#F8FAFC', '#F1F5F9']} style={StyleSheet.absoluteFill} />
         <ActivityIndicator size="large" color={theme.primary} />
       </View>
     );
@@ -213,16 +213,16 @@ export default function InquilinoHome() {
   );
 
   const renderStatusCard = () => (
-    <View style={[styles.statusCard, { backgroundColor: pago?.confirmado ? (isDark ? 'rgba(52,199,89,0.12)' : '#F0FFF4') : (isDark ? 'rgba(255,255,255,0.05)' : '#fff') }]}>
+    <View style={[styles.statusCard, { backgroundColor: pago?.confirmado ? (isDark ? 'rgba(16,185,129,0.12)' : '#ECFDF5') : (isDark ? 'rgba(255,255,255,0.05)' : '#fff') }]}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
         <Ionicons
           name={pago?.confirmado ? 'checkmark-circle' : 'ellipse-outline'}
           size={28}
-          color={pago?.confirmado ? '#34C759' : theme.textSecondary}
+          color={pago?.confirmado ? '#10B981' : theme.textSecondary}
         />
         <View style={{ flex: 1 }}>
           <Text style={[styles.statusMonth, { color: theme.textSecondary }]}>{getPeriodoLabel()}</Text>
-          <Text style={[styles.statusLabel, { color: pago?.confirmado ? '#34C759' : theme.text }]}>
+          <Text style={[styles.statusLabel, { color: pago?.confirmado ? '#10B981' : theme.text }]}>
             {pago?.confirmado ? '¡Pago confirmado!' : pago ? 'Pago pendiente' : 'Sin registro de pago'}
           </Text>
           {pago?.confirmado && pago.confirmado_en ? (
@@ -276,8 +276,8 @@ export default function InquilinoHome() {
                   </LinearGradient>
                   
                   {comprobantePreview ? (
-                    <View style={[styles.comprobanteBox, { borderColor: '#6366F1' + '40', backgroundColor: isDark ? 'rgba(99,102,241,0.08)' : 'rgba(99,102,241,0.05)' }]}>
-                      <Text style={{ color: '#6366F1', fontWeight: '700', fontSize: 13, marginBottom: 10 }}>Vista previa del comprobante</Text>
+                    <View style={[styles.comprobanteBox, { borderColor: '#3B82F6' + '40', backgroundColor: isDark ? 'rgba(59,130,246,0.08)' : 'rgba(59,130,246,0.05)' }]}>
+                      <Text style={{ color: '#3B82F6', fontWeight: '700', fontSize: 13, marginBottom: 10 }}>Vista previa del comprobante</Text>
                       <Image source={{ uri: comprobantePreview }} style={styles.comprobanteImg} resizeMode="contain" />
                       <View style={{ flexDirection: 'row', gap: 8, marginTop: 10, width: '100%' }}>
                         <TouchableOpacity
@@ -289,7 +289,7 @@ export default function InquilinoHome() {
                           <Text style={[styles.actionBtnText, { color: theme.textSecondary }]}>Cambiar</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
-                          style={[styles.actionBtn, { flex: 1, backgroundColor: '#6366F1', opacity: subiendoComprobante ? 0.7 : 1 }]}
+                          style={[styles.actionBtn, { flex: 1, backgroundColor: '#3B82F6', opacity: subiendoComprobante ? 0.7 : 1 }]}
                           onPress={enviarComprobante}
                           disabled={subiendoComprobante}
                         >
@@ -320,7 +320,7 @@ export default function InquilinoHome() {
                     </View>
                   ) : (
                     <TouchableOpacity
-                      style={[styles.actionBtn, { backgroundColor: '#6366F1', marginTop: 12 }]}
+                      style={[styles.actionBtn, { backgroundColor: '#3B82F6', marginTop: 12 }]}
                       onPress={seleccionarComprobante}
                     >
                       <Ionicons name="cloud-upload-outline" size={18} color="#fff" />
@@ -422,7 +422,7 @@ export default function InquilinoHome() {
     <View style={{ gap: 12 }}>
       {inquilino && (
         <TouchableOpacity
-          style={[styles.reportBtn, { backgroundColor: isDark ? 'rgba(99,102,241,0.1)' : 'rgba(99,102,241,0.07)', borderColor: theme.primary + '30' }]}
+          style={[styles.reportBtn, { backgroundColor: isDark ? 'rgba(59,130,246,0.1)' : 'rgba(59,130,246,0.07)', borderColor: theme.primary + '30' }]}
           onPress={() => router.push('/(inquilino)/pagos' as any)}
         >
           <Ionicons name="receipt-outline" size={18} color={theme.primary} />
@@ -444,7 +444,7 @@ export default function InquilinoHome() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <LinearGradient colors={isDark ? ['#0D0F18', '#161929'] : ['#F1F5F9', '#E8EDF5']} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={isDark ? ['#0E1321', '#1A1F2E'] : ['#F8FAFC', '#F1F5F9']} style={StyleSheet.absoluteFill} />
 
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 16, maxWidth: isWide ? 960 : undefined, alignSelf: isWide ? 'center' : undefined, width: '100%' }]}>

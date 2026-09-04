@@ -70,7 +70,7 @@ export default function InquilinoHistorialPagos() {
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <LinearGradient
-        colors={isDark ? ['#0D0F18', '#161929'] : ['#F1F5F9', '#E8EDF5']}
+        colors={isDark ? ['#0E1321', '#1A1F2E'] : ['#F8FAFC', '#F1F5F9']}
         style={StyleSheet.absoluteFill}
       />
 
@@ -100,7 +100,7 @@ export default function InquilinoHistorialPagos() {
           {/* Resumen */}
           {pagos.length > 0 && (
             <View style={styles.resumenRow}>
-              <View style={[styles.resumenChip, { backgroundColor: isDark ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.1)' }]}>
+              <View style={[styles.resumenChip, { backgroundColor: isDark ? 'rgba(59,130,246,0.15)' : 'rgba(59,130,246,0.1)' }]}>
                 <Ionicons name="checkmark-circle" size={16} color={theme.primary} />
                 <Text style={[styles.resumenNum, { color: theme.primary }]}>{resumen.total}</Text>
                 <Text style={[styles.resumenLabel, { color: theme.textSecondary }]}>pagado{resumen.total !== 1 ? 's' : ''}</Text>
@@ -198,7 +198,7 @@ export default function InquilinoHistorialPagos() {
                     {/* Comprobante */}
                     {pago.comprobante_url && (
                       <TouchableOpacity
-                        style={[styles.comprobanteBtn, { backgroundColor: isDark ? 'rgba(99,102,241,0.12)' : 'rgba(99,102,241,0.08)', borderColor: theme.primary + '30' }]}
+                        style={[styles.comprobanteBtn, { backgroundColor: isDark ? 'rgba(59,130,246,0.12)' : 'rgba(59,130,246,0.08)', borderColor: theme.primary + '30' }]}
                         onPress={() => setComprobanteVisible(pago.comprobante_url)}
                       >
                         <Ionicons name="document-attach-outline" size={14} color={theme.primary} />
@@ -219,7 +219,7 @@ export default function InquilinoHistorialPagos() {
       <Modal visible={!!comprobanteVisible} transparent animationType="fade" onRequestClose={() => setComprobanteVisible(null)}>
         <View style={styles.modalOverlay}>
           <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setComprobanteVisible(null)} />
-          <View style={[styles.modalBox, { backgroundColor: isDark ? '#1E2235' : '#fff' }]}>
+          <View style={[styles.modalBox, { backgroundColor: isDark ? '#232842' : '#fff' }]}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
               <Text style={[styles.modalTitle, { color: theme.text }]}>Comprobante de pago</Text>
               <TouchableOpacity onPress={() => setComprobanteVisible(null)}>

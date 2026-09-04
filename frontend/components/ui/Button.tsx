@@ -141,7 +141,7 @@ export function Button({
         <LinearGradient
           colors={isDark
             ? [theme.primary, theme.primaryDark]
-            : [theme.primary, '#3730A3']
+            : [theme.primary, '#2563EB']
           }
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}

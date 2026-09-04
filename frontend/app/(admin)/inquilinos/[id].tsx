@@ -124,7 +124,7 @@ export default function InquilinoDetailScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <LinearGradient
-        colors={isDark ? ['#0D0F18', '#161929'] : ['#F1F5F9', '#E8EDF5']}
+        colors={isDark ? ['#0E1321', '#1A1F2E'] : ['#F8FAFC', '#F1F5F9']}
         style={StyleSheet.absoluteFill}
       />
 

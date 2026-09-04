@@ -8,7 +8,6 @@ import { Theme } from '../../constants/Theme';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router';
-import { GlassCard } from './GlassCard';
 import api from '../../services/api';
 
 interface NotifItem {
@@ -37,7 +36,7 @@ function buildNotifications(inquilinos: any[], router: any): NotifItem[] {
         items.push({
           id: `term_${inq.id}`,
           icon: 'document-text',
-          iconColor: urgency === 'alta' ? '#FF3B30' : urgency === 'media' ? '#FF9500' : '#34C759',
+          iconColor: urgency === 'alta' ? '#EF4444' : urgency === 'media' ? '#F59E0B' : '#10B981',
           title: diff === 0 ? 'Contrato vence hoy' : `Contrato vence en ${diff} día${diff !== 1 ? 's' : ''}`,
           subtitle: `${inq.nombre_completo} · Depto ${inq.depto_numero}`,
           urgency,
@@ -59,7 +58,7 @@ function buildNotifications(inquilinos: any[], router: any): NotifItem[] {
         items.push({
           id: `pago_${inq.id}`,
           icon: 'cash',
-          iconColor: diff === 0 ? '#FF3B30' : '#007AFF',
+          iconColor: diff === 0 ? '#EF4444' : '#3B82F6',
           title: diff === 0 ? 'Pago de renta hoy' : `Pago de renta en ${diff} día${diff !== 1 ? 's' : ''}`,
           subtitle: `${inq.nombre_completo} · $${Number(inq.renta).toLocaleString()}`,
           urgency: diff === 0 ? 'alta' : 'media',
@@ -82,7 +81,7 @@ function buildNotifications(inquilinos: any[], router: any): NotifItem[] {
           items.push({
             id: `deposito_${inq.id}_${dia}`,
             icon: 'wallet',
-            iconColor: diff === 0 ? '#FF3B30' : '#AF52DE',
+            iconColor: diff === 0 ? '#EF4444' : '#3B82F6',
             title: diff === 0 ? 'Pago de depósito hoy' : `Pago de depósito en ${diff} día${diff !== 1 ? 's' : ''}`,
             subtitle: `${inq.nombre_completo} · Depto ${inq.depto_numero} · Día ${dia}`,
             urgency: diff === 0 ? 'alta' : 'media',
@@ -292,15 +291,13 @@ export function TopBar({ isDark: passedIsDark }: { isDark?: boolean }) {
           onPress={() => setShowNotif(false)}
         >
           <TouchableOpacity activeOpacity={1} onPress={() => {}}>
-            <GlassCard
+            <View
               style={[
                 styles.notifPanel,
-                { backgroundColor: isDark ? 'rgba(20,20,20,0.98)' : 'rgba(255,255,255,0.98)' }
+                { backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1 },
               ]}
-              borderRadius={20}
-              padding={0}
             >
-              <View style={[styles.notifHeader, { borderBottomColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}>
+              <View style={[styles.notifHeader, { borderBottomColor: theme.border }]}>
                 <Text style={[styles.notifTitle, { color: theme.text }]}>Notificaciones</Text>
                 <TouchableOpacity onPress={() => setShowNotif(false)}>
                   <Ionicons name="close" size={22} color={theme.textSecondary} />
@@ -343,7 +340,7 @@ export function TopBar({ isDark: passedIsDark }: { isDark?: boolean }) {
                   )}
                 />
               )}
-            </GlassCard>
+            </View>
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
@@ -463,6 +460,7 @@ const styles = StyleSheet.create({
   notifPanel: {
     width: 380,
     maxHeight: 480,
+    borderRadius: 16,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 12 },

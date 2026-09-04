@@ -14,7 +14,6 @@ import { Ionicons } from '@expo/vector-icons';
 import api from '../../services/api';
 import { useSSEEvent } from '../../hooks/useSSE';
 import { showWebNotification } from '../../services/webNotifications';
-import { GlassCard } from './GlassCard';
 import { Colors } from '../../constants/Colors';
 import { Theme } from '../../constants/Theme';
 
@@ -93,7 +92,7 @@ export function NotificationBell() {
   const getTipoIcon = (tipo: string) => {
     switch (tipo) {
       case 'renta':
-        return { name: 'calendar', color: '#4F46E5' };
+        return { name: 'calendar', color: '#3B82F6' };
       case 'cuota':
         return { name: 'warning', color: '#EF4444' };
       case 'ticket':
@@ -119,7 +118,7 @@ export function NotificationBell() {
         style={[
           styles.item,
           { borderBottomColor: theme.border },
-          !item.leido && { backgroundColor: isDark ? 'rgba(99,102,241,0.08)' : 'rgba(99,102,241,0.04)' },
+          !item.leido && { backgroundColor: isDark ? 'rgba(59,130,246,0.08)' : 'rgba(59,130,246,0.04)' },
         ]}
         onPress={() => !item.leido && handleMarcarUnaLeida(item.id)}
         activeOpacity={0.7}
@@ -132,7 +131,7 @@ export function NotificationBell() {
             <Text style={[styles.itemTitle, { color: theme.text }, !item.leido && styles.boldText]}>
               {item.titulo}
             </Text>
-            {!item.leido && <View style={[styles.dot, { backgroundColor: '#4F46E5' }]} />}
+            {!item.leido && <View style={[styles.dot, { backgroundColor: '#3B82F6' }]} />}
           </View>
           <Text style={[styles.itemMsg, { color: theme.textSecondary }]}>
             {item.mensaje}
@@ -174,12 +173,7 @@ export function NotificationBell() {
           onPress={() => setShowDropdown(false)}
         >
           <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
-            <GlassCard
-              style={styles.dropdownCard}
-              borderRadius={16}
-              padding={0}
-              variant="elevated"
-            >
+            <View style={[styles.dropdownCard, { backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1 }]}>
               <View style={[styles.cardHeader, { borderBottomColor: theme.border }]}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <Ionicons name="notifications" size={18} color={theme.text} />
@@ -187,14 +181,14 @@ export function NotificationBell() {
                 </View>
                 {unreadCount > 0 && (
                   <TouchableOpacity onPress={handleMarcarLeidas}>
-                    <Text style={[styles.markReadBtn, { color: '#4F46E5' }]}>Marcar todo leído</Text>
+                    <Text style={[styles.markReadBtn, { color: '#3B82F6' }]}>Marcar todo leído</Text>
                   </TouchableOpacity>
                 )}
               </View>
 
               {loading && notificaciones.length === 0 ? (
                 <View style={styles.centerBlock}>
-                  <ActivityIndicator size="small" color="#4F46E5" />
+                  <ActivityIndicator size="small" color="#3B82F6" />
                 </View>
               ) : notificaciones.length === 0 ? (
                 <View style={styles.centerBlock}>
@@ -210,7 +204,7 @@ export function NotificationBell() {
                   contentContainerStyle={{ paddingBottom: 16 }}
                 />
               )}
-            </GlassCard>
+            </View>
           </View>
         </TouchableOpacity>
       </Modal>
@@ -266,6 +260,8 @@ const styles = StyleSheet.create({
   dropdownCard: {
     maxHeight: 480,
     width: '100%',
+    borderRadius: 16,
+    overflow: 'hidden',
   },
   cardHeader: {
     flexDirection: 'row',

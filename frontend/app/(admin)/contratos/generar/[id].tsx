@@ -165,7 +165,7 @@ export default function ContractPreviewScreen() {
     return (
       <View style={[styles.container, styles.center, { backgroundColor: theme.background }]}>
         <LinearGradient
-          colors={isDark ? ['#1a1a1a', '#000000'] : ['#F2F2F7', '#E5E5EA']}
+          colors={isDark ? ['#0E1321', '#1A1F2E'] : ['#F8FAFC', '#F1F5F9']}
           style={StyleSheet.absoluteFill}
         />
         <ActivityIndicator size="large" color={theme.primary} />
@@ -177,7 +177,7 @@ export default function ContractPreviewScreen() {
     return (
       <View style={[styles.container, styles.center, { backgroundColor: theme.background }]}>
         <LinearGradient
-          colors={isDark ? ['#1a1a1a', '#000000'] : ['#F2F2F7', '#E5E5EA']}
+          colors={isDark ? ['#0E1321', '#1A1F2E'] : ['#F8FAFC', '#F1F5F9']}
           style={StyleSheet.absoluteFill}
         />
         <Ionicons name="alert-circle-outline" size={48} color={theme.danger} />
@@ -189,7 +189,7 @@ export default function ContractPreviewScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <LinearGradient
-        colors={isDark ? ['#1a1a1a', '#000000'] : ['#F2F2F7', '#E5E5EA']}
+        colors={isDark ? ['#0E1321', '#1A1F2E'] : ['#F8FAFC', '#F1F5F9']}
         style={StyleSheet.absoluteFill}
       />
 
@@ -467,7 +467,7 @@ const styles = StyleSheet.create({
   pageHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   pageLogoBox: {
     width: 40, height: 40, borderRadius: 10,
-    backgroundColor: '#007AFF',
+    backgroundColor: '#3B82F6',
     justifyContent: 'center', alignItems: 'center',
   },
   pageLogoLabel: { fontSize: 14, fontWeight: '900', color: '#0f172a', letterSpacing: -0.3 },

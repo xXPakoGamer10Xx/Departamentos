@@ -11,7 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 
 const DOCK_ITEMS = [
-  { name: 'scan',          icon: 'qr-code-outline',         iconFilled: 'qr-code',          color: '#8B5CF6' },
+  { name: 'scan',          icon: 'qr-code-outline',         iconFilled: 'qr-code',          color: '#3B82F6' },
   { name: 'comprobantes',  icon: 'document-attach-outline',  iconFilled: 'document-attach',   color: '#10B981' },
 ];
 

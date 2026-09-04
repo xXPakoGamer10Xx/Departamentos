@@ -56,7 +56,7 @@ export default function ConfirmarPagoScreen() {
 
       <GlassCard style={[styles.card, isDesktop && styles.cardDesktop]} borderRadius={24} border={true} padding={isDesktop ? 48 : 32}>
         {loading ? (
-          <ActivityIndicator size="large" color="#6366F1" />
+          <ActivityIndicator size="large" color="#3B82F6" />
         ) : error ? (
           <>
             <View style={[styles.iconCircle, { backgroundColor: '#E11D4820' }]}>
@@ -94,8 +94,8 @@ export default function ConfirmarPagoScreen() {
           </>
         ) : (
           <>
-            <View style={[styles.iconCircle, { backgroundColor: '#6366F120' }]}>
-              <Ionicons name="cash-outline" size={48} color="#818CF8" />
+            <View style={[styles.iconCircle, { backgroundColor: '#3B82F620' }]}>
+              <Ionicons name="cash-outline" size={48} color="#3B82F6" />
             </View>
             <Text style={styles.payTitle}>Confirmar pago en efectivo</Text>
 
@@ -169,9 +169,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
-  errorTitle: { color: '#FF3B30', fontSize: 22, fontWeight: '800', textAlign: 'center' },
+  errorTitle: { color: '#EF4444', fontSize: 22, fontWeight: '800', textAlign: 'center' },
   errorSub: { color: 'rgba(255,255,255,0.6)', fontSize: 14, textAlign: 'center' },
-  successTitle: { color: '#34C759', fontSize: 24, fontWeight: '900', textAlign: 'center' },
+  successTitle: { color: '#10B981', fontSize: 24, fontWeight: '900', textAlign: 'center' },
   payTitle: { color: '#fff', fontSize: 20, fontWeight: '800', textAlign: 'center' },
 
   details: { width: '100%', gap: 10, marginTop: 8 },
@@ -197,7 +197,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#34C759',
+    backgroundColor: '#10B981',
     paddingHorizontal: 32,
     paddingVertical: 16,
     borderRadius: 16,

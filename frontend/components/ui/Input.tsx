@@ -37,7 +37,7 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
   };
 
   const getBackgroundColor = () => {
-    if (isDark) return isFocused ? 'rgba(99,102,241,0.06)' : 'rgba(255,255,255,0.04)';
+    if (isDark) return isFocused ? 'rgba(59,130,246,0.06)' : 'rgba(255,255,255,0.04)';
     return isFocused ? '#FAFBFF' : '#FFFFFF';
   };
 

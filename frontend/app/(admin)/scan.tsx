@@ -112,7 +112,7 @@ export default function ScanQRScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <LinearGradient
-        colors={isDark ? ['#0D0F18', '#161929'] : ['#F1F5F9', '#E8EDF5']}
+        colors={isDark ? ['#0E1321', '#1A1F2E'] : ['#F8FAFC', '#F1F5F9']}
         style={StyleSheet.absoluteFill}
       />
 
@@ -140,7 +140,7 @@ export default function ScanQRScreen() {
           Platform.OS === 'web' ? (
             /* En web no hay cámara nativa — mostrar instrucción */
             <View style={[styles.webNotice, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#fff', borderColor: theme.border }]}>
-              <View style={[styles.webNoticeIcon, { backgroundColor: isDark ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.1)' }]}>
+              <View style={[styles.webNoticeIcon, { backgroundColor: isDark ? 'rgba(59,130,246,0.15)' : 'rgba(59,130,246,0.1)' }]}>
                 <Ionicons name="phone-portrait-outline" size={40} color={theme.primary} />
               </View>
               <Text style={[styles.webNoticeTitle, { color: theme.text }]}>
@@ -150,7 +150,7 @@ export default function ScanQRScreen() {
                 Abre la app en tu celular y ve a la pestaña Escanear para aceptar el pago en efectivo con la cámara.
               </Text>
 
-              <View style={[styles.webNoticeTip, { backgroundColor: isDark ? 'rgba(99,102,241,0.08)' : 'rgba(99,102,241,0.06)', borderColor: theme.primary + '30' }]}>
+              <View style={[styles.webNoticeTip, { backgroundColor: isDark ? 'rgba(59,130,246,0.08)' : 'rgba(59,130,246,0.06)', borderColor: theme.primary + '30' }]}>
                 <Ionicons name="information-circle-outline" size={14} color={theme.primary} />
                 <Text style={[styles.webNoticeTipText, { color: theme.textSecondary }]}>
                   ¿Sin cámara? Pide al inquilino el código de su QR e ingrésalo aquí abajo.
@@ -237,7 +237,7 @@ export default function ScanQRScreen() {
         {/* ── CONFIRMAR ── */}
         {stage === 'confirm' && pago && (
           <View style={[styles.resultCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#fff', borderColor: theme.border }]}>
-            <View style={[styles.resultIcon, { backgroundColor: isDark ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.1)' }]}>
+            <View style={[styles.resultIcon, { backgroundColor: isDark ? 'rgba(59,130,246,0.15)' : 'rgba(59,130,246,0.1)' }]}>
               <Ionicons name="cash-outline" size={36} color={theme.primary} />
             </View>
             <Text style={[styles.resultTitle, { color: theme.text }]}>Pago pendiente</Text>
@@ -293,30 +293,30 @@ export default function ScanQRScreen() {
 
         {/* ── DONE ── */}
         {stage === 'done' && (
-          <View style={[styles.resultCard, { backgroundColor: isDark ? 'rgba(52,199,89,0.08)' : '#F0FFF4', borderColor: '#34C75940' }]}>
-            <View style={[styles.resultIcon, { backgroundColor: 'rgba(52,199,89,0.15)' }]}>
-              <Ionicons name="checkmark-circle" size={48} color="#34C759" />
+          <View style={[styles.resultCard, { backgroundColor: isDark ? 'rgba(16,185,129,0.08)' : '#ECFDF5', borderColor: '#10B98140' }]}>
+            <View style={[styles.resultIcon, { backgroundColor: 'rgba(16,185,129,0.15)' }]}>
+              <Ionicons name="checkmark-circle" size={48} color="#10B981" />
             </View>
-            <Text style={[styles.resultTitle, { color: '#34C759' }]}>¡Pago confirmado!</Text>
+            <Text style={[styles.resultTitle, { color: '#10B981' }]}>¡Pago confirmado!</Text>
             {pago && (
-              <View style={[styles.resultDetails, { borderColor: '#34C75930' }]}>
+              <View style={[styles.resultDetails, { borderColor: '#10B98130' }]}>
                 <View style={styles.resultRow}>
-                  <Ionicons name="person-outline" size={16} color="#34C759" />
-                  <Text style={[styles.resultLabel, { color: '#34C759' }]}>Inquilino</Text>
-                  <Text style={[styles.resultValue, { color: '#34C759' }]}>{pago.nombre_completo}</Text>
+                  <Ionicons name="person-outline" size={16} color="#10B981" />
+                  <Text style={[styles.resultLabel, { color: '#10B981' }]}>Inquilino</Text>
+                  <Text style={[styles.resultValue, { color: '#10B981' }]}>{pago.nombre_completo}</Text>
                 </View>
                 <View style={styles.resultRow}>
-                  <Ionicons name="home-outline" size={16} color="#34C759" />
-                  <Text style={[styles.resultLabel, { color: '#34C759' }]}>Departamento</Text>
-                  <Text style={[styles.resultValue, { color: '#34C759' }]}>Depto {pago.depto_numero}</Text>
+                  <Ionicons name="home-outline" size={16} color="#10B981" />
+                  <Text style={[styles.resultLabel, { color: '#10B981' }]}>Departamento</Text>
+                  <Text style={[styles.resultValue, { color: '#10B981' }]}>Depto {pago.depto_numero}</Text>
                 </View>
                 <View style={[styles.resultRow, styles.resultRowAmount]}>
-                  <Text style={[styles.amountLabel, { color: '#34C75990' }]}>Total</Text>
-                  <Text style={[styles.amountValue, { color: '#34C759' }]}>{fmtRenta(pago.monto || pago.renta || 0)}</Text>
+                  <Text style={[styles.amountLabel, { color: '#10B98190' }]}>Total</Text>
+                  <Text style={[styles.amountValue, { color: '#10B981' }]}>{fmtRenta(pago.monto || pago.renta || 0)}</Text>
                 </View>
               </View>
             )}
-            <TouchableOpacity style={[styles.confirmBtn, { backgroundColor: '#34C759' }]} onPress={reset}>
+            <TouchableOpacity style={[styles.confirmBtn, { backgroundColor: '#10B981' }]} onPress={reset}>
               <Ionicons name="qr-code-outline" size={18} color="#fff" />
               <Text style={styles.confirmBtnText}>Escanear otro QR</Text>
             </TouchableOpacity>
@@ -411,7 +411,7 @@ const styles = StyleSheet.create({
   amountValue: { fontSize: 22, fontWeight: '900' },
   confirmBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 8, height: 52, borderRadius: 16, width: '100%', backgroundColor: '#34C759',
+    gap: 8, height: 52, borderRadius: 16, width: '100%', backgroundColor: '#10B981',
   },
   confirmBtnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
   cancelBtn: { paddingVertical: 8 },

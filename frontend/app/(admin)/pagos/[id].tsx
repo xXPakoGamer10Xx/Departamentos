@@ -619,7 +619,7 @@ export default function PagoDetalleScreen() {
   if (loading) {
     return (
       <View style={[styles.container, styles.center, { backgroundColor: theme.background }]}>
-        <LinearGradient colors={isDark ? ['#0D0F18', '#161929'] : ['#F1F5F9', '#E8EDF5']} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={isDark ? ['#0E1321', '#1A1F2E'] : ['#F8FAFC', '#F1F5F9']} style={StyleSheet.absoluteFill} />
         <ActivityIndicator size="large" color={theme.primary} />
       </View>
     );
@@ -628,7 +628,7 @@ export default function PagoDetalleScreen() {
   if (!inquilino) {
     return (
       <View style={[styles.container, styles.center, { backgroundColor: theme.background }]}>
-        <LinearGradient colors={isDark ? ['#0D0F18', '#161929'] : ['#F1F5F9', '#E8EDF5']} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={isDark ? ['#0E1321', '#1A1F2E'] : ['#F8FAFC', '#F1F5F9']} style={StyleSheet.absoluteFill} />
         <Ionicons name="alert-circle-outline" size={48} color={theme.danger} />
         <Text style={{ color: theme.textSecondary, marginTop: 12 }}>Inquilino no encontrado</Text>
       </View>
@@ -644,7 +644,7 @@ export default function PagoDetalleScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <LinearGradient colors={isDark ? ['#0D0F18', '#161929'] : ['#F1F5F9', '#E8EDF5']} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={isDark ? ['#0E1321', '#1A1F2E'] : ['#F8FAFC', '#F1F5F9']} style={StyleSheet.absoluteFill} />
 
       {/* Header */}
       <View style={[styles.header, isDesktop && styles.headerDesktop, !isDesktop && { paddingTop: insets.top + 20 }]}>
@@ -697,7 +697,7 @@ export default function PagoDetalleScreen() {
 
           {pago?.confirmado && (
             <View style={styles.pagadoBadge}>
-              <Ionicons name="checkmark-circle" size={16} color="#34C759" />
+              <Ionicons name="checkmark-circle" size={16} color="#10B981" />
               <Text style={styles.pagadoText}>Pagado</Text>
             </View>
           )}
@@ -737,7 +737,7 @@ export default function PagoDetalleScreen() {
                     <Text style={[styles.sectionLabel, { color: theme.textSecondary, marginBottom: 0 }]}>¿Cuándo dijo que paga?</Text>
                   </View>
                   <TouchableOpacity
-                    style={[styles.calendarioBtn, { borderColor: theme.primary + '50', backgroundColor: isDark ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.08)' }]}
+                    style={[styles.calendarioBtn, { borderColor: theme.primary + '50', backgroundColor: isDark ? 'rgba(59,130,246,0.15)' : 'rgba(59,130,246,0.08)' }]}
                     onPress={abrirSelectorFecha}
                   >
                     <Ionicons name="calendar" size={13} color={theme.primary} />
@@ -897,7 +897,7 @@ export default function PagoDetalleScreen() {
 
                 {/* Vista previa en texto claro */}
                 {getPromesaPreview() ? (
-                  <View style={[styles.promesaPreviewBadge, { backgroundColor: isDark ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.08)', borderColor: theme.primary + '30' }]}>
+                  <View style={[styles.promesaPreviewBadge, { backgroundColor: isDark ? 'rgba(59,130,246,0.15)' : 'rgba(59,130,246,0.08)', borderColor: theme.primary + '30' }]}>
                     <Ionicons name="calendar" size={13} color={theme.primary} />
                     <Text style={{ color: theme.primary, fontSize: 12, fontWeight: '700', flex: 1 }}>
                       {getPromesaPreview()}
@@ -928,7 +928,7 @@ export default function PagoDetalleScreen() {
               <Text style={styles.confirmBtnText}>Registrar abono</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.confirmBtn, { flex: 1, marginTop: 0, backgroundColor: '#34C759', opacity: marcandoPagado ? 0.7 : 1 }]}
+              style={[styles.confirmBtn, { flex: 1, marginTop: 0, backgroundColor: '#10B981', opacity: marcandoPagado ? 0.7 : 1 }]}
               onPress={marcarPagadoManual}
               disabled={marcandoPagado}
             >
@@ -983,10 +983,10 @@ export default function PagoDetalleScreen() {
 
             {/* Comprobante del inquilino */}
             {pago?.comprobante_url && (
-              <View style={[styles.comprobanteCard, { backgroundColor: isDark ? 'rgba(99,102,241,0.1)' : 'rgba(99,102,241,0.06)', borderColor: '#6366F140' }]}>
+              <View style={[styles.comprobanteCard, { backgroundColor: isDark ? 'rgba(59,130,246,0.1)' : 'rgba(59,130,246,0.06)', borderColor: '#3B82F640' }]}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                  <Ionicons name="document-attach" size={16} color="#6366F1" />
-                  <Text style={{ color: '#6366F1', fontWeight: '700', fontSize: 13 }}>
+                  <Ionicons name="document-attach" size={16} color="#3B82F6" />
+                  <Text style={{ color: '#3B82F6', fontWeight: '700', fontSize: 13 }}>
                     Comprobante enviado por inquilino
                   </Text>
                   {pago.comprobante_subido_en && (
@@ -1013,7 +1013,7 @@ export default function PagoDetalleScreen() {
                       <Text style={styles.confirmBtnText}>Rechazar</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={[styles.confirmBtn, { flex: 2, marginTop: 0, backgroundColor: '#34C759', opacity: confirmando || rechazando ? 0.7 : 1 }]}
+                      style={[styles.confirmBtn, { flex: 2, marginTop: 0, backgroundColor: '#10B981', opacity: confirmando || rechazando ? 0.7 : 1 }]}
                       onPress={confirmarDirecto}
                       disabled={confirmando || rechazando}
                     >
@@ -1028,7 +1028,7 @@ export default function PagoDetalleScreen() {
                   </View>
                 ) : (
                   <TouchableOpacity
-                    style={[styles.confirmBtn, { backgroundColor: isDark ? 'rgba(52,199,89,0.3)' : '#34C75960', opacity: confirmando ? 0.7 : 1 }]}
+                    style={[styles.confirmBtn, { backgroundColor: isDark ? 'rgba(16,185,129,0.3)' : '#10B98160', opacity: confirmando ? 0.7 : 1 }]}
                     onPress={confirmarDirecto}
                     disabled={confirmando}
                   >
@@ -1065,7 +1065,7 @@ export default function PagoDetalleScreen() {
             <View style={[styles.qrCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#fff' }]}>
               {pago?.confirmado ? (
                 <View style={styles.qrConfirmado}>
-                  <Ionicons name="checkmark-circle" size={64} color="#34C759" />
+                  <Ionicons name="checkmark-circle" size={64} color="#10B981" />
                   <Text style={[styles.qrConfirmadoText, { color: theme.text }]}>¡Pago confirmado!</Text>
                   <Text style={[styles.qrConfirmadoSub, { color: theme.textSecondary }]}>
                     {pago.confirmado_en
@@ -1094,15 +1094,15 @@ export default function PagoDetalleScreen() {
                   )}
 
                   <TouchableOpacity
-                    style={[styles.confirmBtn, { backgroundColor: isDark ? 'rgba(52,199,89,0.3)' : '#34C75960', opacity: confirmando ? 0.7 : 1, marginTop: usaQrInquilinos ? 10 : 0 }]}
+                    style={[styles.confirmBtn, { backgroundColor: isDark ? 'rgba(16,185,129,0.3)' : '#10B98160', opacity: confirmando ? 0.7 : 1, marginTop: usaQrInquilinos ? 10 : 0 }]}
                     onPress={confirmarDirecto}
                     disabled={confirmando}
                   >
                     {confirmando
-                      ? <ActivityIndicator color={isDark ? '#34C759' : '#15803D'} size="small" />
-                      : <Ionicons name="checkmark-circle-outline" size={20} color={isDark ? '#34C759' : '#15803D'} />
+                      ? <ActivityIndicator color={isDark ? '#10B981' : '#15803D'} size="small" />
+                      : <Ionicons name="checkmark-circle-outline" size={20} color={isDark ? '#10B981' : '#15803D'} />
                     }
-                    <Text style={[styles.confirmBtnText, { color: isDark ? '#34C759' : '#15803D' }]}>
+                    <Text style={[styles.confirmBtnText, { color: isDark ? '#10B981' : '#15803D' }]}>
                       {confirmando ? 'Confirmando…' : usaQrInquilinos ? 'Marcar como pagado (Manual)' : 'Marcar como pagado'}
                     </Text>
                   </TouchableOpacity>
@@ -1127,7 +1127,7 @@ export default function PagoDetalleScreen() {
             <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Historial de abonos</Text>
             {abonos.map(a => (
               <View key={a.id} style={[styles.cuotaRow, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)', borderColor: theme.border }]}>
-                <Ionicons name="cash-outline" size={14} color="#34C759" />
+                <Ionicons name="cash-outline" size={14} color="#10B981" />
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.cuotaConcepto, { color: theme.text }]}>
                     {fmtRenta(a.monto)} · {new Date(a.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
@@ -1185,15 +1185,15 @@ export default function PagoDetalleScreen() {
                   <Text style={[styles.noCuotas, { color: theme.textSecondary }]}>Sin cargos adicionales este mes</Text>
                 ) : (
                   cuotas.map(c => c.estado === 'pagado' ? (
-                    <View key={c.id} style={[styles.cuotaRow, { backgroundColor: isDark ? 'rgba(52,199,89,0.08)' : 'rgba(52,199,89,0.06)', borderColor: '#34C75930' }]}>
-                      <Ionicons name="checkmark-circle" size={14} color="#34C759" />
+                    <View key={c.id} style={[styles.cuotaRow, { backgroundColor: isDark ? 'rgba(16,185,129,0.08)' : 'rgba(16,185,129,0.06)', borderColor: '#10B98130' }]}>
+                      <Ionicons name="checkmark-circle" size={14} color="#10B981" />
                       <View style={{ flex: 1 }}>
                         <Text style={[styles.cuotaConcepto, { color: theme.text }]} numberOfLines={1}>{c.concepto}</Text>
                         <Text style={{ color: theme.textSecondary, fontSize: 11, marginTop: 2 }}>
                           Pagado{c.pagado_en ? ` · ${new Date(c.pagado_en).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}` : ''}
                         </Text>
                       </View>
-                      <Text style={[styles.cuotaMonto, { color: '#34C759' }]}>+{fmtRenta(c.monto)}</Text>
+                      <Text style={[styles.cuotaMonto, { color: '#10B981' }]}>+{fmtRenta(c.monto)}</Text>
                     </View>
                   ) : (
                     <View key={c.id} style={[styles.cuotaRow, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)', borderColor: theme.border }]}>
@@ -1202,8 +1202,8 @@ export default function PagoDetalleScreen() {
                       <Text style={[styles.cuotaMonto, { color: '#EF4444' }]}>+{fmtRenta(c.monto)}</Text>
                       <TouchableOpacity onPress={() => pagarCuotaHandler(c.id)} disabled={pagandoCuotaId === c.id} accessibilityLabel="Marcar cargo como pagado">
                         {pagandoCuotaId === c.id
-                          ? <ActivityIndicator size="small" color="#34C759" />
-                          : <Ionicons name="checkmark-circle-outline" size={18} color="#34C759" />
+                          ? <ActivityIndicator size="small" color="#10B981" />
+                          : <Ionicons name="checkmark-circle-outline" size={18} color="#10B981" />
                         }
                       </TouchableOpacity>
                       <TouchableOpacity onPress={() => removeCuota(c.id)}>
@@ -1293,7 +1293,7 @@ export default function PagoDetalleScreen() {
                       )}
                       {p.comprobante_url && (
                         <TouchableOpacity
-                          style={[styles.verComprobanteBtn, { borderColor: theme.primary + '40', backgroundColor: isDark ? 'rgba(99,102,241,0.1)' : 'rgba(99,102,241,0.07)' }]}
+                          style={[styles.verComprobanteBtn, { borderColor: theme.primary + '40', backgroundColor: isDark ? 'rgba(59,130,246,0.1)' : 'rgba(59,130,246,0.07)' }]}
                           onPress={() => setComprobanteModal(p.comprobante_url)}
                         >
                           <Ionicons name="document-attach-outline" size={13} color={theme.primary} />
@@ -1342,7 +1342,7 @@ export default function PagoDetalleScreen() {
           {showPromesasHistorial && promesasHistorial.length > 0 && (
             <View style={{ gap: 6, marginTop: 12 }}>
               {promesasHistorial.map((pr: any) => {
-                const badgeColor = pr.estado_cumplimiento === 'cumplida' ? '#34C759' : pr.estado_cumplimiento === 'incumplida' ? '#EF4444' : '#F59E0B';
+                const badgeColor = pr.estado_cumplimiento === 'cumplida' ? '#10B981' : pr.estado_cumplimiento === 'incumplida' ? '#EF4444' : '#F59E0B';
                 const badgeLabel = pr.estado_cumplimiento === 'cumplida' ? 'Cumplió' : pr.estado_cumplimiento === 'incumplida' ? 'No cumplió' : 'Pendiente';
                 const periodoLabel = (() => {
                   const [a, m] = String(pr.periodo).split('-');
@@ -1389,15 +1389,15 @@ export default function PagoDetalleScreen() {
               <Ionicons name="lock-closed-outline" size={18} color={theme.primary} />
               <Text style={[styles.historialToggleText, { color: theme.primary }]}>Depósito</Text>
               <View style={[styles.pagadoBadge, {
-                backgroundColor: depositoSaldo.deposito_saldo > 0 ? '#F59E0B20' : '#34C75920',
+                backgroundColor: depositoSaldo.deposito_saldo > 0 ? '#F59E0B20' : '#10B98120',
                 marginLeft: 'auto', marginRight: 8,
               }]}>
                 <Ionicons
                   name={depositoSaldo.deposito_saldo > 0 ? 'time' : 'checkmark-circle'}
                   size={14}
-                  color={depositoSaldo.deposito_saldo > 0 ? '#F59E0B' : '#34C759'}
+                  color={depositoSaldo.deposito_saldo > 0 ? '#F59E0B' : '#10B981'}
                 />
-                <Text style={[styles.pagadoText, { color: depositoSaldo.deposito_saldo > 0 ? '#F59E0B' : '#34C759' }]}>
+                <Text style={[styles.pagadoText, { color: depositoSaldo.deposito_saldo > 0 ? '#F59E0B' : '#10B981' }]}>
                   {depositoSaldo.deposito_saldo > 0 ? `Falta ${fmtRenta(depositoSaldo.deposito_saldo)}` : 'Pagado completo'}
                 </Text>
               </View>
@@ -1420,7 +1420,7 @@ export default function PagoDetalleScreen() {
                       <Text style={[styles.montoLabel, { color: theme.textSecondary }]}>DEPÓSITO</Text>
                       <Text style={[styles.montoAmount, { color: theme.text, fontSize: 30 }]}>{fmtRenta(depositoSaldo.deposito_total)}</Text>
                       <View style={styles.pagadoBadge}>
-                        <Ionicons name="checkmark-circle" size={16} color="#34C759" />
+                        <Ionicons name="checkmark-circle" size={16} color="#10B981" />
                         <Text style={styles.pagadoText}>Pagado</Text>
                       </View>
                     </>
@@ -1442,7 +1442,7 @@ export default function PagoDetalleScreen() {
                     <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Historial de abonos al depósito</Text>
                     {depositoAbonos.map(a => (
                       <View key={a.id} style={[styles.cuotaRow, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)', borderColor: theme.border }]}>
-                        <Ionicons name="cash-outline" size={14} color="#34C759" />
+                        <Ionicons name="cash-outline" size={14} color="#10B981" />
                         <View style={{ flex: 1 }}>
                           <Text style={[styles.cuotaConcepto, { color: theme.text }]}>
                             {fmtRenta(a.monto)} · {new Date(a.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
@@ -1472,7 +1472,7 @@ export default function PagoDetalleScreen() {
       {/* Modal rechazar pago */}
       <Modal visible={showRechazarModal} transparent animationType="fade" onRequestClose={() => setShowRechazarModal(false)}>
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalBox, { backgroundColor: isDark ? '#1E2235' : '#fff' }]}>
+          <View style={[styles.modalBox, { backgroundColor: isDark ? '#232842' : '#fff' }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6 }}>
               <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: '#EF444420', justifyContent: 'center', alignItems: 'center' }}>
                 <Ionicons name="close-circle" size={20} color="#EF4444" />
@@ -1519,7 +1519,7 @@ export default function PagoDetalleScreen() {
       <Modal visible={!!comprobanteModal} transparent animationType="fade" onRequestClose={() => setComprobanteModal(null)}>
         <View style={styles.comprobanteOverlay}>
           <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setComprobanteModal(null)} />
-          <View style={[styles.comprobanteModalBox, { backgroundColor: isDark ? '#1E2235' : '#fff' }]}>
+          <View style={[styles.comprobanteModalBox, { backgroundColor: isDark ? '#232842' : '#fff' }]}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
               <Text style={[styles.comprobanteModalTitle, { color: theme.text }]}>Comprobante de pago</Text>
               <TouchableOpacity onPress={() => setComprobanteModal(null)}>
@@ -1536,7 +1536,7 @@ export default function PagoDetalleScreen() {
       {/* Modal agregar cuota */}
       <Modal visible={showCuota} transparent animationType="fade" onRequestClose={() => setShowCuota(false)}>
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalBox, { backgroundColor: isDark ? '#1E2235' : '#fff' }]}>
+          <View style={[styles.modalBox, { backgroundColor: isDark ? '#232842' : '#fff' }]}>
             <Text style={[styles.modalTitle, { color: theme.text }]}>Agregar cargo extra</Text>
             <Text style={[styles.modalLabel, { color: theme.textSecondary }]}>Concepto</Text>
             <TextInput
@@ -1574,7 +1574,7 @@ export default function PagoDetalleScreen() {
       {/* Modal registrar/editar abono */}
       <Modal visible={showAbonoModal} transparent animationType="fade" onRequestClose={() => setShowAbonoModal(false)}>
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalBox, { backgroundColor: isDark ? '#1E2235' : '#fff' }]}>
+          <View style={[styles.modalBox, { backgroundColor: isDark ? '#232842' : '#fff' }]}>
             <Text style={[styles.modalTitle, { color: theme.text }]}>
               {editingAbonoId ? 'Editar abono' : 'Registrar abono'}
             </Text>
@@ -1623,7 +1623,7 @@ export default function PagoDetalleScreen() {
       {/* Modal registrar/editar abono a depósito */}
       <Modal visible={showDepositoModal} transparent animationType="fade" onRequestClose={() => setShowDepositoModal(false)}>
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalBox, { backgroundColor: isDark ? '#1E2235' : '#fff' }]}>
+          <View style={[styles.modalBox, { backgroundColor: isDark ? '#232842' : '#fff' }]}>
             <Text style={[styles.modalTitle, { color: theme.text }]}>
               {editingDepositoAbonoId ? 'Editar abono a depósito' : 'Registrar abono a depósito'}
             </Text>
@@ -1733,12 +1733,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     marginTop: 8,
-    backgroundColor: '#34C75920',
+    backgroundColor: '#10B98120',
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 20,
   },
-  pagadoText: { color: '#34C759', fontWeight: '700', fontSize: 14 },
+  pagadoText: { color: '#10B981', fontWeight: '700', fontSize: 14 },
   rechazoRazon: {
     flexDirection: 'row',
     alignItems: 'flex-start',

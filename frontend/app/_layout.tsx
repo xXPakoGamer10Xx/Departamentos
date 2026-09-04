@@ -2,11 +2,26 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState } from 'react';
-import { useColorScheme } from 'react-native';
+import { useColorScheme, Appearance } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Colors } from '../constants/Colors';
 import api from '../services/api';
 import { hydrateStorage, getItem, setItem, removeItem } from '../services/storage';
+
+// ── Esquema de color estable ─────────────────────────────────────────────────
+// En RN-web `useColorScheme()` puede devolver valores distintos entre
+// componentes si el SO cambia en caliente (shell oscuro + cards claras).
+// Leemos la preferencia del sistema UNA vez al arranque y la fijamos para toda
+// la sesión: todos los componentes resuelven el mismo esquema. Para cambiar de
+// modo claro/oscuro se ajusta el SO y se recarga la app.
+const _systemDark =
+  typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    ? window.matchMedia('(prefers-color-scheme: dark)').matches
+    : Appearance.getColorScheme() === 'dark';
+const _lockedScheme: 'light' | 'dark' = _systemDark ? 'dark' : 'light';
+Appearance.getColorScheme = () => _lockedScheme;
+// @ts-ignore — congelamos el listener para que no haya flips inconsistentes
+Appearance.addChangeListener = () => ({ remove: () => {} });
 
 SplashScreen.preventAutoHideAsync();
 

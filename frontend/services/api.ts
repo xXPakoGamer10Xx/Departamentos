@@ -340,6 +340,9 @@ class ApiService {
   getReporteAnual = (year: number) =>
     this.request<{ year: number; renta_total: number; extra_total: number; deposito_total: number; total_general: number }>('GET', '/reportes/anual', undefined, { year: String(year) });
 
+  getReporteMensual = (year: number) =>
+    this.request<{ year: number; meses: { mes: number; renta: number; extra: number }[] }>('GET', '/reportes/mensual', undefined, { year: String(year) });
+
   // Invite codes
   generarCodigoInvitacion = (rol: string, expira_dias: number | null) =>
     this.request<any>('POST', '/invite-codes', { rol, expira_dias });

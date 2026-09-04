@@ -19,10 +19,10 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { name: 'index', label: 'Dashboard', icon: 'grid', activeColor: '#5B8DEF' },
+  { name: 'index', label: 'Dashboard', icon: 'grid', activeColor: '#3B82F6' },
   { name: 'inquilinos', label: 'Inquilinos', icon: 'people', activeColor: '#F59E0B' },
   { name: 'departamentos', label: 'Departamentos', icon: 'business', activeColor: '#10B981' },
-  { name: 'contratos', label: 'Contratos', icon: 'document-text', activeColor: '#8B5CF6' },
+  { name: 'contratos', label: 'Contratos', icon: 'document-text', activeColor: '#3B82F6' },
   { name: 'pagos', label: 'Pagos', icon: 'card', activeColor: '#3B82F6' },
   { name: 'tickets', label: 'Tickets', icon: 'chatbox-ellipses', activeColor: '#EF4444' },
   { name: 'configuracion', label: 'Configuración', icon: 'settings', activeColor: '#6B7280' },
@@ -62,7 +62,7 @@ export function Sidebar({ isDark: passedIsDark }: { isDark?: boolean }) {
       styles.container,
       {
         borderRightColor: theme.border,
-        backgroundColor: isDark ? 'rgba(13, 15, 24, 0.98)' : 'rgba(255, 255, 255, 0.97)',
+        backgroundColor: isDark ? 'rgba(14, 19, 33, 0.98)' : 'rgba(255, 255, 255, 0.97)',
         shadowColor: '#000',
         shadowOpacity: isDark ? 0.5 : 0.08,
         shadowRadius: 24,
@@ -79,7 +79,7 @@ export function Sidebar({ isDark: passedIsDark }: { isDark?: boolean }) {
       {/* Logo header */}
       <View style={styles.header}>
         <LinearGradient
-          colors={['#6366F1', '#4F46E5']}
+          colors={['#10B981', '#3B82F6']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.logo}
@@ -87,8 +87,8 @@ export function Sidebar({ isDark: passedIsDark }: { isDark?: boolean }) {
           <Ionicons name="home" size={18} color="#fff" />
         </LinearGradient>
         <View>
-          <Text style={[styles.brand, { color: theme.text }]}>VertexRent</Text>
-          <Text style={[styles.brandSub, { color: theme.textMuted }]}>Gestión de renta</Text>
+          <Text style={[styles.brand, { color: theme.text }]}>NethRent</Text>
+          <Text style={[styles.brandSub, { color: theme.textMuted }]}>Executive Suite</Text>
         </View>
       </View>
 

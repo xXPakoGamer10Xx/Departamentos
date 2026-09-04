@@ -1,17 +1,16 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import {
   StyleSheet, View, Text, FlatList, TouchableOpacity,
-  useColorScheme, Platform, useWindowDimensions, ActivityIndicator, Modal,
+  useColorScheme, useWindowDimensions, ActivityIndicator, Modal, TextInput, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../../../constants/Colors';
 import { Theme } from '../../../constants/Theme';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { GlassCard } from '../../../components/ui/GlassCard';
+import { SurfaceCard } from '../../../components/ui/SurfaceCard';
 import { Badge } from '../../../components/ui/Badge';
 import { Button } from '../../../components/ui/Button';
-import { Input } from '../../../components/ui/Input';
 import { LinearGradient } from 'expo-linear-gradient';
 import api from '../../../services/api';
 
@@ -34,8 +33,7 @@ export default function InquilinosListScreen() {
   const [eliminando, setEliminando] = useState(false);
   const [deleteError, setDeleteError] = useState('');
   const router = useRouter();
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const isDark = useColorScheme() === 'dark';
   const theme = isDark ? Colors.dark : Colors.light;
   const { width } = useWindowDimensions();
   const isDesktop = width >= Theme.breakpoints.tablet;
@@ -77,198 +75,307 @@ export default function InquilinosListScreen() {
 
   const filtered = inquilinos.filter(i =>
     i.nombre_completo?.toLowerCase().includes(search.toLowerCase()) ||
-    String(i.depto_numero).includes(search)
+    String(i.depto_numero).includes(search) ||
+    (i.tel_arrendatario || i.telefono || '').includes(search)
   );
+
+  const metrics = useMemo(() => {
+    const n = inquilinos.length;
+    const avg = n > 0 ? inquilinos.reduce((a, c) => a + Number(c.renta || 0), 0) / n : 0;
+    const porVencer = inquilinos.filter(i => {
+      if (!i.fecha_termino) return false;
+      const d = (new Date(i.fecha_termino).getTime() - Date.now()) / 86400000;
+      return d >= 0 && d <= 30;
+    }).length;
+    return { n, avg, porVencer };
+  }, [inquilinos]);
+
+  const fmtMoney = (v: number | string) =>
+    '$' + Number(v).toLocaleString('es-MX', { maximumFractionDigits: 0 });
+
+  const initials = (nombre: string) =>
+    nombre?.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase() || '??';
+
+  const piso = (num: string | number) => {
+    const n = Number(num);
+    return Number.isFinite(n) && n >= 100 ? `Piso ${Math.floor(n / 100)}` : '';
+  };
+
+  const vencimiento = (fecha?: string) => {
+    if (!fecha) return null;
+    const dias = Math.ceil((new Date(fecha).getTime() - Date.now()) / 86400000);
+    if (dias < 0) return { label: 'Contrato vencido', variant: 'danger' as const, muted: 'Contrato vencido', expired: true };
+    if (dias <= 30) return { label: `Vence en ${dias}d`, variant: 'warning' as const, muted: `Vence en ${dias} días`, expired: false };
+    const meses = Math.round(dias / 30);
+    return { label: null, variant: 'success' as const, muted: `Vence en ${meses} mes${meses !== 1 ? 'es' : ''}`, expired: false };
+  };
+
+  const estadoChip = (item: Inquilino, venc: ReturnType<typeof vencimiento>) => {
+    if (item.estado !== 'activo') return { label: 'Archivado', variant: 'danger' as const };
+    if (venc?.expired) return { label: 'Contrato vencido', variant: 'danger' as const };
+    return { label: 'Al corriente', variant: 'success' as const };
+  };
 
   const paddingBottom = isDesktop ? 40 : insets.bottom + Theme.layout.dockHeight;
 
-  if (loading) {
+  /* ---------------- Header (métricas + filtros) ---------------- */
+  const listHeader = (
+    <View style={[styles.header, isDesktop && styles.headerDesktop]}>
+      {isDesktop && (
+        <View style={styles.breadcrumb}>
+          <Text style={[styles.crumb, { color: theme.textSecondary }]}>Dashboard</Text>
+          <Ionicons name="chevron-forward" size={13} color={theme.textMuted} />
+          <Text style={[styles.crumb, { color: theme.text }]}>Inquilinos</Text>
+        </View>
+      )}
+
+      <View style={[styles.headerTop, !isDesktop && { paddingTop: insets.top + 20 }]}>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.title, { color: theme.text }]}>Inquilinos</Text>
+          <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+            {metrics.n} {filtroEstado === 'activo' ? (metrics.n === 1 ? 'activo' : 'activos') : (metrics.n === 1 ? 'archivado' : 'archivados')}
+            {filtroEstado === 'activo' && metrics.porVencer > 0 ? ` · ${metrics.porVencer} por vencer` : ''}
+          </Text>
+        </View>
+        {filtroEstado === 'activo' && (
+          <TouchableOpacity
+            style={[styles.newBtn, { backgroundColor: theme.primary, shadowColor: theme.primary }]}
+            onPress={() => router.push('/(admin)/inquilinos/nuevo')}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="add" size={18} color="#fff" />
+            {isDesktop && <Text style={styles.newBtnText}>Nuevo Inquilino</Text>}
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Métricas */}
+      <View style={styles.metricsRow}>
+        <SurfaceCard style={styles.metricCard} padding={Theme.spacing.md}>
+          <Text style={[styles.metricLabel, { color: theme.textMuted }]}>
+            {filtroEstado === 'activo' ? 'INQUILINOS ACTIVOS' : 'ARCHIVADOS'}
+          </Text>
+          <Text style={[styles.metricValue, { color: theme.text }]}>{metrics.n}</Text>
+        </SurfaceCard>
+        <SurfaceCard style={styles.metricCard} padding={Theme.spacing.md}>
+          <Text style={[styles.metricLabel, { color: theme.textMuted }]}>PROMEDIO DE RENTA</Text>
+          <Text style={[styles.metricValue, { color: theme.text }]}>{fmtMoney(metrics.avg)} <Text style={styles.metricUnit}>MXN</Text></Text>
+        </SurfaceCard>
+        {isDesktop && (
+          <SurfaceCard style={styles.metricCard} padding={Theme.spacing.md}>
+            <Text style={[styles.metricLabel, { color: theme.textMuted }]}>CONTRATOS POR VENCER</Text>
+            <Text style={[styles.metricValue, { color: metrics.porVencer > 0 ? theme.warning : theme.text }]}>{metrics.porVencer}</Text>
+          </SurfaceCard>
+        )}
+      </View>
+
+      {/* Filtros + búsqueda */}
+      <SurfaceCard style={styles.filterBar} padding={6}>
+        <View style={styles.tabRow}>
+          {(['activo', 'inactivo'] as const).map(t => {
+            const active = filtroEstado === t;
+            return (
+              <TouchableOpacity
+                key={t}
+                style={[styles.tab, active && { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.06)' }]}
+                onPress={() => setFiltroEstado(t)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.tabText, { color: active ? theme.text : theme.textSecondary }]}>
+                  {t === 'activo' ? 'Activos' : 'Archivados'}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        <View style={[styles.searchBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#fff', borderColor: theme.border }]}>
+          <Ionicons name="search" size={15} color={theme.textMuted} />
+          <TextInput
+            placeholder="Buscar por nombre, teléfono o depto..."
+            placeholderTextColor={theme.textMuted}
+            value={search}
+            onChangeText={setSearch}
+            style={[styles.searchInput, { color: theme.text }, Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : null]}
+          />
+          {search.length > 0 && (
+            <TouchableOpacity onPress={() => setSearch('')}>
+              <Ionicons name="close-circle" size={15} color={theme.textMuted} />
+            </TouchableOpacity>
+          )}
+        </View>
+      </SurfaceCard>
+
+      {/* Cabecera de tabla (solo desktop) */}
+      {isDesktop && filtered.length > 0 && (
+        <View style={[styles.tableHead, { borderColor: theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(15,23,42,0.02)' }]}>
+          <Text style={[styles.th, { flex: 4, color: theme.textMuted }]}>INQUILINO</Text>
+          <Text style={[styles.th, { flex: 2, color: theme.textMuted }]}>UNIDAD</Text>
+          <Text style={[styles.th, { flex: 2, color: theme.textMuted }]}>RENTA</Text>
+          <Text style={[styles.th, { flex: 3, color: theme.textMuted }]}>ESTADO</Text>
+          <Text style={[styles.th, { width: 96, textAlign: 'right', color: theme.textMuted }]}>ACCIONES</Text>
+        </View>
+      )}
+    </View>
+  );
+
+  if (loading && inquilinos.length === 0) {
     return (
       <View style={[styles.container, styles.center, { backgroundColor: theme.background }]}>
-        <LinearGradient colors={isDark ? ['#0D0F18', '#161929'] : ['#F1F5F9', '#E8EDF5']} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={isDark ? ['#0E1321', '#1A1F2E'] : ['#F8FAFC', '#F1F5F9']} style={StyleSheet.absoluteFill} />
         <ActivityIndicator size="large" color={theme.primary} />
         <Text style={[styles.loadingText, { color: theme.textMuted }]}>Cargando inquilinos...</Text>
       </View>
     );
   }
 
-  return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <LinearGradient
-        colors={isDark ? ['#0D0F18', '#161929'] : ['#F1F5F9', '#E8EDF5']}
-        style={StyleSheet.absoluteFill}
-      />
-
-      {/* Header */}
-      <View style={[
-        styles.header,
-        isDesktop ? styles.headerDesktop : { paddingTop: insets.top + 20 },
-      ]}>
-        <View style={styles.headerTop}>
-          <View>
-            <Text style={[styles.title, { color: theme.text }]}>Inquilinos</Text>
-            <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-              {inquilinos.length} {filtroEstado === 'activo'
-                ? (inquilinos.length === 1 ? 'activo' : 'activos')
-                : (inquilinos.length === 1 ? 'archivado' : 'archivados')}
-            </Text>
+  /* ---------------- Fila desktop (tabla) ---------------- */
+  const renderTableRow = (item: Inquilino, index: number) => {
+    const venc = vencimiento(item.fecha_termino);
+    const activo = item.estado === 'activo';
+    return (
+      <View
+        key={String(item.id)}
+        style={[styles.tr, { borderColor: theme.border }, index === filtered.length - 1 && { borderBottomWidth: 0 }]}
+      >
+        <TouchableOpacity
+          style={[styles.tdInquilino, { flex: 4 }]}
+          onPress={() => router.push(`/(admin)/inquilinos/${item.id}` as any)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.avatarWrap}>
+            <View style={[styles.avatar, { backgroundColor: theme.primaryLight, borderColor: theme.primary + '40' }]}>
+              <Text style={[styles.avatarText, { color: theme.primary }]}>{initials(item.nombre_completo)}</Text>
+            </View>
+            <View style={[styles.statusDot, { backgroundColor: activo ? theme.success : theme.textMuted, borderColor: theme.card }]} />
           </View>
-          {filtroEstado === 'activo' && (
-            <TouchableOpacity
-              style={[styles.addButton, { backgroundColor: theme.primary, shadowColor: theme.primary }]}
-              onPress={() => router.push('/(admin)/inquilinos/nuevo')}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="add" size={22} color="#fff" />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={[styles.rowName, { color: theme.text }]} numberOfLines={1}>{item.nombre_completo}</Text>
+            {(item.tel_arrendatario || item.telefono) ? (
+              <Text style={[styles.rowMeta, { color: theme.textSecondary }]} numberOfLines={1}>{item.tel_arrendatario || item.telefono}</Text>
+            ) : null}
+          </View>
+        </TouchableOpacity>
+
+        <View style={{ flex: 2 }}>
+          <Text style={[styles.rowUnidad, { color: theme.text }]}>Depto {item.depto_numero}</Text>
+          {piso(item.depto_numero) ? <Text style={[styles.rowMeta, { color: theme.textSecondary }]}>{piso(item.depto_numero)}</Text> : null}
+        </View>
+
+        <View style={{ flex: 2 }}>
+          <Text style={[styles.rowRenta, { color: theme.text }]}>{fmtMoney(item.renta)} <Text style={styles.rowMetaInline}>MXN</Text></Text>
+          {item.fecha_pago ? (
+            <Text style={[styles.rowMeta, { color: theme.textSecondary }]}>Día {String(item.fecha_pago).match(/(\d+)/)?.[1] || item.fecha_pago}</Text>
+          ) : null}
+        </View>
+
+        <View style={{ flex: 3, gap: 4, alignItems: 'flex-start' }}>
+          {(() => { const c = estadoChip(item, venc); return <Badge label={c.label} variant={c.variant} size="sm" />; })()}
+          {venc && !venc.expired && <Text style={[styles.rowMeta, { color: venc.variant === 'warning' ? theme.warning : theme.textSecondary }]}>{venc.muted}</Text>}
+        </View>
+
+        <View style={[styles.tdActions, { width: 96 }]}>
+          <TouchableOpacity style={styles.iconBtn} onPress={() => router.push(`/(admin)/inquilinos/${item.id}` as any)}>
+            <Ionicons name="eye-outline" size={17} color={theme.textSecondary} />
+          </TouchableOpacity>
+          {activo ? (
+            <>
+              <TouchableOpacity style={styles.iconBtn} onPress={() => router.push({ pathname: '/(admin)/inquilinos/nuevo', params: { editId: item.id } } as any)}>
+                <Ionicons name="pencil-outline" size={16} color={theme.textSecondary} />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.iconBtn} onPress={() => { setDeleteError(''); setConfirmItem(item); }}>
+                <Ionicons name="person-remove-outline" size={16} color={theme.danger} />
+              </TouchableOpacity>
+            </>
+          ) : (
+            <TouchableOpacity style={styles.iconBtn} onPress={() => router.push({ pathname: '/(admin)/inquilinos/nuevo', params: { fromId: item.id } } as any)}>
+              <Ionicons name="add-circle-outline" size={17} color={theme.primary} />
             </TouchableOpacity>
           )}
         </View>
-
-        {/* Tabs Activos / Archivados */}
-        <View style={styles.tabRow}>
-          <TouchableOpacity
-            style={[styles.tab, filtroEstado === 'activo' && { backgroundColor: theme.primary }]}
-            onPress={() => setFiltroEstado('activo')}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="people" size={14} color={filtroEstado === 'activo' ? '#fff' : theme.textSecondary} />
-            <Text style={[styles.tabText, { color: filtroEstado === 'activo' ? '#fff' : theme.textSecondary }]}>
-              Activos
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, filtroEstado === 'inactivo' && { backgroundColor: theme.primary }]}
-            onPress={() => setFiltroEstado('inactivo')}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="archive" size={14} color={filtroEstado === 'inactivo' ? '#fff' : theme.textSecondary} />
-            <Text style={[styles.tabText, { color: filtroEstado === 'inactivo' ? '#fff' : theme.textSecondary }]}>
-              Archivados
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <Input
-          icon="search-outline"
-          placeholder="Buscar por nombre o departamento..."
-          value={search}
-          onChangeText={setSearch}
-          style={{ marginBottom: 0 } as any}
-        />
       </View>
+    );
+  };
+
+  /* ---------------- Card móvil ---------------- */
+  const renderMobileCard = (item: Inquilino) => {
+    const venc = vencimiento(item.fecha_termino);
+    const activo = item.estado === 'activo';
+    return (
+      <SurfaceCard key={String(item.id)} style={styles.mCard} padding={0}>
+        <TouchableOpacity style={styles.mCardBody} onPress={() => router.push(`/(admin)/inquilinos/${item.id}` as any)} activeOpacity={0.75}>
+          <View style={styles.avatarWrap}>
+            <View style={[styles.avatar, { backgroundColor: theme.primaryLight, borderColor: theme.primary + '40' }]}>
+              <Text style={[styles.avatarText, { color: theme.primary }]}>{initials(item.nombre_completo)}</Text>
+            </View>
+            <View style={[styles.statusDot, { backgroundColor: activo ? theme.success : theme.textMuted, borderColor: theme.card }]} />
+          </View>
+          <View style={{ flex: 1, minWidth: 0, gap: 5 }}>
+            <Text style={[styles.rowName, { color: theme.text }]} numberOfLines={1}>{item.nombre_completo}</Text>
+            <View style={styles.mBadges}>
+              <Badge label={`Depto ${item.depto_numero}`} variant="primary" size="sm" />
+              <Text style={[styles.rowRenta, { color: theme.text }]}>{fmtMoney(item.renta)} MXN</Text>
+            </View>
+            <View style={styles.mBadges}>
+              {(() => { const c = estadoChip(item, venc); return <Badge label={c.label} variant={c.variant} size="sm" />; })()}
+              {venc?.label && !venc.expired && <Badge label={venc.label} variant={venc.variant} size="sm" />}
+            </View>
+          </View>
+        </TouchableOpacity>
+        <View style={[styles.mActions, { borderTopColor: theme.border }]}>
+          {activo ? (
+            <>
+              <TouchableOpacity style={styles.mActionBtn} onPress={() => router.push({ pathname: '/(admin)/inquilinos/nuevo', params: { editId: item.id } } as any)}>
+                <Ionicons name="pencil-outline" size={15} color={theme.textSecondary} />
+                <Text style={[styles.mActionText, { color: theme.textSecondary }]}>Editar</Text>
+              </TouchableOpacity>
+              <View style={[styles.mActionDivider, { backgroundColor: theme.border }]} />
+              <TouchableOpacity style={styles.mActionBtn} onPress={() => { setDeleteError(''); setConfirmItem(item); }}>
+                <Ionicons name="person-remove-outline" size={15} color={theme.danger} />
+                <Text style={[styles.mActionText, { color: theme.danger }]}>Dar de baja</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <TouchableOpacity style={styles.mActionBtn} onPress={() => router.push({ pathname: '/(admin)/inquilinos/nuevo', params: { fromId: item.id } } as any)}>
+              <Ionicons name="add-circle-outline" size={15} color={theme.primary} />
+              <Text style={[styles.mActionText, { color: theme.primary }]}>Nuevo contrato</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </SurfaceCard>
+    );
+  };
+
+  return (
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <LinearGradient colors={isDark ? ['#0E1321', '#1A1F2E'] : ['#F8FAFC', '#F1F5F9']} style={StyleSheet.absoluteFill} />
 
       <FlatList
-        data={filtered}
+        data={isDesktop ? [] : filtered}
         keyExtractor={item => String(item.id)}
-        contentContainerStyle={[
-          styles.listContainer,
-          isDesktop && styles.listContainerDesktop,
-          { paddingBottom },
-        ]}
-        columnWrapperStyle={isDesktop ? styles.columnWrapper : undefined}
-        showsVerticalScrollIndicator={false}
-        numColumns={isDesktop ? 2 : 1}
-        key={isDesktop ? 'desktop' : 'mobile'}
-        ListEmptyComponent={
-          <GlassCard style={styles.emptyCard} padding={Theme.spacing.xxxl}>
-            <View style={styles.emptyContent}>
-              <View style={[styles.emptyIcon, { backgroundColor: theme.surface }]}>
-                <Ionicons name="people-outline" size={32} color={theme.textMuted} />
+        ListHeaderComponent={
+          <>
+            {listHeader}
+            {isDesktop && (
+              <View style={[styles.tableWrap, styles.headerDesktop]}>
+                <SurfaceCard style={{ overflow: 'hidden' }} padding={0}>
+                  {filtered.length === 0
+                    ? <EmptyState theme={theme} search={search} filtroEstado={filtroEstado} />
+                    : filtered.map((item, i) => renderTableRow(item, i))}
+                </SurfaceCard>
               </View>
-              <Text style={[styles.emptyTitle, { color: theme.text }]}>
-                {search ? 'Sin resultados' : filtroEstado === 'inactivo' ? 'Sin archivados' : 'No hay inquilinos'}
-              </Text>
-              <Text style={[styles.emptySub, { color: theme.textSecondary }]}>
-                {search
-                  ? `No se encontró "${search}"`
-                  : filtroEstado === 'inactivo'
-                    ? 'Aquí aparecerán los inquilinos dados de baja'
-                    : 'Agrega el primer inquilino con el botón +'}
-              </Text>
-            </View>
-          </GlassCard>
+            )}
+          </>
         }
-        renderItem={({ item }) => (
-          <GlassCard
-            style={[styles.card, isDesktop && styles.cardDesktop]}
-            borderRadius={Theme.borderRadius.lg}
-            padding={0}
-          >
-            <View style={styles.cardRow}>
-              {/* Contenido principal */}
-              <TouchableOpacity
-                style={[styles.cardContent, isDesktop && styles.cardContentDesktop]}
-                onPress={() => router.push(`/(admin)/inquilinos/${item.id}` as any)}
-                activeOpacity={0.75}
-              >
-                <View style={[styles.avatar, { backgroundColor: theme.primaryLight }]}>
-                  <Text style={[styles.avatarText, { color: theme.primary }]}>
-                    {item.nombre_completo?.split(' ').slice(0, 2).map((w: string) => w[0]).join('').toUpperCase() || '??'}
-                  </Text>
-                </View>
-                <View style={styles.cardInfo}>
-                  <Text style={[styles.cardName, { color: theme.text }]} numberOfLines={1}>
-                    {item.nombre_completo}
-                  </Text>
-                  <View style={styles.deptoRow}>
-                    <Ionicons name="business-outline" size={12} color={theme.textMuted} />
-                    <Text style={[styles.cardDepto, { color: theme.textSecondary }]}>
-                      Depto {item.depto_numero}
-                    </Text>
-                  </View>
-                  <View style={styles.rentaRow}>
-                    <Text style={[styles.cardRenta, { color: theme.text }]}>
-                      ${Number(item.renta).toLocaleString()}
-                    </Text>
-                    <Badge
-                      label={item.estado === 'activo' ? 'Activo' : 'Inactivo'}
-                      variant={item.estado === 'activo' ? 'success' : 'danger'}
-                      size="sm"
-                    />
-                  </View>
-                </View>
-              </TouchableOpacity>
-
-              {/* Acciones */}
-              <View style={[styles.actions, { borderLeftColor: theme.border }]}>
-                {filtroEstado === 'activo' ? (
-                  <>
-                    <TouchableOpacity
-                      style={styles.actionBtn}
-                      onPress={() => router.push({ pathname: '/(admin)/inquilinos/nuevo', params: { editId: item.id } } as any)}
-                      activeOpacity={0.7}
-                    >
-                      <Ionicons name="pencil-outline" size={17} color={theme.primary} />
-                    </TouchableOpacity>
-                    <View style={[styles.actionDivider, { backgroundColor: theme.border }]} />
-                    <TouchableOpacity
-                      style={styles.actionBtn}
-                      onPress={() => { setDeleteError(''); setConfirmItem(item); }}
-                      activeOpacity={0.7}
-                    >
-                      <Ionicons name="person-remove-outline" size={17} color={theme.danger} />
-                    </TouchableOpacity>
-                  </>
-                ) : (
-                  <TouchableOpacity
-                    style={[styles.actionBtn, styles.nuevoContratoBtn]}
-                    onPress={() => router.push({ pathname: '/(admin)/inquilinos/nuevo', params: { fromId: item.id } } as any)}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons name="add-circle-outline" size={15} color={theme.primary} />
-                    <Text style={[styles.nuevoContratoBtnText, { color: theme.primary }]}>Nuevo{'\n'}contrato</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
-          </GlassCard>
-        )}
+        renderItem={isDesktop ? undefined : ({ item }) => renderMobileCard(item)}
+        contentContainerStyle={[styles.listContent, { paddingBottom }]}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={isDesktop ? null : <EmptyState theme={theme} search={search} filtroEstado={filtroEstado} />}
       />
 
-      {/* Modal confirmación dar de baja */}
+      {/* Modal dar de baja */}
       <Modal visible={!!confirmItem} transparent animationType="fade" onRequestClose={() => setConfirmItem(null)}>
         <View style={styles.modalOverlay}>
-          <GlassCard style={styles.confirmBox} borderRadius={Theme.borderRadius.xxl} variant="elevated">
+          <SurfaceCard style={styles.confirmBox} borderRadius={Theme.borderRadius.xxl}>
             <View style={[styles.confirmIconWrap, { backgroundColor: theme.dangerLight }]}>
               <Ionicons name="person-remove" size={26} color={theme.danger} />
             </View>
@@ -290,24 +397,28 @@ export default function InquilinosListScreen() {
             ) : null}
 
             <View style={styles.confirmActions}>
-              <Button
-                title="Cancelar"
-                variant="outline"
-                onPress={() => { setConfirmItem(null); setDeleteError(''); }}
-                disabled={eliminando}
-                style={{ flex: 1 }}
-              />
-              <Button
-                title="Dar de baja"
-                variant="danger"
-                loading={eliminando}
-                onPress={confirmarDarDeBaja}
-                style={{ flex: 1 }}
-              />
+              <Button title="Cancelar" variant="outline" onPress={() => { setConfirmItem(null); setDeleteError(''); }} disabled={eliminando} style={{ flex: 1 }} />
+              <Button title="Dar de baja" variant="danger" loading={eliminando} onPress={confirmarDarDeBaja} style={{ flex: 1 }} />
             </View>
-          </GlassCard>
+          </SurfaceCard>
         </View>
       </Modal>
+    </View>
+  );
+}
+
+function EmptyState({ theme, search, filtroEstado }: { theme: any; search: string; filtroEstado: string }) {
+  return (
+    <View style={styles.emptyContent}>
+      <View style={[styles.emptyIcon, { backgroundColor: theme.surface }]}>
+        <Ionicons name="people-outline" size={30} color={theme.textMuted} />
+      </View>
+      <Text style={[styles.emptyTitle, { color: theme.text }]}>
+        {search ? 'Sin resultados' : filtroEstado === 'inactivo' ? 'Sin archivados' : 'No hay inquilinos'}
+      </Text>
+      <Text style={[styles.emptySub, { color: theme.textSecondary }]}>
+        {search ? `No se encontró "${search}"` : filtroEstado === 'inactivo' ? 'Aquí aparecerán los inquilinos dados de baja' : 'Agrega el primer inquilino con el botón +'}
+      </Text>
     </View>
   );
 }
@@ -316,155 +427,81 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   center: { justifyContent: 'center', alignItems: 'center', gap: 12 },
   loadingText: { fontSize: 14, fontWeight: '500' },
-  header: {
-    paddingHorizontal: Theme.spacing.lg,
-    paddingBottom: Theme.spacing.md,
-    gap: Theme.spacing.md,
+
+  listContent: { paddingBottom: 40 },
+  header: { paddingHorizontal: Theme.spacing.lg, paddingTop: Theme.spacing.md, gap: Theme.spacing.md },
+  headerDesktop: { maxWidth: Theme.layout.maxWidth, alignSelf: 'center', width: '100%', paddingHorizontal: 40 },
+  breadcrumb: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 24 },
+  crumb: { fontSize: 12, fontWeight: '600' },
+  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12 },
+  title: { fontSize: 28, fontWeight: '800', letterSpacing: -0.8 },
+  subtitle: { fontSize: 13, fontWeight: '500', marginTop: 2 },
+  newBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 7,
+    height: 40, paddingHorizontal: 14, borderRadius: Theme.borderRadius.md,
+    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 4,
   },
-  headerDesktop: {
-    paddingTop: 40,
-    paddingHorizontal: 40,
-    maxWidth: Theme.layout.maxWidth,
-    alignSelf: 'center',
-    width: '100%',
-  },
-  headerTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '800',
-    letterSpacing: -0.8,
-  },
-  subtitle: {
-    fontSize: 13,
-    fontWeight: '500',
-    marginTop: 2,
-  },
-  addButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  listContainer: {
-    paddingHorizontal: Theme.spacing.lg,
-    paddingTop: Theme.spacing.md,
-    gap: Theme.spacing.md,
-  },
-  listContainerDesktop: {
-    maxWidth: Theme.layout.maxWidth,
-    alignSelf: 'center',
-    width: '100%',
-    paddingHorizontal: 40,
-    gap: 16,
-  },
-  columnWrapper: { gap: 16 },
-  card: { flex: 1 },
-  cardDesktop: {},
-  cardRow: { flexDirection: 'row', alignItems: 'stretch' },
-  cardContent: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: Theme.spacing.md,
-    gap: 12,
-  },
-  cardContentDesktop: { padding: 20 },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexShrink: 0,
-  },
-  avatarText: { fontWeight: '800', fontSize: 15 },
-  cardInfo: { flex: 1, gap: 3, minWidth: 0 },
-  cardName: { fontSize: 15, fontWeight: '700', letterSpacing: -0.2 },
-  deptoRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  cardDepto: { fontSize: 12, fontWeight: '500' },
-  rentaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
-  cardRenta: { fontSize: 14, fontWeight: '800' },
-  tabRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  tab: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: 'transparent',
-  },
+  newBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+
+  metricsRow: { flexDirection: 'row', gap: 12, flexWrap: 'wrap' },
+  metricCard: { flex: 1, minWidth: 140, justifyContent: 'space-between', minHeight: 84 },
+  metricLabel: { fontSize: 10.5, fontWeight: '700', letterSpacing: 0.6, marginBottom: 8 },
+  metricValue: { fontSize: 24, fontWeight: '800', letterSpacing: -0.8 },
+  metricUnit: { fontSize: 13, fontWeight: '600' },
+
+  filterBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' },
+  tabRow: { flexDirection: 'row', gap: 4 },
+  tab: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: Theme.borderRadius.sm },
   tabText: { fontSize: 13, fontWeight: '600' },
-  actions: {
-    flexDirection: 'column',
-    borderLeftWidth: StyleSheet.hairlineWidth,
-    width: 52,
-    flexShrink: 0,
+  searchBox: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, minWidth: 200, maxWidth: 340,
+    height: 36, paddingHorizontal: 10, borderRadius: Theme.borderRadius.sm, borderWidth: 1,
   },
-  actionBtn: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  actionDivider: { height: StyleSheet.hairlineWidth },
-  nuevoContratoBtn: { flexDirection: 'column', gap: 2, paddingHorizontal: 4 },
-  nuevoContratoBtnText: { fontSize: 10, fontWeight: '700', textAlign: 'center', lineHeight: 13 },
-  // Empty
-  emptyCard: {},
-  emptyContent: { alignItems: 'center', gap: 12 },
-  emptyIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
+  searchInput: { flex: 1, fontSize: 13, height: '100%' },
+
+  tableWrap: { paddingHorizontal: Theme.spacing.lg, marginTop: 4 },
+  tableHead: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingHorizontal: 16, paddingVertical: 10,
+    borderWidth: 1, borderBottomWidth: 0,
+    borderTopLeftRadius: Theme.borderRadius.lg, borderTopRightRadius: Theme.borderRadius.lg,
   },
-  emptyTitle: { fontSize: 17, fontWeight: '700' },
-  emptySub: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
-  // Modal
-  modalOverlay: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.65)',
-    padding: 24,
-  },
-  confirmBox: {
-    width: '100%',
-    maxWidth: 400,
-    padding: 28,
-    alignItems: 'center',
-    gap: 14,
-  },
-  confirmIconWrap: {
-    width: 60,
-    height: 60,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  th: { fontSize: 10, fontWeight: '700', letterSpacing: 0.6 },
+
+  tr: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
+  tdInquilino: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  avatarWrap: { position: 'relative' },
+  avatar: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', borderWidth: 1 },
+  avatarText: { fontWeight: '800', fontSize: 13 },
+  statusDot: { position: 'absolute', bottom: 0, right: 0, width: 11, height: 11, borderRadius: 6, borderWidth: 2 },
+  rowName: { fontSize: 14, fontWeight: '600', letterSpacing: -0.2 },
+  rowMeta: { fontSize: 11.5, marginTop: 2 },
+  rowMetaInline: { fontSize: 11, fontWeight: '500' },
+  rowUnidad: { fontSize: 13, fontWeight: '600' },
+  rowRenta: { fontSize: 13, fontWeight: '700' },
+  tdActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 2 },
+  iconBtn: { width: 30, height: 30, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+
+  mCard: { overflow: 'hidden', marginHorizontal: Theme.spacing.lg, marginTop: Theme.spacing.md },
+  mCardBody: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
+  mBadges: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
+  mActions: { flexDirection: 'row', borderTopWidth: 1 },
+  mActionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 11 },
+  mActionText: { fontSize: 12, fontWeight: '600' },
+  mActionDivider: { width: 1 },
+
+  emptyContent: { alignItems: 'center', gap: 10, paddingVertical: 48, paddingHorizontal: 24 },
+  emptyIcon: { width: 60, height: 60, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
+  emptyTitle: { fontSize: 16, fontWeight: '700' },
+  emptySub: { fontSize: 13, textAlign: 'center', lineHeight: 19 },
+
+  modalOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.65)', padding: 24 },
+  confirmBox: { width: '100%', maxWidth: 400, padding: 28, alignItems: 'center', gap: 14 },
+  confirmIconWrap: { width: 60, height: 60, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
   confirmTitle: { fontSize: 20, fontWeight: '800', letterSpacing: -0.3 },
   confirmMsg: { fontSize: 15, textAlign: 'center', lineHeight: 22 },
   confirmNote: { fontSize: 12, textAlign: 'center', lineHeight: 18, opacity: 0.7, marginTop: -6 },
   confirmActions: { flexDirection: 'row', gap: 12, width: '100%' },
-  errorBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    padding: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    width: '100%',
-  },
+  errorBox: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, borderRadius: 10, borderWidth: 1, width: '100%' },
   errorText: { flex: 1, fontSize: 13, fontWeight: '600' },
 });

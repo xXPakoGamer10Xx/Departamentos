@@ -79,12 +79,12 @@ export default function RegisterScreen() {
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={isDark ? ['#0D0F18', '#161929', '#1E2235'] : ['#EEF2FF', '#F1F5F9', '#E8EDF5']}
+        colors={isDark ? ['#0E1321', '#1A1F2E', '#232842'] : ['#F8FAFC', '#F1F5F9', '#E2E8F0']}
         locations={[0, 0.5, 1]}
         style={StyleSheet.absoluteFill}
       />
-      <View style={[styles.orb1, { backgroundColor: isDark ? 'rgba(99,102,241,0.12)' : 'rgba(99,102,241,0.08)' }]} />
-      <View style={[styles.orb2, { backgroundColor: isDark ? 'rgba(139,92,246,0.08)' : 'rgba(139,92,246,0.06)' }]} />
+      <View style={[styles.orb1, { backgroundColor: isDark ? 'rgba(59,130,246,0.14)' : 'rgba(59,130,246,0.08)' }]} />
+      <View style={[styles.orb2, { backgroundColor: isDark ? 'rgba(16,185,129,0.10)' : 'rgba(16,185,129,0.06)' }]} />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -99,7 +99,7 @@ export default function RegisterScreen() {
         >
           <GlassCard intensity={isDark ? 25 : 60} borderRadius={Theme.borderRadius.xxl} style={styles.card} padding={0} variant="elevated" border>
             <LinearGradient
-              colors={['#4F46E5', '#6366F1', '#818CF8']}
+              colors={['#10B981', '#3B82F6']}
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
               style={styles.cardTop}
             >
@@ -107,7 +107,7 @@ export default function RegisterScreen() {
                 <Ionicons name="person-add" size={26} color="#fff" />
               </View>
               <Text style={styles.cardTopTitle}>Crear cuenta</Text>
-              <Text style={styles.cardTopSub}>VertexRent</Text>
+              <Text style={styles.cardTopSub}>NethRent</Text>
             </LinearGradient>
 
             <View style={styles.form}>
@@ -205,7 +205,7 @@ export default function RegisterScreen() {
           </GlassCard>
 
           <Text style={[styles.footer, { color: theme.textMuted }]}>
-            VertexRent
+            NethRent
           </Text>
         </ScrollView>
       </KeyboardAvoidingView>

@@ -5,13 +5,13 @@ module.exports = {
     scheme: 'nethrent',
     version: '1.0.0',
     orientation: 'portrait',
-    icon: './assets/icono.png',
+    icon: './assets/icon.png',
     userInterfaceStyle: 'automatic',
     newArchEnabled: false,
     splash: {
-      image: './assets/icono.png',
+      image: './assets/adaptive-icon.png',
       resizeMode: 'contain',
-      backgroundColor: '#ffffff',
+      backgroundColor: '#0E1321',
     },
     ios: {
       supportsTablet: true,
@@ -22,7 +22,7 @@ module.exports = {
       googleServicesFile: './google-services.json',
       versionCode: 3,
       adaptiveIcon: {
-        foregroundImage: './assets/icono.png',
+        foregroundImage: './assets/adaptive-icon.png',
         backgroundColor: '#0E1321',
       },
       edgeToEdgeEnabled: true,
@@ -39,19 +39,19 @@ module.exports = {
       [
         'expo-notifications',
         {
-          icon: './assets/icono.png',
-          color: '#3B82F6',
+          icon: './assets/notification-icon.png',
+          color: '#2563EB',
           defaultChannel: 'default',
         },
       ],
       [
         'expo-splash-screen',
         {
-          backgroundColor: '#ffffff',
-          image: './assets/icono.png',
+          backgroundColor: '#0E1321',
+          image: './assets/adaptive-icon.png',
           dark: {
-            backgroundColor: '#000000',
-            image: './assets/icono.png',
+            backgroundColor: '#0E1321',
+            image: './assets/adaptive-icon.png',
           },
           imageWidth: 200,
         },

@@ -7,11 +7,12 @@ import { Colors } from '../../../constants/Colors';
 import { Theme } from '../../../constants/Theme';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSSEEvent } from '../../../hooks/useSSE';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SurfaceCard } from '../../../components/ui/SurfaceCard';
 import { Badge } from '../../../components/ui/Badge';
+import { confirmar } from '../../../utils/confirm';
 import api from '../../../services/api';
 
 type RowState = 'pagado' | 'revision' | 'atrasado' | 'pendiente';
@@ -88,12 +89,47 @@ export default function PagosScreen() {
     if (!usaQr && (tab === 'revision')) setTab('todos');
   }, [usaQr, tab]);
 
-  const marcarPagado = useCallback(async (inquilinoId: string) => {
+  // Barra "Deshacer" temporal tras marcar un pago.
+  const [undo, setUndo] = useState<{ pagoId: string; nombre: string } | null>(null);
+  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearUndo = useCallback(() => {
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    undoTimer.current = null;
+    setUndo(null);
+  }, []);
+
+  useEffect(() => () => { if (undoTimer.current) clearTimeout(undoTimer.current); }, []);
+
+  const marcarPagado = useCallback(async (inquilinoId: string, nombre: string) => {
     setBusyId(inquilinoId);
-    try { await api.marcarPagadoAdmin(inquilinoId); cargar(); }
+    try {
+      const res = await api.marcarPagadoAdmin(inquilinoId);
+      const pagoId = res?.data?.id;
+      cargar();
+      if (pagoId) {
+        if (undoTimer.current) clearTimeout(undoTimer.current);
+        setUndo({ pagoId, nombre });
+        undoTimer.current = setTimeout(() => setUndo(null), 5000);
+      }
+    }
     catch (e) { console.error(e); }
     finally { setBusyId(null); }
   }, [cargar]);
+
+  const cancelarPago = useCallback(async (pagoId: string, opts?: { confirm?: boolean }) => {
+    if (opts?.confirm) {
+      const ok = await confirmar('Cancelar pago', 'El periodo volverá a quedar como pendiente de pago.', { confirmLabel: 'Cancelar pago', destructive: true });
+      if (!ok) return;
+    }
+    clearUndo();
+    try { await api.cancelarPago(pagoId); cargar(); }
+    catch (e: any) {
+      const msg = e?.message || 'No se pudo cancelar el pago';
+      if (Platform.OS === 'web') window.alert(msg);
+      else { const { Alert } = await import('react-native'); Alert.alert('Error', msg); }
+    }
+  }, [cargar, clearUndo]);
 
   const validar = useCallback(async (inquilinoId: string, pagoId?: string) => {
     if (!pagoId) return;
@@ -139,6 +175,13 @@ export default function PagosScreen() {
       speiPct: inquilinos.length > 0 ? Math.round((spei / inquilinos.length) * 100) : 0,
     };
   }, [inquilinos, rows, counts, saldos]);
+
+  // ¿Este pago confirmado todavía se puede cancelar? (dentro de las 24 h)
+  const puedeCancelar = (item: any): boolean => {
+    const e = estados[item.id];
+    if (!e?.pago_id || !e?.confirmado || !e?.confirmado_en) return false;
+    return Date.now() - new Date(e.confirmado_en).getTime() < 24 * 3600 * 1000;
+  };
 
   // Día pactado de pago, extraído del texto libre de `fecha_pago` ("10 de cada mes").
   const diaPago = (item: any): number | null => {
@@ -434,13 +477,22 @@ export default function PagosScreen() {
               {busy ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.smallBtnText}>Validar</Text>}
             </TouchableOpacity>
           ) : state === 'pagado' ? (
-            <TouchableOpacity style={styles.iconBtn} onPress={() => router.push(`/(admin)/pagos/${item.id}`)}>
-              <Ionicons name="receipt-outline" size={17} color={theme.textSecondary} />
-            </TouchableOpacity>
+            puedeCancelar(item) ? (
+              <TouchableOpacity
+                style={[styles.smallBtn, { backgroundColor: 'transparent', borderWidth: 1, borderColor: theme.danger + '60' }]}
+                onPress={() => cancelarPago(e.pago_id, { confirm: true })}
+              >
+                <Text style={[styles.smallBtnText, { color: theme.danger }]}>Cancelar</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={styles.iconBtn} onPress={() => router.push(`/(admin)/pagos/${item.id}`)}>
+                <Ionicons name="receipt-outline" size={17} color={theme.textSecondary} />
+              </TouchableOpacity>
+            )
           ) : (
             <TouchableOpacity
               style={[styles.smallBtn, { backgroundColor: theme.success }]}
-              onPress={() => marcarPagado(item.id)}
+              onPress={() => marcarPagado(item.id, item.nombre_completo)}
               disabled={busy}
             >
               {busy ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.smallBtnText}>Pagar</Text>}
@@ -501,12 +553,23 @@ export default function PagosScreen() {
               </>)}
             </TouchableOpacity>
           ) : state === 'pagado' ? (
-            <TouchableOpacity style={styles.mActionBtn} onPress={() => router.push(`/(admin)/pagos/${item.id}`)}>
-              <Ionicons name="receipt-outline" size={15} color={theme.textSecondary} />
-              <Text style={[styles.mActionText, { color: theme.textSecondary }]}>Ver recibo</Text>
-            </TouchableOpacity>
+            <>
+              <TouchableOpacity style={styles.mActionBtn} onPress={() => router.push(`/(admin)/pagos/${item.id}`)}>
+                <Ionicons name="receipt-outline" size={15} color={theme.textSecondary} />
+                <Text style={[styles.mActionText, { color: theme.textSecondary }]}>Ver recibo</Text>
+              </TouchableOpacity>
+              {puedeCancelar(item) && (
+                <TouchableOpacity
+                  style={[styles.mActionBtn, { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: theme.border }]}
+                  onPress={() => cancelarPago(e.pago_id, { confirm: true })}
+                >
+                  <Ionicons name="close-circle-outline" size={15} color={theme.danger} />
+                  <Text style={[styles.mActionText, { color: theme.danger }]}>Cancelar pago</Text>
+                </TouchableOpacity>
+              )}
+            </>
           ) : (
-            <TouchableOpacity style={styles.mActionBtn} onPress={() => marcarPagado(item.id)} disabled={busy}>
+            <TouchableOpacity style={styles.mActionBtn} onPress={() => marcarPagado(item.id, item.nombre_completo)} disabled={busy}>
               {busy ? <ActivityIndicator size="small" color={theme.success} /> : (<>
                 <Ionicons name="checkmark-circle-outline" size={15} color={theme.success} />
                 <Text style={[styles.mActionText, { color: theme.success }]}>Marcar pagado</Text>
@@ -574,6 +637,24 @@ export default function PagosScreen() {
         )}
       </ScrollView>
       {sortModal}
+
+      {undo && (
+        <View
+          style={[styles.undoWrap, { bottom: isDesktop ? 24 : insets.bottom + Theme.layout.dockHeight + 12 }]}
+          pointerEvents="box-none"
+        >
+          <View style={styles.undoBar}>
+            <Ionicons name="checkmark-circle" size={18} color="#10B981" />
+            <Text style={styles.undoText} numberOfLines={1}>{undo.nombre} — pago registrado</Text>
+            <TouchableOpacity onPress={() => cancelarPago(undo.pagoId)} style={styles.undoBtn}>
+              <Text style={styles.undoBtnText}>Deshacer</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={clearUndo} hitSlop={8}>
+              <Ionicons name="close" size={16} color="rgba(255,255,255,0.55)" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -621,6 +702,15 @@ const styles = StyleSheet.create({
   sortTitle: { fontSize: 13, fontWeight: '800', letterSpacing: 0.3, paddingHorizontal: 10, paddingTop: 8, paddingBottom: 10, textTransform: 'uppercase' },
   sortOpt: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, paddingHorizontal: 12, paddingVertical: 13, borderRadius: 12 },
   sortOptText: { fontSize: 14 },
+  undoWrap: { position: 'absolute', left: 12, right: 12, alignItems: 'center' },
+  undoBar: {
+    width: '100%', maxWidth: 460, flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: '#1E293B', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12,
+    shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 10,
+  },
+  undoText: { flex: 1, color: '#fff', fontSize: 13, fontWeight: '600' },
+  undoBtn: { paddingHorizontal: 8, paddingVertical: 4 },
+  undoBtnText: { color: '#38BDF8', fontWeight: '800', fontSize: 13 },
 
   thead: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1 },
   th: { fontSize: 10, fontWeight: '700', letterSpacing: 0.6 },
@@ -643,8 +733,8 @@ const styles = StyleSheet.create({
 
   mCard: { overflow: 'hidden' },
   mBody: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
-  mActions: { borderTopWidth: 1 },
-  mActionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 11 },
+  mActions: { borderTopWidth: 1, flexDirection: 'row' },
+  mActionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 11 },
   mActionText: { fontSize: 12.5, fontWeight: '700' },
 
   empty: { alignItems: 'center', gap: 10, paddingVertical: 48 },

@@ -483,6 +483,46 @@ export async function marcarPagadoAdmin(req: AuthRequest, res: Response, next: N
   }
 }
 
+// DELETE /api/pagos/:pago_id/cancelar — deshace un pago registrado por error.
+// Solo dentro de las 24 h siguientes a marcarlo pagado (o de haberlo creado).
+export async function cancelarPago(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { pago_id } = req.params;
+
+    const pagoRes = await pool.query(
+      `SELECT p.id, p.periodo, p.confirmado_en, p.created_at, i.usuario_id
+       FROM pagos p JOIN inquilinos i ON i.id = p.inquilino_id
+       WHERE p.id = $1 AND i.admin_id = $2`,
+      [pago_id, req.user!.id]
+    );
+    const pago = pagoRes.rows[0];
+    if (!pago) throw new AppError('Pago no encontrado o no autorizado', 404);
+
+    const ref = pago.confirmado_en ?? pago.created_at;
+    const horas = (Date.now() - new Date(ref).getTime()) / 3_600_000;
+    if (horas > 24) {
+      throw new AppError('Ya pasó más de un día. Para corregir este pago usa un abono manual.', 400);
+    }
+
+    // abonos_pago y promesas_pago se borran en cascada.
+    await pool.query(`DELETE FROM pagos WHERE id = $1`, [pago_id]);
+
+    res.json({ success: true, message: 'Pago cancelado' });
+
+    if (pago.usuario_id) {
+      emitToUser(pago.usuario_id, 'payment_confirmed', { pago: null });
+      createAndSendNotification(
+        pago.usuario_id,
+        'Pago cancelado',
+        `El administrador canceló el registro de pago de ${pago.periodo}.`,
+        'pago'
+      ).catch(() => {});
+    }
+  } catch (err) {
+    next(err);
+  }
+}
+
 // GET /api/pagos/estados-actuales  — estado del periodo actual para los inquilinos activos
 export async function getEstadosPagosActuales(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -498,6 +538,7 @@ export async function getEstadosPagosActuales(req: AuthRequest, res: Response, n
               p.id AS pago_id,
               p.monto,
               COALESCE(p.confirmado, false) AS confirmado,
+              p.confirmado_en,
               COALESCE(p.rechazado, false) AS rechazado,
               p.comprobante_url,
               COALESCE(ab.total_abonado, 0) AS total_abonado

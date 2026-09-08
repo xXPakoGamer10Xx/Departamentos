@@ -26,7 +26,9 @@ export default function ReportesScreen() {
   const anioActual = new Date().getFullYear();
   const [year, setYear] = useState(anioActual);
   const [reporte, setReporte] = useState<{ renta_total: number; extra_total: number; deposito_total: number; total_general: number } | null>(null);
-  const [meses, setMeses] = useState<{ mes: number; renta: number; extra: number }[]>([]);
+  const [meses, setMeses] = useState<{ mes: number; renta: number; extra: number; deposito: number; total: number }[]>([]);
+  const [porDepto, setPorDepto] = useState<{ depto_numero: number; total: number; meses: number[] }[]>([]);
+  const [aniosDisp, setAniosDisp] = useState<number[]>([]);
   const [ocup, setOcup] = useState<{ ocupados: number; total: number }>({ ocupados: 0, total: 0 });
   const [deuda, setDeuda] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -35,13 +37,15 @@ export default function ReportesScreen() {
     setLoading(true);
     Promise.all([
       api.getReporteAnual(y),
-      api.getReporteMensual(y).catch(() => ({ data: { meses: [] as any[] } })),
+      api.getReporteMensual(y).catch(() => ({ data: { meses: [] as any[], por_departamento: [] as any[], anios_disponibles: [] as number[] } })),
       api.getDepartamentosStats().catch(() => ({ data: {} as any })),
       api.getResumenDeuda().catch(() => ({ data: { total_general: 0 } })),
     ])
       .then(([anual, mensual, stats, res]) => {
         setReporte(anual.data || null);
         setMeses(mensual.data?.meses || []);
+        setPorDepto((mensual.data as any)?.por_departamento || []);
+        if ((mensual.data as any)?.anios_disponibles?.length) setAniosDisp((mensual.data as any).anios_disponibles);
         setOcup({ ocupados: Number(stats.data?.ocupados || 0), total: Number(stats.data?.total || 0) });
         setDeuda(Number(res.data?.total_general || 0));
       })
@@ -54,6 +58,7 @@ export default function ReportesScreen() {
   const fmt = (n: number) =>
     new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(Number(n || 0));
   const fmtK = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(Math.round(n)));
+  const fmtCell = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1).replace('.0', '')}k` : String(Math.round(n)));
 
   const pctOcup = ocup.total > 0 ? Math.round((ocup.ocupados / ocup.total) * 100) : 0;
   const totalGeneral = reporte?.total_general || 0;
@@ -61,7 +66,7 @@ export default function ReportesScreen() {
   const extraPct = totalGeneral > 0 ? Math.round(((reporte?.extra_total || 0) / totalGeneral) * 100) : 0;
   const depoPct = Math.max(0, 100 - rentaPct - extraPct);
 
-  const maxMes = Math.max(1, ...meses.map(m => m.renta + m.extra));
+  const maxMes = Math.max(1, ...meses.map(m => (m.total ?? m.renta + m.extra)));
 
   /* ---------------- KPI ---------------- */
   const kpis = (
@@ -106,9 +111,10 @@ export default function ReportesScreen() {
     <SurfaceCard style={isDesktop ? styles.chartCard : {}} padding={Theme.spacing.lg}>
       <View style={styles.chartHead}>
         <Text style={[styles.panelTitle, { color: theme.textSecondary }]}>FLUJO MENSUAL DE RECAUDACIÓN</Text>
-        <View style={{ flexDirection: 'row', gap: 14 }}>
+        <View style={{ flexDirection: 'row', gap: 14, flexWrap: 'wrap' }}>
           <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: theme.success }]} /><Text style={[styles.legendText, { color: theme.textSecondary }]}>Renta</Text></View>
           <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: theme.primary }]} /><Text style={[styles.legendText, { color: theme.textSecondary }]}>Extras</Text></View>
+          <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: theme.warning }]} /><Text style={[styles.legendText, { color: theme.textSecondary }]}>Depósitos</Text></View>
         </View>
       </View>
 
@@ -126,13 +132,16 @@ export default function ReportesScreen() {
               <View key={i} style={[styles.grid, { bottom: `${f * 100}%`, borderColor: theme.border }]} />
             ))}
             <View style={styles.bars}>
-              {(meses.length ? meses : MESES.map((_, i) => ({ mes: i + 1, renta: 0, extra: 0 }))).map((m, i) => {
-                const rentaH = (m.renta / maxMes) * 100;
+              {(meses.length ? meses : MESES.map((_, i) => ({ mes: i + 1, renta: 0, extra: 0, deposito: 0, total: 0 }))).map((m: any, i) => {
+                const depoH = (m.deposito / maxMes) * 100;
                 const extraH = (m.extra / maxMes) * 100;
+                const rentaH = (m.renta / maxMes) * 100;
+                const round = { borderTopLeftRadius: 3, borderTopRightRadius: 3 };
                 return (
                   <View key={i} style={styles.barStack}>
-                    {extraH > 0 && <View style={[styles.barSeg, { height: `${extraH}%`, backgroundColor: theme.primary, borderTopLeftRadius: 3, borderTopRightRadius: 3 }]} />}
-                    <View style={[styles.barSeg, { height: `${Math.max(rentaH, m.renta > 0 ? 2 : 0)}%`, backgroundColor: theme.success, borderTopLeftRadius: extraH > 0 ? 0 : 3, borderTopRightRadius: extraH > 0 ? 0 : 3 }]} />
+                    {depoH > 0 && <View style={[styles.barSeg, { height: `${depoH}%`, backgroundColor: theme.warning }, round]} />}
+                    {extraH > 0 && <View style={[styles.barSeg, { height: `${extraH}%`, backgroundColor: theme.primary }, depoH > 0 ? null : round]} />}
+                    <View style={[styles.barSeg, { height: `${Math.max(rentaH, m.renta > 0 ? 2 : 0)}%`, backgroundColor: theme.success }, (depoH > 0 || extraH > 0) ? null : round]} />
                   </View>
                 );
               })}
@@ -198,6 +207,43 @@ export default function ReportesScreen() {
     </View>
   );
 
+  /* ---------------- Matriz depto × mes ---------------- */
+  const matrizDeptos = porDepto.length > 0 && (
+    <SurfaceCard padding={0} style={{ overflow: 'hidden' }}>
+      <View style={[styles.compHead, { borderBottomColor: theme.border }]}>
+        <Text style={[styles.panelTitle, { color: theme.textSecondary }]}>INGRESO POR DEPARTAMENTO · {year}</Text>
+      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator>
+        <View>
+          <View style={[styles.mtxRow, { borderBottomColor: theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(15,23,42,0.03)' }]}>
+            <Text style={[styles.mtxDepto, styles.mtxHead, { color: theme.textMuted }]}>Depto</Text>
+            {MESES.map(mn => <Text key={mn} style={[styles.mtxCell, styles.mtxHead, { color: theme.textMuted }]}>{mn}</Text>)}
+            <Text style={[styles.mtxTotal, styles.mtxHead, { color: theme.text }]}>Total</Text>
+          </View>
+          {porDepto.map(d => (
+            <View key={d.depto_numero} style={[styles.mtxRow, { borderBottomColor: theme.border }]}>
+              <Text style={[styles.mtxDepto, { color: theme.text }]}>#{d.depto_numero}</Text>
+              {d.meses.map((v, i) => (
+                <Text key={i} style={[styles.mtxCell, { color: v > 0 ? theme.text : theme.textMuted }]}>{v > 0 ? fmtCell(v) : '·'}</Text>
+              ))}
+              <Text style={[styles.mtxTotal, { color: theme.success }]}>{fmt(d.total)}</Text>
+            </View>
+          ))}
+          <View style={[styles.mtxRow, { borderBottomWidth: 0, backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(15,23,42,0.03)' }]}>
+            <Text style={[styles.mtxDepto, { color: theme.text, fontWeight: '800' }]}>Total</Text>
+            {meses.map((m, i) => (
+              <Text key={i} style={[styles.mtxCell, { color: theme.text, fontWeight: '700' }]}>{m.total > 0 ? fmtCell(m.total) : '·'}</Text>
+            ))}
+            <Text style={[styles.mtxTotal, { color: theme.primary, fontWeight: '800' }]}>{fmt(meses.reduce((s, m) => s + m.total, 0))}</Text>
+          </View>
+        </View>
+      </ScrollView>
+      <Text style={[styles.kpiMini, { color: theme.textMuted, padding: 12 }]}>
+        Cifras en miles (k). Cuenta el dinero por el mes en que se recibió (renta, cuotas y depósitos), incluidos inquilinos que ya se dieron de baja.
+      </Text>
+    </SurfaceCard>
+  );
+
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <LinearGradient colors={isDark ? ['#0E1321', '#1A1F2E'] : ['#F8FAFC', '#F1F5F9']} style={StyleSheet.absoluteFill} />
@@ -242,6 +288,7 @@ export default function ReportesScreen() {
                 {sidePanel}
               </View>
             )}
+            {matrizDeptos}
           </>
         )}
       </ScrollView>
@@ -298,6 +345,11 @@ const styles = StyleSheet.create({
 
   compHead: { paddingHorizontal: 14, paddingVertical: 11, borderBottomWidth: 1 },
   compRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 11 },
+  mtxRow: { flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth },
+  mtxHead: { fontSize: 9.5, fontWeight: '800', letterSpacing: 0.3, textTransform: 'uppercase' },
+  mtxDepto: { width: 60, paddingHorizontal: 12, paddingVertical: 11, fontSize: 12.5, fontWeight: '700' },
+  mtxCell: { width: 46, textAlign: 'center', paddingVertical: 11, fontSize: 11.5 },
+  mtxTotal: { width: 92, textAlign: 'right', paddingHorizontal: 12, paddingVertical: 11, fontSize: 12, fontWeight: '700' },
   compLabel: { fontSize: 12.5, fontWeight: '600' },
   compVal: { fontSize: 11.5, fontVariant: ['tabular-nums'] },
   compPct: { fontSize: 12.5, fontWeight: '700', minWidth: 36, textAlign: 'right', fontVariant: ['tabular-nums'] },

@@ -1,7 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
-  View, TextInput, StyleSheet, useColorScheme, TouchableOpacity,
-  Platform, Modal, Text, FlatList, ActivityIndicator,
+  View, StyleSheet, useColorScheme, TouchableOpacity,
+  Modal, Text, FlatList, ActivityIndicator,
 } from 'react-native';
 import { Colors } from '../../constants/Colors';
 import { Theme } from '../../constants/Theme';
@@ -108,56 +108,6 @@ export function TopBar({ isDark: passedIsDark }: { isDark?: boolean }) {
   const [notifs, setNotifs] = useState<NotifItem[]>([]);
   const [loadingNotifs, setLoadingNotifs] = useState(false);
 
-  // Global search
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<{ type: 'inquilino' | 'departamento'; id: string; title: string; subtitle: string }[]>([]);
-  const [showResults, setShowResults] = useState(false);
-  const [loadingSearch, setLoadingSearch] = useState(false);
-  const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    if (!searchQuery.trim()) {
-      setSearchResults([]);
-      setShowResults(false);
-      return;
-    }
-    if (searchTimeout.current) clearTimeout(searchTimeout.current);
-    searchTimeout.current = setTimeout(async () => {
-      setLoadingSearch(true);
-      setShowResults(true);
-      try {
-        const [inqRes, deptRes] = await Promise.all([
-          api.getInquilinos({ search: searchQuery }),
-          api.getDepartamentos(),
-        ]);
-        const q = searchQuery.toLowerCase();
-        const inqs = (inqRes.data || [])
-          .filter((i: any) => i.nombre_completo?.toLowerCase().includes(q) || String(i.depto_numero).includes(q))
-          .slice(0, 5)
-          .map((i: any) => ({
-            type: 'inquilino' as const,
-            id: String(i.id),
-            title: i.nombre_completo,
-            subtitle: `Depto ${i.depto_numero} · $${Number(i.renta).toLocaleString()}`,
-          }));
-        const deptos = (deptRes.data || [])
-          .filter((d: any) => String(d.numero).includes(q) || d.descripcion?.toLowerCase().includes(q))
-          .slice(0, 4)
-          .map((d: any) => ({
-            type: 'departamento' as const,
-            id: String(d.numero),
-            title: `Departamento ${d.numero}`,
-            subtitle: `${d.estado?.toUpperCase()} · ${d.descripcion || 'Sin descripción'}`,
-          }));
-        setSearchResults([...inqs, ...deptos]);
-      } catch {
-        setSearchResults([]);
-      } finally {
-        setLoadingSearch(false);
-      }
-    }, 300);
-  }, [searchQuery]);
-
   const openNotifications = async () => {
     setShowNotif(true);
     setLoadingNotifs(true);
@@ -179,87 +129,6 @@ export function TopBar({ isDark: passedIsDark }: { isDark?: boolean }) {
         <BlurView intensity={isDark ? Theme.blur.intensityDark : Theme.blur.intensityHigh} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
 
         <View style={styles.content}>
-          <View style={styles.searchWrapper}>
-            <View style={[
-              styles.searchBox,
-              {
-                backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : theme.surface,
-                borderColor: showResults ? theme.primary : theme.border,
-                borderWidth: 1,
-                shadowColor: showResults ? theme.primary : 'transparent',
-                shadowOpacity: showResults ? 0.15 : 0,
-                shadowRadius: 8,
-                shadowOffset: { width: 0, height: 2 },
-                elevation: showResults ? 2 : 0,
-              }
-            ]}>
-              {loadingSearch
-                ? <ActivityIndicator size="small" color={theme.textSecondary} style={{ width: 18 }} />
-                : <Ionicons name="search" size={18} color={theme.textSecondary} />
-              }
-              <TextInput
-                placeholder="Buscar inquilinos, departamentos..."
-                placeholderTextColor={theme.textMuted}
-                style={[styles.input, { color: theme.text }]}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                onFocus={() => searchQuery.trim() && setShowResults(true)}
-                onBlur={() => setTimeout(() => setShowResults(false), 150)}
-              />
-              {searchQuery.length > 0 && (
-                <TouchableOpacity onPress={() => { setSearchQuery(''); setShowResults(false); }}>
-                  <Ionicons name="close-circle" size={16} color={theme.textMuted} />
-                </TouchableOpacity>
-              )}
-            </View>
-
-            {/* Resultados dropdown */}
-            {showResults && (
-              <View style={[
-                styles.searchDropdown,
-                { backgroundColor: theme.card, borderColor: theme.border }
-              ]}>
-                {searchResults.length === 0 && !loadingSearch ? (
-                  <View style={styles.searchEmptyRow}>
-                    <Text style={[styles.searchEmptyText, { color: theme.textSecondary }]}>Sin resultados para "{searchQuery}"</Text>
-                  </View>
-                ) : (
-                  searchResults.map(item => (
-                    <TouchableOpacity
-                      key={`${item.type}_${item.id}`}
-                      style={[styles.searchResultRow, { borderBottomColor: theme.border }]}
-                      onPress={() => {
-                        setSearchQuery('');
-                        setShowResults(false);
-                        if (item.type === 'inquilino') {
-                          router.push(`/(admin)/inquilinos/${item.id}` as any);
-                        } else {
-                          router.push(`/(admin)/departamentos/${item.id}` as any);
-                        }
-                      }}
-                    >
-                      <View style={[
-                        styles.searchResultIcon,
-                        { backgroundColor: item.type === 'inquilino' ? theme.warningLight : theme.successLight }
-                      ]}>
-                        <Ionicons
-                          name={item.type === 'inquilino' ? 'person' : 'business'}
-                          size={15}
-                          color={item.type === 'inquilino' ? theme.warning : theme.success}
-                        />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styles.searchResultTitle, { color: theme.text }]} numberOfLines={1}>{item.title}</Text>
-                        <Text style={[styles.searchResultSub, { color: theme.textSecondary }]} numberOfLines={1}>{item.subtitle}</Text>
-                      </View>
-                      <Ionicons name="arrow-forward" size={14} color={theme.textSecondary} />
-                    </TouchableOpacity>
-                  ))
-                )}
-              </View>
-            )}
-          </View>
-
           <View style={styles.actions}>
             <TouchableOpacity
               style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(15,23,42,0.04)' }]}
@@ -359,65 +228,9 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     paddingHorizontal: 24,
   },
-  searchWrapper: {
-    position: 'relative',
-    zIndex: 100,
-  },
-  searchBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: 400,
-    height: 40,
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    gap: 10,
-  },
-  input: {
-    flex: 1,
-    fontSize: 14,
-    height: '100%',
-    ...Platform.select({
-      web: { outlineStyle: 'none' } as any
-    })
-  },
-  searchDropdown: {
-    position: 'absolute',
-    top: 48,
-    left: 0,
-    right: 0,
-    borderRadius: Theme.borderRadius.md,
-    borderWidth: 1,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.12,
-    shadowRadius: 20,
-    elevation: 20,
-    zIndex: 200,
-  },
-  searchResultRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    paddingHorizontal: 16,
-    gap: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  searchResultIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexShrink: 0,
-  },
-  searchResultTitle: { fontSize: 14, fontWeight: '600' },
-  searchResultSub: { fontSize: 12, opacity: 0.7, marginTop: 1 },
-  searchEmptyRow: { padding: 16, alignItems: 'center' },
-  searchEmptyText: { fontSize: 13 },
   actions: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -280,7 +280,17 @@ export default function PagosScreen() {
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={[styles.rowName, { color: theme.text }]} numberOfLines={1}>{item.nombre_completo}</Text>
-            <Text style={[styles.rowMeta, { color: theme.textSecondary }]}>Renta mensual · {mesLabel()}</Text>
+            <Text style={[styles.rowMeta, { color: theme.textSecondary }]} numberOfLines={1}>
+              Renta mensual · {mesLabel()}
+            </Text>
+            {diaPago(item) != null && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                <Ionicons name="calendar-outline" size={12} color={atrasado ? theme.danger : theme.textMuted} />
+                <Text style={[styles.rowMeta, { fontSize: 11, color: atrasado ? theme.danger : theme.textMuted }]}>
+                  {atrasado ? `Venció el ${diaPago(item)}` : `Paga el día ${diaPago(item)} de cada mes`}
+                </Text>
+              </View>
+            )}
           </View>
         </TouchableOpacity>
 
@@ -335,6 +345,14 @@ export default function PagosScreen() {
 
   function mesLabel() { return mesActual.charAt(0).toUpperCase() + mesActual.slice(1); }
 
+  // Día pactado de pago, extraído del texto libre de `fecha_pago` ("10 de cada mes").
+  const diaPago = (item: any): number | null => {
+    const match = String(item?.fecha_pago ?? '').match(/\d{1,2}/);
+    if (!match) return null;
+    const d = parseInt(match[0], 10);
+    return d >= 1 && d <= 31 ? d : null;
+  };
+
   /* ---------------- Card móvil ---------------- */
   const mobileCard = ({ item, state }: { item: any; state: RowState }) => {
     const e = estados[item.id];
@@ -358,6 +376,14 @@ export default function PagosScreen() {
                 <Text style={[styles.rowMeta, { color: theme.textSecondary }]}>{m.label}</Text>
               </View>
             </View>
+            {diaPago(item) != null && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Ionicons name="calendar-outline" size={12} color={atrasado ? theme.danger : theme.textMuted} />
+                <Text style={[styles.rowMeta, { fontSize: 11, color: atrasado ? theme.danger : theme.textMuted }]}>
+                  {atrasado ? `Venció el ${diaPago(item)}` : `Paga el día ${diaPago(item)}`}
+                </Text>
+              </View>
+            )}
             <Badge label={chip.label} variant={chip.variant} size="sm" />
           </View>
         </TouchableOpacity>

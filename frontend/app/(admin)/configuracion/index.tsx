@@ -1966,7 +1966,7 @@ export default function ConfiguracionScreen() {
       {/* ── Modal: Cuentas bancarias ──────────────────────────────────── */}
       <Modal visible={showCuentas} transparent animationType="slide" onRequestClose={() => setShowCuentas(false)}>
         <View style={styles.modalOverlay}>
-          <GlassCard style={[styles.modalBox, { maxHeight: '88%' }]} padding={0}>
+          <GlassCard style={[styles.modalBox, { maxHeight: '88%', maxWidth: 560 }]} padding={0}>
             <View style={[styles.sheetHeader, { borderBottomColor: theme.border }]}>
               <Text style={[styles.sheetTitle, { color: theme.text }]}>Cuentas Bancarias</Text>
               <View style={styles.sheetHeaderActions}>
@@ -1988,52 +1988,81 @@ export default function ConfiguracionScreen() {
                   Aún no tienes cuentas. Toca “Nueva” para agregar la primera.
                 </Text>
               ) : (
-                <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 460 }}>
-                  {cuentas.map(c => (
-                    <View key={c.id} style={[styles.backupItem, { borderBottomColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }]}>
-                      <View style={[styles.backupTypeIcon, { backgroundColor: '#10B98120' }]}>
-                        <Ionicons name="card" size={16} color="#10B981" />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                          <Text style={[styles.backupName, { color: theme.text }]}>
-                            {c.alias || c.banco_nombre || 'Cuenta'}
-                          </Text>
-                          {c.es_predeterminada && (
-                            <View style={[styles.rolBadge, { backgroundColor: '#10B98125' }]}>
-                              <Text style={[styles.rolBadgeText, { color: '#10B981' }]}>PREDET.</Text>
-                            </View>
-                          )}
+                <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 480 }}>
+                  {cuentas.map(c => {
+                    const asignados = Array.isArray(c.departamentos) ? c.departamentos : [];
+                    const monto = Number(c.renta_mensual || 0);
+                    return (
+                    <View key={c.id} style={[styles.cuentaCard, { borderColor: theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)' }]}>
+                      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
+                        <View style={[styles.backupTypeIcon, { backgroundColor: '#10B98120', width: 40, height: 40 }]}>
+                          <Ionicons name="card" size={19} color="#10B981" />
                         </View>
-                        <Text style={[styles.backupMeta, { color: theme.textSecondary }]}>
-                          {c.banco_nombre ? `${c.banco_nombre} · ` : ''}{c.banco_clabe}
-                        </Text>
-                        {Array.isArray(c.departamentos) && c.departamentos.length > 0 ? (
-                          <Text style={[styles.backupMeta, { color: theme.textSecondary }]}>
-                            Deptos {c.departamentos.join(', ')} · entra ~{Number(c.renta_mensual || 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 })}/mes
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <Text style={[styles.cuentaNombre, { color: theme.text }]}>
+                              {c.alias || c.banco_nombre || 'Cuenta'}
+                            </Text>
+                            {c.es_predeterminada && (
+                              <View style={[styles.rolBadge, { backgroundColor: '#10B98125' }]}>
+                                <Text style={[styles.rolBadgeText, { color: '#10B981' }]}>PREDET.</Text>
+                              </View>
+                            )}
+                          </View>
+                          <Text style={[styles.cuentaBanco, { color: theme.textSecondary }]} numberOfLines={1}>
+                            {c.banco_nombre ? `${c.banco_nombre} · ` : ''}{c.banco_clabe}
                           </Text>
-                        ) : (
-                          <Text style={[styles.backupMeta, { color: theme.textSecondary }]}>
-                            Sin departamentos asignados
-                          </Text>
-                        )}
-                      </View>
-                      <View style={{ gap: 6 }}>
-                        {!c.es_predeterminada && (
-                          <TouchableOpacity style={[styles.toggleBtn, { backgroundColor: '#10B98120' }]} onPress={() => marcarDefaultCuenta(c.id)}>
-                            <Ionicons name="star-outline" size={15} color="#10B981" />
+                          {c.banco_titular ? (
+                            <Text style={[styles.cuentaBanco, { color: theme.textSecondary }]} numberOfLines={1}>
+                              {c.banco_titular}
+                            </Text>
+                          ) : null}
+                        </View>
+                        <View style={{ flexDirection: 'row', gap: 6 }}>
+                          {!c.es_predeterminada && (
+                            <TouchableOpacity style={[styles.toggleBtn, { backgroundColor: '#10B98120' }]} onPress={() => marcarDefaultCuenta(c.id)}>
+                              <Ionicons name="star-outline" size={16} color="#10B981" />
+                            </TouchableOpacity>
+                          )}
+                          <TouchableOpacity style={[styles.toggleBtn, { backgroundColor: theme.primary + '20' }]} onPress={() => editarCuenta(c)}>
+                            <Ionicons name="create-outline" size={16} color={theme.primary} />
                           </TouchableOpacity>
-                        )}
-                        <TouchableOpacity style={[styles.toggleBtn, { backgroundColor: theme.primary + '20' }]} onPress={() => editarCuenta(c)}>
-                          <Ionicons name="create-outline" size={15} color={theme.primary} />
-                        </TouchableOpacity>
-                        <TouchableOpacity style={[styles.toggleBtn, { backgroundColor: theme.danger + '20' }]} onPress={() => eliminarCuenta(c.id)}>
-                          <Ionicons name="trash-outline" size={15} color={theme.danger} />
-                        </TouchableOpacity>
+                          <TouchableOpacity style={[styles.toggleBtn, { backgroundColor: theme.danger + '20' }]} onPress={() => eliminarCuenta(c.id)}>
+                            <Ionicons name="trash-outline" size={16} color={theme.danger} />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+
+                      <View style={[styles.cuentaResumen, { borderTopColor: theme.border }]}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.cuentaResumenLabel, { color: theme.textSecondary }]}>
+                            {asignados.length === 0 ? 'DEPARTAMENTOS' : asignados.length === 1 ? '1 DEPARTAMENTO' : `${asignados.length} DEPARTAMENTOS`}
+                          </Text>
+                          <Text style={[styles.cuentaResumenValor, { color: theme.text }]} numberOfLines={1}>
+                            {asignados.length === 0 ? 'Ninguno asignado' : asignados.map((n: number) => `#${n}`).join('  ')}
+                          </Text>
+                        </View>
+                        <View style={{ alignItems: 'flex-end' }}>
+                          <Text style={[styles.cuentaResumenLabel, { color: theme.textSecondary }]}>ENTRA AL MES</Text>
+                          <Text style={[styles.cuentaMonto, { color: monto > 0 ? '#10B981' : theme.textSecondary }]}>
+                            {monto.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 })}
+                          </Text>
+                        </View>
                       </View>
                     </View>
-                  ))}
+                    );
+                  })}
                 </ScrollView>
+              )}
+              {cuentas.length > 0 && (
+                <View style={[styles.cuentaResumen, { borderTopColor: theme.border, marginTop: 4 }]}>
+                  <Text style={[styles.cuentaResumenValor, { color: theme.text, flex: 1 }]}>Total asignado</Text>
+                  <Text style={[styles.cuentaMonto, { color: '#10B981' }]}>
+                    {cuentas.reduce((s, c) => s + Number(c.renta_mensual || 0), 0)
+                      .toLocaleString('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 })}
+                    <Text style={{ fontSize: 12, fontWeight: '600' }}> /mes</Text>
+                  </Text>
+                </View>
               )}
               <Text style={[styles.plantillaBannerSub, { color: theme.textSecondary, marginTop: 12 }]}>
                 Asigna qué cuenta usa cada departamento desde la pantalla del departamento. El inquilino verá automáticamente la cuenta de su depto (o la predeterminada).
@@ -2213,6 +2242,13 @@ const styles = StyleSheet.create({
   backupMeta: { fontSize: 11, opacity: 0.7, marginTop: 2 },
   backupTypeBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
   backupTypeText: { fontSize: 10, fontWeight: '800' },
+  cuentaCard: { borderWidth: 1, borderRadius: 16, padding: 14, marginBottom: 12, gap: 12 },
+  cuentaNombre: { fontSize: 16, fontWeight: '700' },
+  cuentaBanco: { fontSize: 12.5, marginTop: 3 },
+  cuentaResumen: { flexDirection: 'row', alignItems: 'center', gap: 12, borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 10 },
+  cuentaResumenLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5, marginBottom: 3 },
+  cuentaResumenValor: { fontSize: 14, fontWeight: '600' },
+  cuentaMonto: { fontSize: 19, fontWeight: '800' },
   adminItem: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth,

@@ -3,7 +3,7 @@ module.exports = {
     name: 'NethRent',
     slug: 'nethrent',
     scheme: 'nethrent',
-    version: '1.0.0',
+    version: '1.1.0',
     orientation: 'portrait',
     icon: './assets/icon.png',
     userInterfaceStyle: 'automatic',
@@ -20,7 +20,7 @@ module.exports = {
     android: {
       package: 'com.vertexrent.app',
       googleServicesFile: './google-services.json',
-      versionCode: 3,
+      versionCode: 4,
       adaptiveIcon: {
         foregroundImage: './assets/adaptive-icon.png',
         backgroundColor: '#0E1321',

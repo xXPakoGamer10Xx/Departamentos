@@ -15,7 +15,7 @@ import { Badge } from '../../../components/ui/Badge';
 import api from '../../../services/api';
 
 type RowState = 'pagado' | 'revision' | 'atrasado' | 'pendiente';
-type Tab = 'todos' | 'pagados' | 'revision' | 'atrasados';
+type Tab = 'todos' | 'pagados' | 'revision' | 'pendientes' | 'atrasados';
 
 export default function PagosScreen() {
   const router = useRouter();
@@ -78,11 +78,13 @@ export default function PagosScreen() {
     finally { setBusyId(null); }
   }, [cargar]);
 
+  // `saldos` viene del backend contando solo meses ya vencidos (día de pago +
+  // días de gracia). Deuda > 0 ⇒ atrasado; sin deuda y sin pagar ⇒ por pagar.
   const rowState = useCallback((item: any): RowState => {
     const e = estados[item.id];
     if (e?.confirmado) return 'pagado';
     if (e?.comprobante_url && !e?.rechazado) return 'revision';
-    if ((saldos[item.id] ?? 0) > 0 || e?.rechazado) return 'atrasado';
+    if ((saldos[item.id] ?? 0) > 0.5 || e?.rechazado) return 'atrasado';
     return 'pendiente';
   }, [estados, saldos]);
 
@@ -92,6 +94,7 @@ export default function PagosScreen() {
     todos: rows.length,
     pagados: rows.filter(r => r.state === 'pagado').length,
     revision: rows.filter(r => r.state === 'revision').length,
+    pendientes: rows.filter(r => r.state === 'pendiente').length,
     atrasados: rows.filter(r => r.state === 'atrasado').length,
   }), [rows]);
 
@@ -111,6 +114,7 @@ export default function PagosScreen() {
   const filtered = rows.filter(({ item, state }) => {
     if (tab === 'pagados' && state !== 'pagado') return false;
     if (tab === 'revision' && state !== 'revision') return false;
+    if (tab === 'pendientes' && state !== 'pendiente') return false;
     if (tab === 'atrasados' && state !== 'atrasado') return false;
     if (!search) return true;
     const q = search.toLowerCase();
@@ -134,7 +138,7 @@ export default function PagosScreen() {
       case 'pagado': return { label: 'PAGADO', variant: 'success' as const };
       case 'revision': return { label: 'EN REVISIÓN', variant: 'warning' as const };
       case 'atrasado': return { label: 'ATRASADO', variant: 'danger' as const };
-      default: return { label: 'PENDIENTE', variant: 'default' as const };
+      default: return { label: 'POR PAGAR', variant: 'default' as const };
     }
   };
 
@@ -142,6 +146,7 @@ export default function PagosScreen() {
     { key: 'todos', label: 'Todos' },
     { key: 'pagados', label: 'Pagados' },
     { key: 'revision', label: 'Revisión', color: theme.warning },
+    { key: 'pendientes', label: 'Por pagar' },
     { key: 'atrasados', label: 'Atrasados', color: theme.danger },
   ];
 
@@ -169,7 +174,11 @@ export default function PagosScreen() {
         </View>
         <Text style={[styles.kpiValue, { color: theme.text }]}>{fmt0(kpi.porRecaudar)} <Text style={styles.kpiUnit}>MXN</Text></Text>
         <Text style={[styles.kpiMini, { color: theme.textSecondary }]}>
-          {counts.atrasados > 0 ? `${counts.atrasados} adeudo${counts.atrasados > 1 ? 's' : ''} pendiente${counts.atrasados > 1 ? 's' : ''}` : 'Sin adeudos'}
+          {counts.atrasados > 0
+            ? `${counts.atrasados} vencido${counts.atrasados > 1 ? 's' : ''}${counts.pendientes > 0 ? ` · ${counts.pendientes} por vencer` : ''}`
+            : counts.pendientes > 0
+              ? `${counts.pendientes} por pagar · al corriente`
+              : 'Todo cobrado'}
         </Text>
       </SurfaceCard>
 

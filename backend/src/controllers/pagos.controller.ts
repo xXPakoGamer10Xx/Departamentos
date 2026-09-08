@@ -922,6 +922,23 @@ export async function eliminarPromesaHistorial(req: AuthRequest, res: Response, 
   }
 }
 
+// Fecha límite de pago del mes `gs` para el inquilino `i`: primer día del mes
+// + (día pactado en fecha_pago - 1) + días de gracia configurados por el admin.
+// Un mes solo cuenta como DEUDA VENCIDA cuando CURRENT_DATE ya pasó esa fecha;
+// el mes en curso cuya fecha de pago aún no llega NO es adeudo.
+const MES_VENCIDO = `CURRENT_DATE > (
+  gs::date
+  + (COALESCE(NULLIF(regexp_replace(i.fecha_pago, '[^0-9]', '', 'g'), '')::int, 1) - 1)
+  + COALESCE((SELECT c.valor FROM configuracion c
+              WHERE c.admin_id = i.admin_id AND c.clave = 'dias_gracia_retraso')::int, 0)
+)`;
+
+// Suma de la deuda de un inquilino contando solo los meses ya vencidos.
+const DEUDA_VENCIDA = `COALESCE(SUM(GREATEST(
+  CASE WHEN ${MES_VENCIDO}
+       THEN i.renta + COALESCE(cx.total, 0) - COALESCE(ab.total, 0)
+       ELSE 0 END, 0)), 0)`;
+
 // GET /api/pagos/saldos — deuda total de todos los inquilinos activos (para la lista)
 export async function getSaldosInquilinos(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -931,7 +948,7 @@ export async function getSaldosInquilinos(req: AuthRequest, res: Response, next:
 
     const result = await pool.query(
       `SELECT i.id AS inquilino_id, i.depto_numero, i.nombre_completo,
-              COALESCE(SUM(GREATEST(i.renta + COALESCE(cx.total, 0) - COALESCE(ab.total, 0), 0)), 0) AS deuda_total
+              ${DEUDA_VENCIDA} AS deuda_total
        FROM inquilinos i
        CROSS JOIN LATERAL generate_series(
          date_trunc('month', i.fecha_inicio), date_trunc('month', CURRENT_DATE), interval '1 month'
@@ -965,7 +982,7 @@ export async function getResumenDeuda(req: AuthRequest, res: Response, next: Nex
     const result = await pool.query(
       `SELECT * FROM (
          SELECT i.id AS inquilino_id, i.depto_numero, i.nombre_completo,
-                COALESCE(SUM(GREATEST(i.renta + COALESCE(cx.total, 0) - COALESCE(ab.total, 0), 0)), 0) AS deuda_total
+                ${DEUDA_VENCIDA} AS deuda_total
          FROM inquilinos i
          CROSS JOIN LATERAL generate_series(
            date_trunc('month', i.fecha_inicio), date_trunc('month', CURRENT_DATE), interval '1 month'

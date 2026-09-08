@@ -9,3 +9,9 @@ export function ownerId(req: AuthRequest): string {
   if (req.user?.rol === 'admin') return req.user.id;
   return (req.user as any)?.admin_id || req.user!.id;
 }
+
+// Id del usuario REAL que hace la petición (para campos "creado_por", auditoría, etc.).
+// Para un colaborador `req.user.id` fue reescrito al del admin, así que aquí se usa actorId.
+export function actorId(req: AuthRequest): string {
+  return req.user?.actorId ?? req.user!.id;
+}

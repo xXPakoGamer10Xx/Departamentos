@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { pool } from '../config/database';
-import { createAndSendNotification } from './push.service';
+import { createAndSendNotification, notificarEquipoPagos } from './push.service';
 
 function parseDiaPago(fechaPago: string): number | null {
   const match = fechaPago.match(/^(\d{1,2})/);
@@ -96,7 +96,7 @@ async function checkRentaReminders(): Promise<void> {
           : diasRestantes === 1
             ? `Mañana vence el pago de ${inq.nombre_completo} (Depto ${inq.depto_numero})`
             : `En ${diasRestantes} días vence el pago de ${inq.nombre_completo} (Depto ${inq.depto_numero})`;
-        await createAndSendNotification(inq.admin_id, '💰 Vencimiento de renta próximo', adminMsg, 'renta');
+        await notificarEquipoPagos(inq.admin_id, '💰 Vencimiento de renta próximo', adminMsg, 'renta');
       }
     }
   } catch (err) {
@@ -138,7 +138,7 @@ async function checkContratoExpiration(): Promise<void> {
         const adminMsg = diasRestantes === 1
           ? `El contrato de ${inq.nombre_completo} (Depto ${inq.depto_numero}) vence mañana`
           : `El contrato de ${inq.nombre_completo} (Depto ${inq.depto_numero}) vence en ${diasRestantes} días`;
-        await createAndSendNotification(inq.admin_id, '📋 Contrato por vencer', adminMsg, 'renta');
+        await notificarEquipoPagos(inq.admin_id, '📋 Contrato por vencer', adminMsg, 'renta');
       }
     }
   } catch (err) {
@@ -192,7 +192,7 @@ async function checkDepositoReminders(): Promise<void> {
             : diasRestantes === 1
               ? `Mañana vence el depósito diferido de ${inq.nombre_completo} (Depto ${inq.depto_numero})`
               : `En ${diasRestantes} días vence el depósito diferido de ${inq.nombre_completo} (Depto ${inq.depto_numero})`;
-          await createAndSendNotification(inq.admin_id, '💰 Vencimiento de depósito próximo', adminMsg, 'renta');
+          await notificarEquipoPagos(inq.admin_id, '💰 Vencimiento de depósito próximo', adminMsg, 'renta');
         }
       }
     }
@@ -233,7 +233,7 @@ async function checkPromesaPagoReminders(): Promise<void> {
       const msg = diasRestantes === 0
         ? `Hoy es la fecha en que ${pago.nombre_completo} (Depto ${pago.depto_numero}) dijo que pagaría ${pago.periodo}`
         : `Mañana es la fecha en que ${pago.nombre_completo} (Depto ${pago.depto_numero}) dijo que pagaría ${pago.periodo}`;
-      await createAndSendNotification(pago.admin_id, titulo, msg, 'promesa');
+      await notificarEquipoPagos(pago.admin_id, titulo, msg, 'promesa');
     }
   } catch (err) {
     console.error('[Scheduler] Error en checkPromesaPagoReminders:', err);

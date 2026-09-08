@@ -1,340 +1,177 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
-  StyleSheet,
-  View,
-  Text,
-  TouchableOpacity,
-  FlatList,
-  Modal,
-  ActivityIndicator,
-  Platform,
-  useColorScheme,
+  View, StyleSheet, useColorScheme, TouchableOpacity, Modal, Text, FlatList, ActivityIndicator,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import api from '../../services/api';
-import { useSSEEvent } from '../../hooks/useSSE';
-import { showWebNotification } from '../../services/webNotifications';
 import { Colors } from '../../constants/Colors';
-import { Theme } from '../../constants/Theme';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import api from '../../services/api';
 
-export function NotificationBell() {
-  const isDark = useColorScheme() === 'dark';
+interface NotifItem {
+  id: string;
+  icon: string;
+  iconColor: string;
+  title: string;
+  subtitle: string;
+  urgency: 'alta' | 'media' | 'baja';
+  onPress?: () => void;
+}
+
+function buildNotifications(inquilinos: any[], router: any): NotifItem[] {
+  const items: NotifItem[] = [];
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+
+  for (const inq of inquilinos) {
+    if (inq.fecha_termino) {
+      const termino = new Date(inq.fecha_termino);
+      termino.setHours(0, 0, 0, 0);
+      const diff = Math.round((termino.getTime() - hoy.getTime()) / 86400000);
+      if (diff >= 0 && diff <= 30) {
+        const urgency = diff <= 7 ? 'alta' : diff <= 15 ? 'media' : 'baja';
+        items.push({
+          id: `term_${inq.id}`,
+          icon: 'document-text',
+          iconColor: urgency === 'alta' ? '#EF4444' : urgency === 'media' ? '#F59E0B' : '#10B981',
+          title: diff === 0 ? 'Contrato vence hoy' : `Contrato vence en ${diff} día${diff !== 1 ? 's' : ''}`,
+          subtitle: `${inq.nombre_completo} · Depto ${inq.depto_numero}`,
+          urgency,
+          onPress: () => router.push(`/(admin)/contratos/generar/${inq.id}` as any),
+        });
+      }
+    }
+
+    if (inq.fecha_pago) {
+      const diaHoy = hoy.getDate();
+      const diaPago = parseInt(String(inq.fecha_pago).match(/\d{1,2}/)?.[0] ?? '', 10);
+      if (diaPago) {
+        let diff = diaPago - diaHoy;
+        if (diff < 0) {
+          const diasMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate();
+          diff = diasMes - diaHoy + diaPago;
+        }
+        if (diff >= 0 && diff <= 5) {
+          items.push({
+            id: `pago_${inq.id}`,
+            icon: 'cash',
+            iconColor: diff === 0 ? '#EF4444' : '#3B82F6',
+            title: diff === 0 ? 'Pago de renta hoy' : `Pago de renta en ${diff} día${diff !== 1 ? 's' : ''}`,
+            subtitle: `${inq.nombre_completo} · $${Number(inq.renta).toLocaleString()}`,
+            urgency: diff === 0 ? 'alta' : 'media',
+            onPress: () => router.push(`/(admin)/inquilinos/${inq.id}` as any),
+          });
+        }
+      }
+    }
+  }
+
+  return items.sort((a, b) => {
+    const order = { alta: 0, media: 1, baja: 2 };
+    return order[a.urgency] - order[b.urgency];
+  });
+}
+
+export function NotificationBell({ isDark: passedIsDark, style }: { isDark?: boolean; style?: any }) {
+  const colorScheme = useColorScheme();
+  const isDark = passedIsDark !== undefined ? passedIsDark : colorScheme === 'dark';
   const theme = isDark ? Colors.dark : Colors.light;
+  const router = useRouter();
 
-  const [notificaciones, setNotificaciones] = useState<any[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [showDropdown, setShowDropdown] = useState(false);
+  const [show, setShow] = useState(false);
+  const [notifs, setNotifs] = useState<NotifItem[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Cargar notificaciones
-  const loadNotificaciones = async () => {
+  const abrir = async () => {
+    setShow(true);
     setLoading(true);
     try {
-      const res = await api.getNotificaciones();
-      if (res.data) {
-        setNotificaciones(res.data);
-        setUnreadCount(res.data.filter((n: any) => !n.leido).length);
-      }
-    } catch (e) {
-      console.error('Error al cargar notificaciones:', e);
+      const res = await api.getInquilinos({ estado: 'activo' });
+      setNotifs(buildNotifications(res.data || [], router));
+    } catch {
+      setNotifs([]);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    loadNotificaciones();
-  }, []);
-
-  // Escuchar notificaciones en tiempo real por SSE
-  useSSEEvent('notification_new', (data) => {
-    // data tiene: { title, mensaje, tipo }
-    const newNotif = {
-      id: Math.random().toString(), // id temporal para renderizar
-      titulo: data.title,
-      mensaje: data.mensaje,
-      tipo: data.tipo,
-      leido: false,
-      created_at: new Date().toISOString(),
-    };
-
-    setNotificaciones((prev) => [newNotif, ...prev]);
-    setUnreadCount((c) => c + 1);
-
-    // Mostrar notificación nativa en navegador si estamos en Web
-    if (Platform.OS === 'web') {
-      showWebNotification(data.title, data.mensaje);
-    }
-  });
-
-  const handleMarcarLeidas = async () => {
-    try {
-      await api.marcarNotificacionesLeidas();
-      setNotificaciones((prev) => prev.map((n) => ({ ...n, leido: true })));
-      setUnreadCount(0);
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const handleMarcarUnaLeida = async (id: string) => {
-    try {
-      await api.marcarNotificacionLeida(id);
-      setNotificaciones((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, leido: true } : n))
-      );
-      setUnreadCount((c) => Math.max(0, c - 1));
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const getTipoIcon = (tipo: string) => {
-    switch (tipo) {
-      case 'renta':
-        return { name: 'calendar', color: '#3B82F6' };
-      case 'cuota':
-        return { name: 'warning', color: '#EF4444' };
-      case 'ticket':
-        return { name: 'chatbox-ellipses', color: '#F59E0B' };
-      case 'pago':
-        return { name: 'checkmark-circle', color: '#10B981' };
-      default:
-        return { name: 'notifications', color: theme.textSecondary };
-    }
-  };
-
-  const renderItem = ({ item }: { item: any }) => {
-    const icon = getTipoIcon(item.tipo);
-    const dateStr = new Date(item.created_at).toLocaleDateString('es-MX', {
-      day: '2-digit',
-      month: 'short',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-
-    return (
-      <TouchableOpacity
-        style={[
-          styles.item,
-          { borderBottomColor: theme.border },
-          !item.leido && { backgroundColor: isDark ? 'rgba(59,130,246,0.08)' : 'rgba(59,130,246,0.04)' },
-        ]}
-        onPress={() => !item.leido && handleMarcarUnaLeida(item.id)}
-        activeOpacity={0.7}
-      >
-        <View style={[styles.iconWrap, { backgroundColor: icon.color + '15' }]}>
-          <Ionicons name={icon.name as any} size={18} color={icon.color} />
-        </View>
-        <View style={styles.itemBody}>
-          <View style={styles.itemHeader}>
-            <Text style={[styles.itemTitle, { color: theme.text }, !item.leido && styles.boldText]}>
-              {item.titulo}
-            </Text>
-            {!item.leido && <View style={[styles.dot, { backgroundColor: '#3B82F6' }]} />}
-          </View>
-          <Text style={[styles.itemMsg, { color: theme.textSecondary }]}>
-            {item.mensaje}
-          </Text>
-          <Text style={[styles.itemDate, { color: theme.textMuted }]}>
-            {dateStr}
-          </Text>
-        </View>
-      </TouchableOpacity>
-    );
-  };
+  const urgentes = notifs.filter(n => n.urgency === 'alta').length;
 
   return (
-    <View>
+    <>
       <TouchableOpacity
-        style={[styles.bellBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}
-        onPress={() => {
-          setShowDropdown(true);
-          loadNotificaciones();
-        }}
+        style={[styles.btn, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(15,23,42,0.05)' }, style]}
+        onPress={abrir}
+        activeOpacity={0.7}
       >
         <Ionicons name="notifications-outline" size={20} color={theme.text} />
-        {unreadCount > 0 && (
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
-          </View>
-        )}
+        {urgentes > 0 && <View style={[styles.dot, { borderColor: theme.card }]} />}
       </TouchableOpacity>
 
-      <Modal
-        visible={showDropdown}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowDropdown(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowDropdown(false)}
-        >
-          <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
-            <View style={[styles.dropdownCard, { backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1 }]}>
-              <View style={[styles.cardHeader, { borderBottomColor: theme.border }]}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Ionicons name="notifications" size={18} color={theme.text} />
-                  <Text style={[styles.cardTitle, { color: theme.text }]}>Notificaciones</Text>
-                </View>
-                {unreadCount > 0 && (
-                  <TouchableOpacity onPress={handleMarcarLeidas}>
-                    <Text style={[styles.markReadBtn, { color: '#3B82F6' }]}>Marcar todo leído</Text>
-                  </TouchableOpacity>
-                )}
+      <Modal visible={show} transparent animationType="fade" onRequestClose={() => setShow(false)}>
+        <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setShow(false)}>
+          <TouchableOpacity activeOpacity={1} onPress={() => {}} style={styles.panelWrap}>
+            <View style={[styles.panel, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              <View style={[styles.header, { borderBottomColor: theme.border }]}>
+                <Text style={[styles.title, { color: theme.text }]}>Notificaciones</Text>
+                <TouchableOpacity onPress={() => setShow(false)}>
+                  <Ionicons name="close" size={22} color={theme.textSecondary} />
+                </TouchableOpacity>
               </View>
 
-              {loading && notificaciones.length === 0 ? (
-                <View style={styles.centerBlock}>
-                  <ActivityIndicator size="small" color="#3B82F6" />
-                </View>
-              ) : notificaciones.length === 0 ? (
-                <View style={styles.centerBlock}>
-                  <Ionicons name="notifications-off-outline" size={32} color={theme.textMuted} />
-                  <Text style={[styles.emptyText, { color: theme.textSecondary }]}>Sin notificaciones nuevas</Text>
+              {loading ? (
+                <View style={styles.empty}><ActivityIndicator size="small" color={theme.primary} /></View>
+              ) : notifs.length === 0 ? (
+                <View style={styles.empty}>
+                  <Ionicons name="checkmark-circle-outline" size={40} color={theme.success} />
+                  <Text style={[styles.emptyText, { color: theme.textSecondary }]}>Todo al día, sin alertas pendientes</Text>
                 </View>
               ) : (
                 <FlatList
-                  data={notificaciones}
-                  renderItem={renderItem}
-                  keyExtractor={(item) => item.id}
-                  style={styles.list}
-                  contentContainerStyle={{ paddingBottom: 16 }}
+                  data={notifs}
+                  keyExtractor={i => i.id}
+                  style={{ maxHeight: 400 }}
+                  scrollEnabled={notifs.length > 5}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      style={[styles.item, { borderBottomColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }]}
+                      onPress={() => { setShow(false); item.onPress?.(); }}
+                    >
+                      <View style={[styles.itemIcon, { backgroundColor: item.iconColor + '20' }]}>
+                        <Ionicons name={item.icon as any} size={20} color={item.iconColor} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.itemTitle, { color: theme.text }]}>{item.title}</Text>
+                        <Text style={[styles.itemSub, { color: theme.textSecondary }]} numberOfLines={1}>{item.subtitle}</Text>
+                      </View>
+                      {item.urgency === 'alta' && <View style={styles.urgentDot} />}
+                    </TouchableOpacity>
+                  )}
                 />
               )}
             </View>
-          </View>
+          </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
-    </View>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  bellBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
-  },
-  badge: {
-    position: 'absolute',
-    top: -2,
-    right: -2,
-    backgroundColor: '#EF4444',
-    borderRadius: 8,
-    minWidth: 16,
-    height: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 3,
-    borderWidth: 1.5,
-    borderColor: '#fff',
-  },
-  badgeText: {
-    color: '#fff',
-    fontSize: 9,
-    fontWeight: '800',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.15)',
-    justifyContent: Platform.OS === 'web' ? 'flex-start' : 'center',
-    alignItems: Platform.OS === 'web' ? 'flex-end' : 'center',
-    paddingTop: Platform.OS === 'web' ? 70 : 0,
-    paddingRight: Platform.OS === 'web' ? 40 : 0,
-  },
-  modalContent: {
-    width: '90%',
-    maxWidth: 380,
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 8,
-  },
-  dropdownCard: {
-    maxHeight: 480,
-    width: '100%',
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-  },
-  cardTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  markReadBtn: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  list: {
-    flexGrow: 0,
-  },
-  item: {
-    flexDirection: 'row',
-    padding: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: 12,
-  },
-  iconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-  },
-  itemBody: {
-    flex: 1,
-    gap: 2,
-  },
-  itemHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  itemTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    flex: 1,
-  },
+  btn: { width: 38, height: 38, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    marginLeft: 6,
+    position: 'absolute', top: 7, right: 7, width: 9, height: 9, borderRadius: 5,
+    backgroundColor: '#FB7185', borderWidth: 2,
   },
-  itemMsg: {
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  itemDate: {
-    fontSize: 10,
-    marginTop: 4,
-  },
-  boldText: {
-    fontWeight: '800',
-  },
-  centerBlock: {
-    height: 180,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
-  },
-  emptyText: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
+  overlay: { flex: 1, backgroundColor: 'rgba(9,10,15,0.45)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  panelWrap: { width: '100%', maxWidth: 400 },
+  panel: { width: '100%', maxHeight: 480, borderRadius: 16, borderWidth: 1, overflow: 'hidden' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 18, borderBottomWidth: 1 },
+  title: { fontSize: 17, fontWeight: '700' },
+  item: { flexDirection: 'row', alignItems: 'center', padding: 14, paddingHorizontal: 18, gap: 14, borderBottomWidth: StyleSheet.hairlineWidth },
+  itemIcon: { width: 38, height: 38, borderRadius: 10, justifyContent: 'center', alignItems: 'center', flexShrink: 0 },
+  itemTitle: { fontSize: 14, fontWeight: '600', marginBottom: 2 },
+  itemSub: { fontSize: 12, opacity: 0.75 },
+  urgentDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#FB7185', flexShrink: 0 },
+  empty: { padding: 40, alignItems: 'center', gap: 12 },
+  emptyText: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
 });

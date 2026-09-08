@@ -15,7 +15,7 @@ export function auditLog(tabla: string, accion: 'crear' | 'editar' | 'eliminar')
           `INSERT INTO auditoria (usuario_id, tabla_afectada, accion, registro_id, datos_anteriores, datos_nuevos, ip_address)
            VALUES ($1, $2, $3, $4, $5, $6, $7)`,
           [
-            req.user?.id || null,
+            req.user?.actorId ?? req.user?.id ?? null,
             tabla,
             accion,
             registroId,

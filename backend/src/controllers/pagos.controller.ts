@@ -3,9 +3,10 @@ import { pool } from '../config/database';
 import { AppError } from '../middleware/error.middleware';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { v4 as uuidv4 } from 'uuid';
-import { sendPush, getUserPushTokens, getAdminPushTokens, createAndSendNotification } from '../services/push.service';
+import { sendPush, getUserPushTokens, getAdminPushTokens, createAndSendNotification, notificarEquipoPagos } from '../services/push.service';
 import { emitToUser, emitToAdmins } from '../services/sse.service';
 import { recalcularPago } from '../services/saldo.service';
+import { actorId } from '../utils/scope';
 
 function getCurrentPeriodo(): string {
   const now = new Date();
@@ -274,7 +275,7 @@ export async function subirComprobante(req: AuthRequest, res: Response, next: Ne
     const inq = inqName.rows[0];
     if (inq.admin_id) {
        emitToUser(inq.admin_id, 'comprobante_subido', { pago: updated.rows[0], inquilino: inq });
-       createAndSendNotification(inq.admin_id, '📎 Comprobante recibido', `Depto ${inq.depto_numero} — ${inq.nombre_completo}`, 'pago');
+       notificarEquipoPagos(inq.admin_id, '📎 Comprobante recibido', `Depto ${inq.depto_numero} — ${inq.nombre_completo}`).catch(() => {});
     }
   } catch (err) {
     next(err);
@@ -302,7 +303,7 @@ export async function confirmarPagoAdmin(req: AuthRequest, res: Response, next: 
 
     await pool.query(
       `UPDATE pagos SET escaneado_por = $2, escaneado_en = NOW() WHERE id = $1`,
-      [pago_id, req.user!.id]
+      [pago_id, actorId(req)]
     );
 
     const sumRes = await pool.query(
@@ -314,7 +315,7 @@ export async function confirmarPagoAdmin(req: AuthRequest, res: Response, next: 
       await pool.query(
         `INSERT INTO abonos_pago (pago_id, monto, metodo, nota, registrado_por)
          VALUES ($1, $2, $3, $4, $5)`,
-        [pago_id, saldoPendiente, pago.metodo, 'Confirmado por admin (comprobante)', req.user!.id]
+        [pago_id, saldoPendiente, pago.metodo, 'Confirmado por admin (comprobante)', actorId(req)]
       );
     }
     const { pago: pagoActualizado } = await recalcularPago(pago_id);
@@ -445,7 +446,7 @@ export async function marcarPagadoAdmin(req: AuthRequest, res: Response, next: N
     const pagoId = pagoRes.rows[0].id;
     await pool.query(
       `UPDATE pagos SET escaneado_por = $2, escaneado_en = NOW() WHERE id = $1`,
-      [pagoId, req.user!.id]
+      [pagoId, actorId(req)]
     );
 
     const sumRes = await pool.query(
@@ -457,7 +458,7 @@ export async function marcarPagadoAdmin(req: AuthRequest, res: Response, next: N
       await pool.query(
         `INSERT INTO abonos_pago (pago_id, monto, metodo, nota, registrado_por)
          VALUES ($1, $2, $3, $4, $5)`,
-        [pagoId, saldoPendiente, inquilino.metodo_pago || 'efectivo', 'Marcado como pagado completo por admin', req.user!.id]
+        [pagoId, saldoPendiente, inquilino.metodo_pago || 'efectivo', 'Marcado como pagado completo por admin', actorId(req)]
       );
     }
     const { pago: pagoActualizado } = await recalcularPago(pagoId);
@@ -469,6 +470,13 @@ export async function marcarPagadoAdmin(req: AuthRequest, res: Response, next: N
     };
     res.json({ success: true, data: pagoData });
 
+    if (inquilino.admin_id) {
+      notificarEquipoPagos(
+        inquilino.admin_id,
+        '💵 Pago registrado',
+        `Depto ${inquilino.depto_numero} — ${inquilino.nombre_completo} · ${periodo}`,
+      ).catch(() => {});
+    }
     if (inquilino.usuario_id) {
       emitToUser(inquilino.usuario_id, 'payment_confirmed', { pago: pagoData });
       createAndSendNotification(
@@ -651,7 +659,7 @@ export async function registrarAbono(req: AuthRequest, res: Response, next: Next
     const abonoRes = await pool.query(
       `INSERT INTO abonos_pago (pago_id, monto, fecha, metodo, nota, comprobante_url, registrado_por)
        VALUES ($1, $2, COALESCE($3, CURRENT_DATE), $4, $5, $6, $7) RETURNING *`,
-      [pago.id, montoAbono, fecha || null, metodo || inquilino.metodo_pago || 'efectivo', nota || null, comprobante_url || null, req.user!.id]
+      [pago.id, montoAbono, fecha || null, metodo || inquilino.metodo_pago || 'efectivo', nota || null, comprobante_url || null, actorId(req)]
     );
 
     const { pago: pagoActualizado, totalAbonado, completo, saldoPendiente } = await recalcularPago(pago.id);
@@ -868,7 +876,7 @@ export async function setPromesaPago(req: AuthRequest, res: Response, next: Next
     );
     if (!pagoRes.rows[0]) throw new AppError('Pago no encontrado o no autorizado', 404);
 
-    const pago = await aplicarPromesa(pago_id, fecha, req.user!.id);
+    const pago = await aplicarPromesa(pago_id, fecha, actorId(req));
     res.json({ success: true, data: pago });
   } catch (err) {
     next(err);
@@ -905,7 +913,7 @@ export async function setPromesaPagoInquilino(req: AuthRequest, res: Response, n
     const pago = existente.rows[0] || await getOrCrearPago(inqRes.rows[0], periodo);
     if (pago.confirmado) throw new AppError('Este periodo ya está pagado por completo', 400);
 
-    const actualizado = await aplicarPromesa(pago.id, fecha, req.user!.id);
+    const actualizado = await aplicarPromesa(pago.id, fecha, actorId(req));
     res.json({ success: true, data: actualizado });
   } catch (err) {
     next(err);

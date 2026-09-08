@@ -146,3 +146,27 @@ export async function createAndSendNotification(
     console.error('Error al guardar/enviar notificación:', err);
   }
 }
+
+// Notificación de cobranza: al administrador Y a sus colaboradores que tengan
+// el permiso 'notificaciones.pagos'.
+export async function notificarEquipoPagos(
+  adminId: string,
+  title: string,
+  body: string,
+  tipo: 'renta' | 'pago' | 'promesa' = 'pago'
+): Promise<void> {
+  await createAndSendNotification(adminId, title, body, tipo).catch(() => {});
+  try {
+    const { rows } = await pool.query(
+      `SELECT id FROM usuarios
+       WHERE admin_id = $1 AND rol = 'cobrador' AND activo = TRUE
+         AND permisos @> '["notificaciones.pagos"]'::jsonb`,
+      [adminId]
+    );
+    for (const r of rows) {
+      await createAndSendNotification(r.id, title, body, tipo).catch(() => {});
+    }
+  } catch (err) {
+    console.error('Error al notificar al equipo de pagos:', err);
+  }
+}

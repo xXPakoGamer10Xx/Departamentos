@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import { pool } from '../config/database';
 import { AppError } from '../middleware/error.middleware';
 import { AuthRequest } from '../middleware/auth.middleware';
+import { actorId } from '../utils/scope';
 import { createAndSendNotification } from '../services/push.service';
 
 // GET /api/depositos/:inquilino_id/saldo — total, pagado y pendiente del depósito
@@ -83,7 +84,7 @@ export async function registrarAbonoDeposito(req: AuthRequest, res: Response, ne
     const abonoRes = await pool.query(
       `INSERT INTO abonos_deposito (inquilino_id, monto, fecha, metodo, nota, comprobante_url, registrado_por)
        VALUES ($1, $2, COALESCE($3, CURRENT_DATE), $4, $5, $6, $7) RETURNING *`,
-      [inquilino_id, montoAbono, fecha || null, metodo || inquilino.metodo_pago || 'efectivo', nota || null, comprobante_url || null, req.user!.id]
+      [inquilino_id, montoAbono, fecha || null, metodo || inquilino.metodo_pago || 'efectivo', nota || null, comprobante_url || null, actorId(req)]
     );
 
     const sumRes = await pool.query(

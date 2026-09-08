@@ -4,6 +4,7 @@ import { Colors } from '../../constants/Colors';
 import { Theme } from '../../constants/Theme';
 import { Ionicons } from '@expo/vector-icons';
 import { Badge } from '../../components/ui/Badge';
+import { can } from '../../constants/permisos';
 import { ProgressRing } from '../../components/ui/ProgressRing';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useState, useCallback, type ReactNode } from 'react';
@@ -113,6 +114,9 @@ export default function DashboardScreen() {
       .finally(() => setLoading(false));
   }, []));
 
+  // Un colaborador sin permiso de Reportes no ve las cifras de ingreso.
+  const verFinanzas = can('reportes');
+  const dineroMasked = (n: number | string) => (verFinanzas ? fmtMoney(n) : '•••••');
   const fmtMoney = (n: number | string) =>
     new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(Number(n));
 
@@ -135,13 +139,13 @@ export default function DashboardScreen() {
     new Intl.DateTimeFormat('es-MX', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date());
 
   const quickActions: QuickAction[] = [
-    { icon: 'add', label: 'Registrar Pago', primary: true, onPress: () => router.push('/pagos') },
-    { icon: 'person-add-outline', label: 'Nuevo Inquilino', onPress: () => router.push('/inquilinos/nuevo') },
-    { icon: 'document-text-outline', label: 'Generar Contrato', onPress: () => router.push('/contratos') },
+    can('pagos') && { icon: 'add', label: 'Registrar Pago', primary: true, onPress: () => router.push('/pagos') },
+    can('inquilinos.editar') && { icon: 'person-add-outline', label: 'Nuevo Inquilino', onPress: () => router.push('/inquilinos/nuevo') },
+    can('contratos') && { icon: 'document-text-outline', label: 'Generar Contrato', onPress: () => router.push('/contratos') },
     usaQr
-      ? { icon: 'qr-code-outline', label: 'Escanear QR', onPress: () => router.push('/scan') }
-      : { icon: 'wallet-outline', label: 'Cuentas Bancarias', onPress: () => router.push('/(admin)/cuentas') },
-  ];
+      ? (can('pagos.marcar') && { icon: 'qr-code-outline', label: 'Escanear QR', onPress: () => router.push('/scan') })
+      : (can('cuentas') && { icon: 'wallet-outline', label: 'Cuentas Bancarias', onPress: () => router.push('/(admin)/cuentas') }),
+  ].filter(Boolean) as QuickAction[];
 
   if (loading) {
     return (
@@ -176,7 +180,7 @@ export default function DashboardScreen() {
           <Text style={[styles.kpiChipText, { color: theme.success }]}>Ocupación {pctOcupacion}%</Text>
         </View>
       </View>
-      <Text style={[styles.kpiValue, { color: theme.text, fontSize: 28 }]}>{fmtMoney(ingresos)}</Text>
+      <Text style={[styles.kpiValue, { color: theme.text, fontSize: 28 }]}>{dineroMasked(ingresos)}</Text>
       <Text style={[styles.kpiSub, { color: theme.textSecondary, marginBottom: 12 }]}>{ocupados} de {total} deptos generando renta</Text>
       <View style={[styles.progressTrack, { backgroundColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(15,23,42,0.08)' }]}>
         <View style={[styles.progressFill, { width: `${pctOcupacion}%`, backgroundColor: theme.primary }]} />
@@ -251,7 +255,7 @@ export default function DashboardScreen() {
       </View>
       <View style={styles.kpiBodyRow}>
         <View>
-          <Text style={[styles.kpiValue, { color: theme.text }]}>{fmtMoney(ingresos)}</Text>
+          <Text style={[styles.kpiValue, { color: theme.text }]}>{dineroMasked(ingresos)}</Text>
           <Text style={[styles.kpiSub, { color: theme.textSecondary }]}>MXN / mes</Text>
         </View>
       </View>

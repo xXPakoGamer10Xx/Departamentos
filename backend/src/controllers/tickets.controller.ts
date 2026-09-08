@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import { pool } from '../config/database';
 import { AppError } from '../middleware/error.middleware';
 import { AuthRequest } from '../middleware/auth.middleware';
+import { actorId } from '../utils/scope';
 import { sendPush, getAdminPushTokens, getUserPushTokens, createAndSendNotification } from '../services/push.service';
 import { emitToAdmins, emitToUser } from '../services/sse.service';
 
@@ -120,7 +121,7 @@ export async function createTicket(req: AuthRequest, res: Response, next: NextFu
     const result = await pool.query(
       `INSERT INTO tickets (inquilino_id, titulo, descripcion, creado_por)
        VALUES ($1, $2, $3, $4) RETURNING *`,
-      [inqId, titulo.trim(), descripcion.trim(), req.user!.id]
+      [inqId, titulo.trim(), descripcion.trim(), actorId(req)]
     );
 
     const ticket = result.rows[0];
@@ -162,7 +163,7 @@ export async function updateTicket(req: AuthRequest, res: Response, next: NextFu
         atendido_por = CASE WHEN $1 IS NOT NULL THEN $3 ELSE atendido_por END,
         updated_at   = NOW()
        WHERE id = $4 RETURNING *`,
-      [estado || null, nota_admin !== undefined ? nota_admin : null, req.user!.id, id]
+      [estado || null, nota_admin !== undefined ? nota_admin : null, actorId(req), id]
     );
 
     const updated = result.rows[0];

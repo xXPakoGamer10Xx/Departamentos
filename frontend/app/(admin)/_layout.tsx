@@ -12,7 +12,7 @@ import { Theme } from '../../constants/Theme';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { Sidebar } from '../../components/ui/Sidebar';
-import { TopBar } from '../../components/ui/TopBar';
+import { NotificationBell } from '../../components/ui/NotificationBell';
 import { can, esAdmin } from '../../constants/permisos';
 
 const DOCK_ITEMS = [
@@ -93,7 +93,12 @@ export default function AdminLayout() {
     <View style={[styles.root, { backgroundColor: theme.background }]}>
       {isDesktop && <Sidebar isDark={isDark} usaQr={usaQrInquilinos} />}
       <View style={[styles.mainContent, isDesktop && { borderLeftWidth: 0 }]}>
-        {isDesktop && <TopBar isDark={isDark} />}
+        {/* En móvil no hay sidebar: la campana va flotando arriba a la derecha. */}
+        {!isDesktop && (
+          <View style={[styles.mobileBell, { top: insets.top + 8 }]} pointerEvents="box-none">
+            <NotificationBell isDark={isDark} />
+          </View>
+        )}
         <Tabs
           // "history" hace que la flecha atrás vuelva a la pantalla anterior real
           // (p. ej. la lista de Inquilinos) en vez de saltar siempre al Dashboard.
@@ -187,6 +192,12 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0, // Evita que el contenido desborde la sidebar en flex
     overflow: 'hidden',
+  },
+  mobileBell: {
+    position: 'absolute',
+    right: 14,
+    zIndex: 900,
+    alignItems: 'flex-end',
   },
   dockWrapper: {
     position: 'absolute',

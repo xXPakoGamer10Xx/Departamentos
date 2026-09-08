@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import { pool } from '../config/database';
 import { AppError } from '../middleware/error.middleware';
 import { AuthRequest } from '../middleware/auth.middleware';
+import { actorId } from '../utils/scope';
 import { createAndSendNotification } from '../services/push.service';
 import { recalcularPago } from '../services/saldo.service';
 import { getOrCrearPago } from './pagos.controller';
@@ -68,7 +69,7 @@ export async function createCuota(req: AuthRequest, res: Response, next: NextFun
     const result = await pool.query(
       `INSERT INTO cuotas_extra (inquilino_id, concepto, monto, periodo, creado_por)
        VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [inquilino_id, concepto.trim(), Number(monto), periodo, req.user!.id]
+      [inquilino_id, concepto.trim(), Number(monto), periodo, actorId(req)]
     );
 
     // Si ya existe un registro de pago (sin confirmar) para este periodo, sumarle

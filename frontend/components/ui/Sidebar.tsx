@@ -7,6 +7,7 @@ import { BlurView } from 'expo-blur';
 import { useRouter, usePathname } from 'expo-router';
 import { getItem, removeItem } from '../../services/storage';
 import { can, esAdmin, type Permiso } from '../../constants/permisos';
+import { NotificationBell } from './NotificationBell';
 
 const USER_KEY = 'auth_user';
 const TOKEN_KEY = 'auth_token';
@@ -89,13 +90,16 @@ export function Sidebar({ isDark: passedIsDark, usaQr = true }: { isDark?: boole
 
       {/* Logo header */}
       <View style={styles.header}>
-        <View style={styles.logoChip}>
-          <Image
-            source={require('../../assets/logo-lockup.png')}
-            style={styles.logoImg}
-            resizeMode="contain"
-            accessibilityLabel="NethRent"
-          />
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+          <View style={styles.logoChip}>
+            <Image
+              source={require('../../assets/logo-lockup.png')}
+              style={styles.logoImg}
+              resizeMode="contain"
+              accessibilityLabel="NethRent"
+            />
+          </View>
+          <NotificationBell isDark={isDark} />
         </View>
         <Text style={[styles.brandSub, { color: theme.textMuted }]}>Executive Suite</Text>
       </View>

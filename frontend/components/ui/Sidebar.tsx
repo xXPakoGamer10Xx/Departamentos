@@ -15,6 +15,7 @@ interface NavItem {
   label: string;
   icon: any;
   activeColor: string;
+  tenantOnly?: boolean; // solo tiene sentido si los inquilinos usan la app
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -23,13 +24,15 @@ const NAV_ITEMS: NavItem[] = [
   { name: 'departamentos', label: 'Departamentos', icon: 'business', activeColor: '#10B981' },
   { name: 'contratos', label: 'Contratos', icon: 'document-text', activeColor: '#3B82F6' },
   { name: 'pagos', label: 'Pagos', icon: 'card', activeColor: '#3B82F6' },
-  { name: 'tickets', label: 'Tickets', icon: 'chatbox-ellipses', activeColor: '#EF4444' },
+  { name: 'cuentas', label: 'Cuentas', icon: 'wallet', activeColor: '#10B981' },
+  { name: 'tickets', label: 'Tickets', icon: 'chatbox-ellipses', activeColor: '#EF4444', tenantOnly: true },
   { name: 'configuracion', label: 'Configuración', icon: 'settings', activeColor: '#6B7280' },
 ];
 
-export function Sidebar({ isDark: passedIsDark }: { isDark?: boolean }) {
+export function Sidebar({ isDark: passedIsDark, usaQr = true }: { isDark?: boolean; usaQr?: boolean }) {
   const colorScheme = useColorScheme();
   const isDark = passedIsDark !== undefined ? passedIsDark : colorScheme === 'dark';
+  const navItems = NAV_ITEMS.filter(item => usaQr || !item.tenantOnly);
   const theme = isDark ? Colors.dark : Colors.light;
   const router = useRouter();
   const pathname = usePathname();
@@ -93,7 +96,7 @@ export function Sidebar({ isDark: passedIsDark }: { isDark?: boolean }) {
 
       {/* Nav items */}
       <View style={styles.nav}>
-        {NAV_ITEMS.map((item) => {
+        {navItems.map((item) => {
           const active = isCurrentRoute(item.name);
 
           return (

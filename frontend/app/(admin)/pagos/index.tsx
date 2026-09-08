@@ -1,6 +1,6 @@
 import {
   StyleSheet, View, Text, ScrollView, TouchableOpacity, TextInput,
-  useColorScheme, ActivityIndicator, useWindowDimensions, Platform,
+  useColorScheme, ActivityIndicator, useWindowDimensions, Platform, Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../../../constants/Colors';
@@ -16,6 +16,16 @@ import api from '../../../services/api';
 
 type RowState = 'pagado' | 'revision' | 'atrasado' | 'pendiente';
 type Tab = 'todos' | 'pagados' | 'revision' | 'pendientes' | 'atrasados';
+type SortMode = 'depto' | 'dia_asc' | 'dia_desc' | 'monto_desc' | 'monto_asc' | 'nombre';
+
+const SORT_OPTS: { key: SortMode; label: string }[] = [
+  { key: 'depto', label: 'Número de departamento' },
+  { key: 'dia_asc', label: 'Día de pago — del 1 al 31' },
+  { key: 'dia_desc', label: 'Día de pago — del 31 al 1' },
+  { key: 'monto_desc', label: 'Renta — de mayor a menor' },
+  { key: 'monto_asc', label: 'Renta — de menor a mayor' },
+  { key: 'nombre', label: 'Nombre del inquilino (A–Z)' },
+];
 
 export default function PagosScreen() {
   const router = useRouter();
@@ -32,6 +42,8 @@ export default function PagosScreen() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<Tab>('todos');
+  const [sortMode, setSortMode] = useState<SortMode>('depto');
+  const [showSort, setShowSort] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const cargar = useCallback((showLoader = false) => {
@@ -128,6 +140,14 @@ export default function PagosScreen() {
     };
   }, [inquilinos, rows, counts, saldos]);
 
+  // Día pactado de pago, extraído del texto libre de `fecha_pago` ("10 de cada mes").
+  const diaPago = (item: any): number | null => {
+    const match = String(item?.fecha_pago ?? '').match(/\d{1,2}/);
+    if (!match) return null;
+    const d = parseInt(match[0], 10);
+    return d >= 1 && d <= 31 ? d : null;
+  };
+
   const filtered = rows.filter(({ item, state }) => {
     if (tab === 'pagados' && state !== 'pagado') return false;
     if (tab === 'revision' && state !== 'revision') return false;
@@ -137,6 +157,19 @@ export default function PagosScreen() {
     const q = search.toLowerCase();
     return item.nombre_completo?.toLowerCase().includes(q) || String(item.depto_numero).includes(search);
   });
+
+  const visible = [...filtered].sort((a, b) => {
+    switch (sortMode) {
+      case 'dia_asc':   return (diaPago(a.item) ?? 99) - (diaPago(b.item) ?? 99);
+      case 'dia_desc':  return (diaPago(b.item) ?? -1) - (diaPago(a.item) ?? -1);
+      case 'monto_desc': return Number(b.item.renta || 0) - Number(a.item.renta || 0);
+      case 'monto_asc':  return Number(a.item.renta || 0) - Number(b.item.renta || 0);
+      case 'nombre':    return String(a.item.nombre_completo || '').localeCompare(String(b.item.nombre_completo || ''));
+      default:          return Number(a.item.depto_numero) - Number(b.item.depto_numero);
+    }
+  });
+
+  const sortLabel = SORT_OPTS.find(o => o.key === sortMode)?.label ?? '';
 
   const fmt = (n: number) => '$' + Number(n).toLocaleString('es-MX', { minimumFractionDigits: 2 });
   const fmt0 = (n: number) => '$' + Number(n).toLocaleString('es-MX', { maximumFractionDigits: 0 });
@@ -217,6 +250,7 @@ export default function PagosScreen() {
       </SurfaceCard>
       )}
 
+      {usaQr && (
       <SurfaceCard style={styles.kpi} padding={Theme.spacing.md}>
         <View style={styles.kpiHead}>
           <Text style={[styles.kpiLabel, { color: theme.textMuted }]}>MÉTODO PREFERIDO</Text>
@@ -239,6 +273,7 @@ export default function PagosScreen() {
           </View>
         </View>
       </SurfaceCard>
+      )}
     </View>
   );
 
@@ -296,7 +331,45 @@ export default function PagosScreen() {
           );
         })}
       </ScrollView>
+
+      <TouchableOpacity
+        style={[styles.sortBtn, { borderColor: theme.border }, !isDesktop && { alignSelf: 'flex-start' }]}
+        onPress={() => setShowSort(true)}
+        activeOpacity={0.7}
+      >
+        <Ionicons name="swap-vertical" size={14} color={theme.textSecondary} />
+        <Text style={[styles.sortBtnText, { color: theme.textSecondary }]} numberOfLines={1}>
+          Ordenar: {sortLabel}
+        </Text>
+        <Ionicons name="chevron-down" size={13} color={theme.textMuted} />
+      </TouchableOpacity>
     </View>
+  );
+
+  /* ---------------- Modal de orden ---------------- */
+  const sortModal = (
+    <Modal visible={showSort} transparent animationType="fade" onRequestClose={() => setShowSort(false)}>
+      <TouchableOpacity style={styles.sortOverlay} activeOpacity={1} onPress={() => setShowSort(false)}>
+        <View style={[styles.sortSheet, { backgroundColor: theme.surface ?? (isDark ? '#161B29' : '#fff'), borderColor: theme.border }]}>
+          <Text style={[styles.sortTitle, { color: theme.text }]}>Ordenar lista por</Text>
+          {SORT_OPTS.map(o => {
+            const on = sortMode === o.key;
+            return (
+              <TouchableOpacity
+                key={o.key}
+                style={[styles.sortOpt, on && { backgroundColor: theme.primary + '14' }]}
+                onPress={() => { setSortMode(o.key); setShowSort(false); }}
+              >
+                <Text style={[styles.sortOptText, { color: on ? theme.primary : theme.text, fontWeight: on ? '700' : '500' }]}>
+                  {o.label}
+                </Text>
+                {on && <Ionicons name="checkmark" size={17} color={theme.primary} />}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </TouchableOpacity>
+    </Modal>
   );
 
   /* ---------------- Fila tabla (desktop) ---------------- */
@@ -307,7 +380,7 @@ export default function PagosScreen() {
     const busy = busyId === item.id;
     const atrasado = state === 'atrasado';
     return (
-      <View key={item.id} style={[styles.tr, { borderColor: theme.border }, i === filtered.length - 1 && { borderBottomWidth: 0 }, atrasado && { backgroundColor: theme.danger + '08' }]}>
+      <View key={item.id} style={[styles.tr, { borderColor: theme.border }, i === visible.length - 1 && { borderBottomWidth: 0 }, atrasado && { backgroundColor: theme.danger + '08' }]}>
         <TouchableOpacity style={[styles.tdInq, { flex: 4 }]} onPress={() => router.push(`/(admin)/pagos/${item.id}`)} activeOpacity={0.7}>
           <View style={[styles.deptoBox, { borderColor: atrasado ? theme.danger + '40' : theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(15,23,42,0.03)' }]}>
             <Text style={[styles.deptoBoxTop, { color: atrasado ? theme.danger : theme.textMuted }]}>Dpto</Text>
@@ -379,14 +452,6 @@ export default function PagosScreen() {
   };
 
   function mesLabel() { return mesActual.charAt(0).toUpperCase() + mesActual.slice(1); }
-
-  // Día pactado de pago, extraído del texto libre de `fecha_pago` ("10 de cada mes").
-  const diaPago = (item: any): number | null => {
-    const match = String(item?.fecha_pago ?? '').match(/\d{1,2}/);
-    if (!match) return null;
-    const d = parseInt(match[0], 10);
-    return d >= 1 && d <= 31 ? d : null;
-  };
 
   /* ---------------- Card móvil ---------------- */
   const mobileCard = ({ item, state }: { item: any; state: RowState }) => {
@@ -480,7 +545,7 @@ export default function PagosScreen() {
             <SurfaceCard style={{ overflow: 'hidden' }} padding={0}>
               {toolbar}
 
-              {isDesktop && filtered.length > 0 && (
+              {isDesktop && visible.length > 0 && (
                 <View style={[styles.thead, { borderColor: theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(15,23,42,0.02)' }]}>
                   <Text style={[styles.th, { flex: 4, color: theme.textMuted }]}>UNIDAD / INQUILINO</Text>
                   <Text style={[styles.th, { flex: 2, color: theme.textMuted }]}>MONTO</Text>
@@ -490,7 +555,7 @@ export default function PagosScreen() {
                 </View>
               )}
 
-              {filtered.length === 0 ? (
+              {visible.length === 0 ? (
                 <View style={styles.empty}>
                   <Ionicons name="card-outline" size={40} color={theme.textMuted} />
                   <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
@@ -498,16 +563,17 @@ export default function PagosScreen() {
                   </Text>
                 </View>
               ) : isDesktop ? (
-                filtered.map((r, i) => tableRow(r, i))
+                visible.map((r, i) => tableRow(r, i))
               ) : (
                 <View style={{ padding: 12, gap: 10 }}>
-                  {filtered.map(r => mobileCard(r))}
+                  {visible.map(r => mobileCard(r))}
                 </View>
               )}
             </SurfaceCard>
           </>
         )}
       </ScrollView>
+      {sortModal}
     </View>
   );
 }
@@ -544,6 +610,17 @@ const styles = StyleSheet.create({
   tabRow: { gap: 6, alignItems: 'center' },
   tab: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: Theme.borderRadius.sm, borderWidth: 1 },
   tabText: { fontSize: 12.5, fontWeight: '600' },
+  sortBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    borderWidth: 1, borderRadius: Theme.borderRadius.sm,
+    paddingHorizontal: 10, paddingVertical: 6, maxWidth: 320,
+  },
+  sortBtnText: { fontSize: 12, fontWeight: '600', flexShrink: 1 },
+  sortOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  sortSheet: { width: '100%', maxWidth: 380, borderRadius: 18, borderWidth: 1, padding: 10 },
+  sortTitle: { fontSize: 13, fontWeight: '800', letterSpacing: 0.3, paddingHorizontal: 10, paddingTop: 8, paddingBottom: 10, textTransform: 'uppercase' },
+  sortOpt: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, paddingHorizontal: 12, paddingVertical: 13, borderRadius: 12 },
+  sortOptText: { fontSize: 14 },
 
   thead: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1 },
   th: { fontSize: 10, fontWeight: '700', letterSpacing: 0.6 },

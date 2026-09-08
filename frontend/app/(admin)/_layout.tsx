@@ -20,6 +20,7 @@ const DOCK_ITEMS = [
   { name: 'tickets',       icon: 'chatbox-ellipses-outline', iconFilled: 'chatbox-ellipses', color: '#EF4444' },
   { name: 'pagos',         icon: 'card-outline',    iconFilled: 'card',          color: '#10B981' },
   { name: 'scan',          icon: 'qr-code-outline', iconFilled: 'qr-code',       color: '#3B82F6' },
+  { name: 'cuentas',       icon: 'wallet-outline',  iconFilled: 'wallet',        color: '#10B981' },
   { name: 'configuracion', icon: 'settings-outline', iconFilled: 'settings',    color: '#6B7280' },
 ];
 
@@ -89,7 +90,7 @@ export default function AdminLayout() {
 
   return (
     <View style={[styles.root, { backgroundColor: theme.background }]}>
-      {isDesktop && <Sidebar isDark={isDark} />}
+      {isDesktop && <Sidebar isDark={isDark} usaQr={usaQrInquilinos} />}
       <View style={[styles.mainContent, isDesktop && { borderLeftWidth: 0 }]}>
         {isDesktop && <TopBar isDark={isDark} />}
         <Tabs
@@ -121,7 +122,10 @@ export default function AdminLayout() {
                            route.name === d.name
                     );
                     if (!dockItem) return null;
-                    if (dockItem.name === 'scan' && !usaQrInquilinos) return null;
+                    // Modo solo-admin (sin app para inquilinos): fuera QR y Tickets,
+                    // y en su lugar aparece acceso directo a Cuentas.
+                    if ((dockItem.name === 'scan' || dockItem.name === 'tickets') && !usaQrInquilinos) return null;
+                    if (dockItem.name === 'cuentas' && usaQrInquilinos) return null;
 
                     const isFocused = props.state.index === index;
                     const iconName = isFocused ? dockItem.iconFilled : dockItem.icon;
@@ -156,6 +160,7 @@ export default function AdminLayout() {
           <Tabs.Screen name="tickets" options={{ title: 'Tickets' }} />
           <Tabs.Screen name="pagos" options={{ title: 'Pagos' }} />
           <Tabs.Screen name="scan" options={{ title: 'Escanear' }} />
+          <Tabs.Screen name="cuentas" options={{ title: 'Cuentas' }} />
           <Tabs.Screen name="departamentos" options={{ title: 'Departamentos' }} />
           <Tabs.Screen name="contratos" options={{ title: 'Contratos' }} />
           <Tabs.Screen name="reportes" options={{ title: 'Reportes' }} />

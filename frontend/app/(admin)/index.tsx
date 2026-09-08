@@ -49,6 +49,7 @@ export default function DashboardScreen() {
   const [proximosPagos, setProximosPagos] = useState<any[]>([]);
   const [proximosVencer, setProximosVencer] = useState<any[]>([]);
   const [contratosVencidos, setContratosVencidos] = useState<any[]>([]);
+  const [usaQr, setUsaQr] = useState(true);
   const [loading, setLoading] = useState(true);
 
   useFocusEffect(useCallback(() => {
@@ -59,11 +60,13 @@ export default function DashboardScreen() {
       api.getResumenDeuda(),
       api.getDepartamentos().catch(() => ({ data: [] })),
       api.getTickets({ estado: 'abierto' }).catch(() => ({ data: [] })),
+      api.getConfig().catch(() => ({ data: {} as Record<string, string> })),
     ])
-      .then(([sRes, iRes, deudaRes, dRes, tRes]) => {
+      .then(([sRes, iRes, deudaRes, dRes, tRes, cfgRes]) => {
         setStats(sRes.data);
+        setUsaQr((cfgRes.data as any)?.usa_qr_inquilinos !== 'false');
         setDeudaTotal(deudaRes.data?.total_general || 0);
-        setDeudores((deudaRes.data?.por_departamento || []).filter((d: any) => Number(d.deuda_total) > 0).length);
+        setDeudores((deudaRes.data?.por_departamento || []).filter((d: any) => Number(d.deuda_vencida ?? d.deuda_total) > 0).length);
         setDepartamentos(dRes.data || []);
         setTickets(tRes.data || []);
         const inquilinos: any[] = iRes.data || [];
@@ -135,7 +138,9 @@ export default function DashboardScreen() {
     { icon: 'add', label: 'Registrar Pago', primary: true, onPress: () => router.push('/pagos') },
     { icon: 'person-add-outline', label: 'Nuevo Inquilino', onPress: () => router.push('/inquilinos/nuevo') },
     { icon: 'document-text-outline', label: 'Generar Contrato', onPress: () => router.push('/contratos') },
-    { icon: 'qr-code-outline', label: 'Escanear QR', onPress: () => router.push('/scan') },
+    usaQr
+      ? { icon: 'qr-code-outline', label: 'Escanear QR', onPress: () => router.push('/scan') }
+      : { icon: 'wallet-outline', label: 'Cuentas Bancarias', onPress: () => router.push('/(admin)/cuentas') },
   ];
 
   if (loading) {

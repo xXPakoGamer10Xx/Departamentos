@@ -883,7 +883,7 @@ export default function ConfiguracionScreen() {
           iconColor="#10B981"
           title="Cuentas Bancarias (SPEI)"
           subtitle="Administra varias cuentas y asígnalas a cada departamento"
-          onPress={openCuentas}
+          onPress={() => router.push('/(admin)/cuentas' as any)}
         />
       </Section>
 

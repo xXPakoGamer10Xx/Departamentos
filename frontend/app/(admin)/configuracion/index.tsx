@@ -2008,9 +2008,13 @@ export default function ConfiguracionScreen() {
                         <Text style={[styles.backupMeta, { color: theme.textSecondary }]}>
                           {c.banco_nombre ? `${c.banco_nombre} · ` : ''}{c.banco_clabe}
                         </Text>
-                        {Array.isArray(c.departamentos) && c.departamentos.length > 0 && (
+                        {Array.isArray(c.departamentos) && c.departamentos.length > 0 ? (
                           <Text style={[styles.backupMeta, { color: theme.textSecondary }]}>
-                            Deptos: {c.departamentos.join(', ')}
+                            Deptos {c.departamentos.join(', ')} · entra ~{Number(c.renta_mensual || 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 })}/mes
+                          </Text>
+                        ) : (
+                          <Text style={[styles.backupMeta, { color: theme.textSecondary }]}>
+                            Sin departamentos asignados
                           </Text>
                         )}
                       </View>

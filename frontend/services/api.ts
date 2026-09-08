@@ -314,6 +314,11 @@ class ApiService {
   setPromesaPago = (pago_id: string, fecha_promesa: string | null) =>
     this.request<any>('PUT', `/pagos/${pago_id}/promesa`, { fecha_promesa });
 
+  // Igual que setPromesaPago pero cuando aún no existe la fila de pago del periodo:
+  // el backend la crea al vuelo.
+  setPromesaPagoInquilino = (inquilino_id: string, fecha_promesa: string | null, periodo?: string) =>
+    this.request<any>('PUT', `/pagos/promesa/inquilino/${inquilino_id}`, { fecha_promesa, periodo });
+
   getPromesasHistorial = (inquilino_id: string) =>
     this.request<any[]>('GET', `/pagos/promesas/${inquilino_id}`);
 

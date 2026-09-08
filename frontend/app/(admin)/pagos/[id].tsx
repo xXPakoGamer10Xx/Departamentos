@@ -475,7 +475,12 @@ export default function PagoDetalleScreen() {
   };
 
   const guardarPromesa = useCallback(async () => {
-    if (!pago?.id) return;
+    if (!pago?.id && !inquilino?.id) return;
+    // Si aún no hay fila de pago para el periodo, el backend la crea al vuelo.
+    const guardarFecha = (fecha: string | null) =>
+      pago?.id
+        ? api.setPromesaPago(pago.id, fecha)
+        : api.setPromesaPagoInquilino(inquilino!.id, fecha);
     const d = promesaDia.trim();
     const m = promesaMes.trim();
     const y = promesaAno.trim();
@@ -484,7 +489,7 @@ export default function PagoDetalleScreen() {
       setSavingPromesa(true);
       setPromesaError('');
       try {
-        await api.setPromesaPago(pago.id, null);
+        await guardarFecha(null);
         cargar();
         setPromesaGuardada(true);
         setTimeout(() => setPromesaGuardada(false), 2500);
@@ -505,7 +510,7 @@ export default function PagoDetalleScreen() {
     setSavingPromesa(true);
     setPromesaError('');
     try {
-      await api.setPromesaPago(pago.id, iso);
+      await guardarFecha(iso);
       cargar();
       setPromesaGuardada(true);
       setEditandoPromesa(false);
@@ -715,8 +720,8 @@ export default function PagoDetalleScreen() {
           )}
         </View>
 
-        {/* Promesa de pago */}
-        {!pago?.confirmado && pago?.id && (
+        {/* Promesa de pago — se puede anotar aunque todavía no exista la fila de pago del periodo */}
+        {!pago?.confirmado && (pago?.id || inquilino?.id) && (
           <View style={[styles.promesaCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#fff', borderColor: theme.border }]}>
             {!editandoPromesa ? (
               <TouchableOpacity

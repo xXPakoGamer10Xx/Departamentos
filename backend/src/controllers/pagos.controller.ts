@@ -776,30 +776,49 @@ export async function getSaldoInquilino(req: AuthRequest, res: Response, next: N
   }
 }
 
+// Normaliza una fecha de promesa a 'AAAA-MM-DD' o null. Acepta también DD/MM/AAAA
+// y DD-MM-AAAA. Lanza AppError si el formato no es reconocible.
+function normalizarFechaPromesa(raw: unknown): string | null {
+  if (raw === null || raw === undefined || raw === '') return null;
+  let fecha = String(raw).trim();
+
+  const dmyMatch = fecha.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (dmyMatch) {
+    const d = dmyMatch[1].padStart(2, '0');
+    const m = dmyMatch[2].padStart(2, '0');
+    fecha = `${dmyMatch[3]}-${m}-${d}`;
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+    throw new AppError('La fecha debe tener el formato DD/MM/AAAA o AAAA-MM-DD', 400);
+  }
+  return fecha;
+}
+
+// Guarda la fecha de promesa en el pago y, si hay fecha, la agrega al historial.
+async function aplicarPromesa(pagoId: string, fecha: string | null, userId: string) {
+  const updated = await pool.query(
+    `UPDATE pagos SET fecha_promesa = $2 WHERE id = $1 RETURNING *`,
+    [pagoId, fecha]
+  );
+
+  // Cada vez que se guarda una fecha (no al borrarla) se agrega al historial
+  // de promesas, independiente del valor actual en pagos.fecha_promesa.
+  if (fecha) {
+    await pool.query(
+      `INSERT INTO promesas_pago (pago_id, fecha_promesa, creado_por) VALUES ($1, $2, $3)`,
+      [pagoId, fecha, userId]
+    );
+  }
+
+  return updated.rows[0];
+}
+
 // PUT /api/pagos/:pago_id/promesa — el admin anota la fecha en que el inquilino prometió pagar
 export async function setPromesaPago(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     const { pago_id } = req.params;
-    let { fecha_promesa } = req.body;
-
-    if (fecha_promesa !== null && fecha_promesa !== undefined && fecha_promesa !== '') {
-      fecha_promesa = String(fecha_promesa).trim();
-
-      // Convertir DD/MM/AAAA o DD-MM-AAAA a AAAA-MM-DD si es necesario
-      const dmyMatch = fecha_promesa.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-      if (dmyMatch) {
-        const d = dmyMatch[1].padStart(2, '0');
-        const m = dmyMatch[2].padStart(2, '0');
-        const y = dmyMatch[3];
-        fecha_promesa = `${y}-${m}-${d}`;
-      }
-
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha_promesa)) {
-        throw new AppError('La fecha debe tener el formato DD/MM/AAAA o AAAA-MM-DD', 400);
-      }
-    } else {
-      fecha_promesa = null;
-    }
+    const fecha = normalizarFechaPromesa(req.body?.fecha_promesa);
 
     const pagoRes = await pool.query(
       `SELECT p.id FROM pagos p JOIN inquilinos i ON i.id = p.inquilino_id
@@ -808,21 +827,45 @@ export async function setPromesaPago(req: AuthRequest, res: Response, next: Next
     );
     if (!pagoRes.rows[0]) throw new AppError('Pago no encontrado o no autorizado', 404);
 
-    const updated = await pool.query(
-      `UPDATE pagos SET fecha_promesa = $2 WHERE id = $1 RETURNING *`,
-      [pago_id, fecha_promesa]
+    const pago = await aplicarPromesa(pago_id, fecha, req.user!.id);
+    res.json({ success: true, data: pago });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// PUT /api/pagos/promesa/inquilino/:inquilino_id — anota la promesa aunque todavía
+// no exista la fila de pago del periodo (la crea igual que "marcar pagado" o un abono).
+export async function setPromesaPagoInquilino(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { inquilino_id } = req.params;
+    const fecha = normalizarFechaPromesa(req.body?.fecha_promesa);
+    const periodo = req.body?.periodo && /^\d{4}-\d{2}$/.test(String(req.body.periodo))
+      ? String(req.body.periodo)
+      : getCurrentPeriodo();
+
+    const inqRes = await pool.query(
+      `SELECT * FROM inquilinos WHERE id = $1 AND admin_id = $2 AND estado = 'activo'`,
+      [inquilino_id, req.user!.id]
+    );
+    if (!inqRes.rows[0]) throw new AppError('Inquilino no encontrado o no autorizado', 404);
+
+    const existente = await pool.query(
+      `SELECT * FROM pagos WHERE inquilino_id = $1 AND periodo = $2`,
+      [inquilino_id, periodo]
     );
 
-    // Cada vez que se guarda una fecha (no al borrarla) se agrega al historial
-    // de promesas, independiente del valor actual en pagos.fecha_promesa.
-    if (fecha_promesa) {
-      await pool.query(
-        `INSERT INTO promesas_pago (pago_id, fecha_promesa, creado_por) VALUES ($1, $2, $3)`,
-        [pago_id, fecha_promesa, req.user!.id]
-      );
+    // Borrar la promesa cuando ni siquiera hay pago: no hay nada que guardar.
+    if (!fecha && !existente.rows[0]) {
+      res.json({ success: true, data: null });
+      return;
     }
 
-    res.json({ success: true, data: updated.rows[0] });
+    const pago = existente.rows[0] || await getOrCrearPago(inqRes.rows[0], periodo);
+    if (pago.confirmado) throw new AppError('Este periodo ya está pagado por completo', 400);
+
+    const actualizado = await aplicarPromesa(pago.id, fecha, req.user!.id);
+    res.json({ success: true, data: actualizado });
   } catch (err) {
     next(err);
   }

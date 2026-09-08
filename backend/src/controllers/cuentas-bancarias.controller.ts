@@ -9,7 +9,11 @@ export async function getCuentasBancarias(req: AuthRequest, res: Response, next:
     const result = await pool.query(
       `SELECT cb.*,
         (SELECT json_agg(d.numero ORDER BY d.numero)
-           FROM departamentos d WHERE d.cuenta_bancaria_id = cb.id) AS departamentos
+           FROM departamentos d WHERE d.cuenta_bancaria_id = cb.id) AS departamentos,
+        (SELECT COALESCE(SUM(i.renta), 0)
+           FROM departamentos d
+           JOIN inquilinos i ON i.depto_numero = d.numero AND i.estado = 'activo'
+           WHERE d.cuenta_bancaria_id = cb.id) AS renta_mensual
        FROM cuentas_bancarias cb
        WHERE cb.admin_id = $1
        ORDER BY cb.es_predeterminada DESC, cb.created_at ASC`,

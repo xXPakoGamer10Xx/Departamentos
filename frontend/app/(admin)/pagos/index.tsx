@@ -244,8 +244,16 @@ export default function PagosScreen() {
 
   /* ---------------- Toolbar ---------------- */
   const toolbar = (
-    <View style={[styles.toolbar, { borderBottomColor: theme.border }]}>
-      <View style={[styles.searchBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#fff', borderColor: theme.border }]}>
+    <View style={[
+      styles.toolbar,
+      { borderBottomColor: theme.border },
+      !isDesktop && { flexDirection: 'column', alignItems: 'stretch' },
+    ]}>
+      <View style={[
+        styles.searchBox,
+        { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#fff', borderColor: theme.border },
+        !isDesktop && { maxWidth: undefined, width: '100%' },
+      ]}>
         <Ionicons name="search" size={15} color={theme.textMuted} />
         <TextInput
           placeholder="Buscar por inquilino o unidad..."
@@ -260,7 +268,12 @@ export default function PagosScreen() {
           </TouchableOpacity>
         )}
       </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabRow}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.tabRow}
+        style={!isDesktop ? { width: '100%', flexGrow: 0 } : undefined}
+      >
         {TAB_META.map(t => {
           const active = tab === t.key;
           const c = t.color || theme.text;
@@ -405,6 +418,11 @@ export default function PagosScreen() {
                   {atrasado ? `Venció el ${diaPago(item)}` : `Paga el día ${diaPago(item)}`}
                 </Text>
               </View>
+            )}
+            {atrasado && (saldos[item.id]?.total ?? 0) > Number(item.renta) + 0.5 && (
+              <Text style={[styles.rowMeta, { fontSize: 11, fontWeight: '700', color: theme.danger }]}>
+                Debe {fmt0(saldos[item.id]?.total ?? 0)} en total
+              </Text>
             )}
             <Badge label={chip.label} variant={chip.variant} size="sm" />
           </View>

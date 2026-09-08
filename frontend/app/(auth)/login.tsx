@@ -212,10 +212,12 @@ export default function LoginScreen() {
             />
             <View style={styles.showcaseContent}>
               <View style={styles.showcaseLogoRow}>
-                <LinearGradient colors={['#10B981', '#3B82F6']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.logoMark}>
-                  <Ionicons name="home" size={20} color="#fff" />
-                </LinearGradient>
-                <Text style={styles.showcaseBrand}>NethRent</Text>
+                <Image
+                  source={require('../../assets/logo-lockup.png')}
+                  style={styles.showcaseLogoImg}
+                  resizeMode="contain"
+                  accessibilityLabel="NethRent"
+                />
               </View>
 
               <View style={{ maxWidth: 480 }}>
@@ -321,15 +323,8 @@ const styles = StyleSheet.create({
     padding: 48,
     justifyContent: 'space-between',
   },
-  showcaseLogoRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  logoMark: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  showcaseBrand: { color: '#fff', fontSize: 20, fontWeight: '800', letterSpacing: -0.4 },
+  showcaseLogoRow: { flexDirection: 'row', alignItems: 'center' },
+  showcaseLogoImg: { width: 220, height: 58 },
   showcaseTitle: {
     color: '#F8FAFC',
     fontSize: 42,

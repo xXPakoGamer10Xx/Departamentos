@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, useColorScheme, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, useColorScheme, Platform, Image } from 'react-native';
 import { Colors } from '../../constants/Colors';
 import { Theme } from '../../constants/Theme';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, usePathname } from 'expo-router';
 import { getItem, removeItem } from '../../services/storage';
 
@@ -78,18 +77,15 @@ export function Sidebar({ isDark: passedIsDark }: { isDark?: boolean }) {
 
       {/* Logo header */}
       <View style={styles.header}>
-        <LinearGradient
-          colors={['#10B981', '#3B82F6']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.logo}
-        >
-          <Ionicons name="home" size={18} color="#fff" />
-        </LinearGradient>
-        <View>
-          <Text style={[styles.brand, { color: theme.text }]}>NethRent</Text>
-          <Text style={[styles.brandSub, { color: theme.textMuted }]}>Executive Suite</Text>
+        <View style={styles.logoChip}>
+          <Image
+            source={require('../../assets/logo-lockup.png')}
+            style={styles.logoImg}
+            resizeMode="contain"
+            accessibilityLabel="NethRent"
+          />
         </View>
+        <Text style={[styles.brandSub, { color: theme.textMuted }]}>Executive Suite</Text>
       </View>
 
       {/* Separador */}
@@ -188,29 +184,26 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: 18,
     marginBottom: 20,
-    gap: 12,
   },
-  logo: {
-    width: 38,
-    height: 38,
-    borderRadius: 11,
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexShrink: 0,
+  logoChip: {
+    backgroundColor: '#0E1321',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    alignSelf: 'flex-start',
   },
-  brand: {
-    fontSize: 16,
-    fontWeight: '800',
-    letterSpacing: -0.4,
+  logoImg: {
+    width: 158,
+    height: 42,
   },
   brandSub: {
     fontSize: 11,
-    fontWeight: '500',
-    marginTop: 1,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+    marginTop: 7,
+    marginLeft: 2,
   },
   divider: {
     height: 1,

@@ -9,8 +9,10 @@ import api from '../../../services/api';
 import { confirmar } from '../../../utils/confirm';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { LinearGradient } from 'expo-linear-gradient';
+import { usePermisoGuard } from '../../../hooks/usePermisoGuard';
 
 export default function InquilinoDetailScreen() {
+  usePermisoGuard('inquilinos');
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const colorScheme = useColorScheme();

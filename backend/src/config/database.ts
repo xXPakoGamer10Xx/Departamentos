@@ -103,6 +103,17 @@ ALTER TABLE usuarios DROP CONSTRAINT IF EXISTS usuarios_rol_check;
 ALTER TABLE usuarios ADD CONSTRAINT usuarios_rol_check
   CHECK (rol IN ('admin', 'inquilino', 'cobrador'));
 
+-- Permisos granulares para colaboradores (rol 'cobrador')
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS permisos JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE codigos_invitacion ADD COLUMN IF NOT EXISTS permisos JSONB NOT NULL DEFAULT '[]'::jsonb;
+
+-- admin_id: a qué administrador pertenece un colaborador/inquilino (multi-tenant).
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS admin_id UUID REFERENCES usuarios(id) ON DELETE CASCADE;
+-- Backfill: en un despliegue de un solo admin, todos los no-admin cuelgan de él.
+UPDATE usuarios SET admin_id = (SELECT id FROM usuarios WHERE rol = 'admin' ORDER BY created_at ASC LIMIT 1)
+WHERE rol <> 'admin' AND admin_id IS NULL
+  AND EXISTS (SELECT 1 FROM usuarios WHERE rol = 'admin');
+
 -- Cuentas bancarias múltiples por admin (transferencias)
 CREATE TABLE IF NOT EXISTS cuentas_bancarias (
   id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

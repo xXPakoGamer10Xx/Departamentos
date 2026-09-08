@@ -1,13 +1,17 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { AppError } from './error.middleware';
+import { pool } from '../config/database';
 
 export interface AuthRequest extends Request {
   user?: {
-    id: string;
+    id: string;              // OJO: para un colaborador se reescribe al id del admin dueño
     email: string;
     rol: 'admin' | 'inquilino' | 'cobrador';
     nombre_completo: string;
+    admin_id?: string;       // admin dueño de los datos (para cobrador/inquilino)
+    actorId?: string;        // el usuario real que hace la petición (colaborador)
+    permisos?: string[];     // solo informativo; el gating real relee de la BD
   };
 }
 
@@ -25,6 +29,13 @@ export function authMiddleware(req: AuthRequest, _res: Response, next: NextFunct
   try {
     const decoded = jwt.verify(raw, process.env.JWT_SECRET!) as any;
     req.user = decoded;
+    // Un colaborador (cobrador) opera SOBRE los datos de su admin: reescribimos
+    // req.user.id al del admin para que todas las consultas `WHERE admin_id = id`
+    // sigan funcionando sin tocar cada controlador. `actorId` guarda quién actúa.
+    if (decoded.rol === 'cobrador' && decoded.admin_id) {
+      req.user!.actorId = decoded.id;
+      req.user!.id = decoded.admin_id;
+    }
     next();
   } catch {
     next(new AppError('Token inválido o expirado', 401));
@@ -43,6 +54,30 @@ export function cobradorOrAdmin(req: AuthRequest, _res: Response, next: NextFunc
     return next(new AppError('Acceso restringido a administradores y cobradores', 403));
   }
   next();
+}
+
+// Gating por permiso para colaboradores. El admin pasa siempre. Un 'cobrador'
+// pasa si tiene ALGUNO de los permisos indicados (se leen frescos de la BD, así
+// que cambiarlos surte efecto sin re-login). Cualquier otro rol: 403.
+export function requirePermiso(...keys: string[]) {
+  return async (req: AuthRequest, _res: Response, next: NextFunction): Promise<void> => {
+    if (req.user?.rol === 'admin') return next();
+    if (req.user?.rol !== 'cobrador') {
+      return next(new AppError('Acceso restringido', 403));
+    }
+    try {
+      // req.user.id ya fue reescrito al admin; el colaborador real es actorId.
+      const r = await pool.query(
+        `SELECT permisos FROM usuarios WHERE id = $1 AND activo = TRUE`,
+        [req.user.actorId ?? req.user.id]
+      );
+      const permisos: string[] = Array.isArray(r.rows[0]?.permisos) ? r.rows[0].permisos : [];
+      if (keys.some(k => permisos.includes(k))) return next();
+      next(new AppError('No tienes permiso para esta acción', 403));
+    } catch (err) {
+      next(err);
+    }
+  };
 }
 
 // Para rutas que el browser abre directamente (PDF): acepta token en header O en ?token=.

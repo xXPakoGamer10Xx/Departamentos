@@ -15,8 +15,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Print from 'expo-print';
 import api from '../../../services/api';
 import { buildReciboHtml } from '../../../utils/recibo';
+import { usePermisoGuard } from '../../../hooks/usePermisoGuard';
 
 export default function PagoDetalleScreen() {
+  usePermisoGuard('pagos');
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const colorScheme = useColorScheme();

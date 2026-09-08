@@ -14,6 +14,7 @@ import { SurfaceCard } from '../../../components/ui/SurfaceCard';
 import { Badge } from '../../../components/ui/Badge';
 import { confirmar } from '../../../utils/confirm';
 import api from '../../../services/api';
+import { usePermisoGuard } from '../../../hooks/usePermisoGuard';
 
 type RowState = 'pagado' | 'revision' | 'atrasado' | 'pendiente';
 type Tab = 'todos' | 'pagados' | 'revision' | 'pendientes' | 'atrasados';
@@ -29,6 +30,7 @@ const SORT_OPTS: { key: SortMode; label: string }[] = [
 ];
 
 export default function PagosScreen() {
+  usePermisoGuard('pagos');
   const router = useRouter();
   const isDark = useColorScheme() === 'dark';
   const theme = isDark ? Colors.dark : Colors.light;

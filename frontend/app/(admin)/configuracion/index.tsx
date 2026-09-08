@@ -17,6 +17,8 @@ import api from '../../../services/api';
 import { getItem, setItem, removeItem } from '../../../services/storage';
 import { activateWebPush } from '../../../services/webNotifications';
 import { confirmar } from '../../../utils/confirm';
+import { PRESETS, PERMISO_LABELS, type Permiso } from '../../../constants/permisos';
+import { useAdminGuard } from '../../../hooks/usePermisoGuard';
 
 const TOKEN_KEY = 'auth_token';
 const USER_KEY = 'auth_user';
@@ -34,6 +36,7 @@ function setNotifPref(val: boolean) {
 }
 
 export default function ConfiguracionScreen() {
+  useAdminGuard();
   const router = useRouter();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
@@ -94,7 +97,12 @@ export default function ConfiguracionScreen() {
   const [codigoGenerado, setCodigoGenerado] = useState<any | null>(null);
   const [rolCodigo, setRolCodigo] = useState<'inquilino' | 'cobrador'>('inquilino');
   const [expiraDias, setExpiraDias] = useState<number | null>(7);
+  const [presetCodigo, setPresetCodigo] = useState<string>('cobrador');
+  const [permisosCodigo, setPermisosCodigo] = useState<Permiso[]>(PRESETS.find(p => p.key === 'cobrador')!.permisos);
   const [codigoCopiado, setCodigoCopiado] = useState(false);
+  // Edición de permisos de un colaborador existente
+  const [permisosUser, setPermisosUser] = useState<{ id: string; nombre: string; permisos: Permiso[] } | null>(null);
+  const [savingPermisosUser, setSavingPermisosUser] = useState(false);
 
   // Vincular modal
   const [vincularModal, setVincularModal] = useState<{ userId: string; userName: string } | null>(null);
@@ -377,12 +385,40 @@ export default function ConfiguracionScreen() {
   const generarCodigo = async () => {
     setGenerandoCodigo(true);
     try {
-      const res = await api.generarCodigoInvitacion(rolCodigo, expiraDias);
+      const res = await api.generarCodigoInvitacion(
+        rolCodigo, expiraDias,
+        rolCodigo === 'cobrador' ? permisosCodigo : undefined,
+      );
       setCodigoGenerado(res.data);
       setCodigos(prev => [res.data, ...prev]);
     } catch (e: any) {
       // Mostrar error si ocurre
     } finally { setGenerandoCodigo(false); }
+  };
+
+  const togglePermisoCodigo = (k: Permiso) => {
+    setPresetCodigo('custom');
+    setPermisosCodigo(prev => prev.includes(k) ? prev.filter(x => x !== k) : [...prev, k]);
+  };
+  const aplicarPreset = (key: string) => {
+    setPresetCodigo(key);
+    const p = PRESETS.find(x => x.key === key);
+    if (p) setPermisosCodigo([...p.permisos]);
+  };
+
+  const guardarPermisosUser = async () => {
+    if (!permisosUser) return;
+    setSavingPermisosUser(true);
+    try {
+      await api.actualizarPermisosUsuario(permisosUser.id, permisosUser.permisos);
+      setPermisosUser(null);
+      const res = await api.getUsuarios();
+      setAdmins(res.data || []);
+    } catch (e: any) {
+      if (Platform.OS === 'web') window.alert(e?.message || 'No se pudo guardar');
+    } finally {
+      setSavingPermisosUser(false);
+    }
   };
 
   const copiarCodigo = async (codigo: string) => {
@@ -1309,6 +1345,18 @@ export default function ConfiguracionScreen() {
                                 <Text style={[styles.toggleBtnText, { color: theme.primary }]}>Vincular</Text>
                               </TouchableOpacity>
                             )}
+                            {a.rol === 'cobrador' && (
+                              <TouchableOpacity
+                                style={[styles.toggleBtn, { backgroundColor: theme.primary + '20' }]}
+                                onPress={() => setPermisosUser({
+                                  id: a.id, nombre: a.nombre_completo,
+                                  permisos: Array.isArray(a.permisos) ? a.permisos : [],
+                                })}
+                              >
+                                <Ionicons name="options-outline" size={16} color={theme.primary} />
+                                <Text style={[styles.toggleBtnText, { color: theme.primary }]}>Permisos</Text>
+                              </TouchableOpacity>
+                            )}
                             <View style={{ flexDirection: 'row', gap: 6 }}>
                               <TouchableOpacity
                                 style={[
@@ -1440,6 +1488,55 @@ export default function ConfiguracionScreen() {
             >
               <Text style={{ color: theme.text, fontWeight: '600' }}>Cancelar</Text>
             </TouchableOpacity>
+          </GlassCard>
+        </View>
+      </Modal>
+
+      {/* Modal permisos de un colaborador */}
+      <Modal visible={!!permisosUser} transparent animationType="fade" onRequestClose={() => setPermisosUser(null)}>
+        <View style={styles.modalOverlay}>
+          <GlassCard style={[styles.modalBox, { maxHeight: '85%' }]} borderRadius={Theme.borderRadius.xl} padding={24}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Permisos de {permisosUser?.nombre}</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+              {PRESETS.map(p => (
+                <TouchableOpacity
+                  key={p.key}
+                  style={{
+                    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1,
+                    backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', borderColor: theme.border,
+                  }}
+                  onPress={() => setPermisosUser(u => u ? { ...u, permisos: [...p.permisos] } : u)}
+                >
+                  <Text style={{ color: theme.text, fontWeight: '700', fontSize: 12.5 }}>{p.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <ScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>
+              {PERMISO_LABELS.map(pl => {
+                const on = permisosUser?.permisos.includes(pl.key) ?? false;
+                return (
+                  <TouchableOpacity
+                    key={pl.key}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10 }}
+                    onPress={() => setPermisosUser(u => u ? {
+                      ...u,
+                      permisos: on ? u.permisos.filter(x => x !== pl.key) : [...u.permisos, pl.key],
+                    } : u)}
+                  >
+                    <Ionicons name={on ? 'checkbox' : 'square-outline'} size={20} color={on ? theme.primary : theme.textSecondary} />
+                    <Text style={{ color: theme.text, fontSize: 13.5, flex: 1 }}>{pl.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={[styles.modalBtn, { borderWidth: 1, borderColor: theme.border }]} onPress={() => setPermisosUser(null)} disabled={savingPermisosUser}>
+                <Text style={{ color: theme.text, fontWeight: '600' }}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: theme.primary, opacity: savingPermisosUser ? 0.7 : 1 }]} onPress={guardarPermisosUser} disabled={savingPermisosUser}>
+                {savingPermisosUser ? <ActivityIndicator size="small" color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '700' }}>Guardar</Text>}
+              </TouchableOpacity>
+            </View>
           </GlassCard>
         </View>
       </Modal>
@@ -1611,6 +1708,44 @@ export default function ConfiguracionScreen() {
                     );
                   })}
                 </View>
+
+                {rolCodigo === 'cobrador' && (
+                  <>
+                    <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>Rol predeterminado</Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                      {PRESETS.map(p => (
+                        <TouchableOpacity
+                          key={p.key}
+                          style={{
+                            paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1,
+                            backgroundColor: presetCodigo === p.key ? '#10B98120' : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'),
+                            borderColor: presetCodigo === p.key ? '#10B981' : theme.border,
+                          }}
+                          onPress={() => aplicarPreset(p.key)}
+                        >
+                          <Text style={{ color: presetCodigo === p.key ? '#10B981' : theme.text, fontWeight: '700', fontSize: 13 }}>{p.label}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>Puede ver / hacer</Text>
+                    <View style={{ gap: 2, marginBottom: 16 }}>
+                      {PERMISO_LABELS.map(pl => {
+                        const on = permisosCodigo.includes(pl.key);
+                        return (
+                          <TouchableOpacity
+                            key={pl.key}
+                            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 9 }}
+                            onPress={() => togglePermisoCodigo(pl.key)}
+                          >
+                            <Ionicons name={on ? 'checkbox' : 'square-outline'} size={20} color={on ? theme.primary : theme.textSecondary} />
+                            <Text style={{ color: theme.text, fontSize: 13.5, flex: 1 }}>{pl.label}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </>
+                )}
 
                 <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>Vigencia</Text>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>

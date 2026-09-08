@@ -12,10 +12,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useState, useCallback, useEffect } from 'react';
 import api from '../../../services/api';
+import { usePermisoGuard } from '../../../hooks/usePermisoGuard';
 
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
 export default function ReportesScreen() {
+  usePermisoGuard('reportes');
   const router = useRouter();
   const isDark = useColorScheme() === 'dark';
   const theme = isDark ? Colors.dark : Colors.light;

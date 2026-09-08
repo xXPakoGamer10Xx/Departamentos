@@ -15,8 +15,10 @@ import { Badge } from '../../../components/ui/Badge';
 import { Input } from '../../../components/ui/Input';
 import { Button } from '../../../components/ui/Button';
 import { LinearGradient } from 'expo-linear-gradient';
+import { usePermisoGuard } from '../../../hooks/usePermisoGuard';
 
 export default function DepartamentosScreen() {
+  usePermisoGuard('departamentos');
   const isDark = useColorScheme() === 'dark';
   const theme = isDark ? Colors.dark : Colors.light;
   const router = useRouter();

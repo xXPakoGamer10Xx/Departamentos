@@ -13,8 +13,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import api from '../../../../services/api';
+import { usePermisoGuard } from '../../../../hooks/usePermisoGuard';
 
 export default function ContractPreviewScreen() {
+  usePermisoGuard('contratos');
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const colorScheme = useColorScheme();

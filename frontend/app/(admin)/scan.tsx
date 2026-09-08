@@ -10,6 +10,7 @@ import { useFocusEffect } from 'expo-router';
 import { Colors } from '../../constants/Colors';
 import { Theme } from '../../constants/Theme';
 import api from '../../services/api';
+import { usePermisoGuard } from '../../hooks/usePermisoGuard';
 
 let CameraView: any = null;
 let useCameraPermissions: any = null;
@@ -24,6 +25,7 @@ const TOKEN_REGEX = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 type Stage = 'scan' | 'confirm' | 'done' | 'error';
 
 export default function ScanQRScreen() {
+  usePermisoGuard('pagos.marcar');
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const theme = isDark ? Colors.dark : Colors.light;

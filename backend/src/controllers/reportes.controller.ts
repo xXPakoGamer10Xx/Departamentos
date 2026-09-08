@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import { pool } from '../config/database';
 import { AppError } from '../middleware/error.middleware';
 import { AuthRequest } from '../middleware/auth.middleware';
+import { ownerId } from '../utils/scope';
 
 // GET /api/reportes/anual?year=YYYY — corte anual: renta, cuotas extra y depósitos cobrados
 export async function getReporteAnual(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
@@ -9,7 +10,7 @@ export async function getReporteAnual(req: AuthRequest, res: Response, next: Nex
     const year = parseInt(String(req.query.year), 10);
     if (!year || year < 2000 || year > 2100) throw new AppError('year inválido', 400);
 
-    const adminId = req.user!.id;
+    const adminId = ownerId(req);
 
     const [rentaRes, extraRes, depositoRes] = await Promise.all([
       pool.query(
@@ -64,7 +65,7 @@ export async function getReporteMensual(req: AuthRequest, res: Response, next: N
   try {
     const year = parseInt(String(req.query.year), 10);
     if (!year || year < 2000 || year > 2100) throw new AppError('year inválido', 400);
-    const adminId = req.user!.id;
+    const adminId = ownerId(req);
 
     const [detalle, aniosRes] = await Promise.all([
       pool.query(

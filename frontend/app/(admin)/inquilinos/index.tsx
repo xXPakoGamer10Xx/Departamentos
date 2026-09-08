@@ -13,6 +13,7 @@ import { Badge } from '../../../components/ui/Badge';
 import { Button } from '../../../components/ui/Button';
 import { LinearGradient } from 'expo-linear-gradient';
 import api from '../../../services/api';
+import { usePermisoGuard } from '../../../hooks/usePermisoGuard';
 
 interface Inquilino {
   id: number | string;
@@ -24,6 +25,7 @@ interface Inquilino {
 }
 
 export default function InquilinosListScreen() {
+  usePermisoGuard('inquilinos');
   const [search, setSearch] = useState('');
   const [inquilinos, setInquilinos] = useState<Inquilino[]>([]);
   const [loading, setLoading] = useState(true);

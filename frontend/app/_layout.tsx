@@ -7,6 +7,7 @@ import { useRouter } from 'expo-router';
 import { Colors } from '../constants/Colors';
 import api from '../services/api';
 import { hydrateStorage, getItem, setItem, removeItem } from '../services/storage';
+import { setSesionPermisos } from '../constants/permisos';
 
 // ── Esquema de color estable ─────────────────────────────────────────────────
 // En RN-web `useColorScheme()` puede devolver valores distintos entre
@@ -45,6 +46,12 @@ export default function RootLayout() {
         // poder leerlo de forma síncrona en el resto de la app.
         await hydrateStorage();
 
+        // Permisos desde el usuario guardado (pintado rápido antes de /me).
+        try {
+          const cached = JSON.parse(getItem(USER_KEY) || 'null');
+          if (cached) setSesionPermisos(cached.rol, cached.permisos);
+        } catch { /* ignore */ }
+
         const saved = getItem(TOKEN_KEY);
         if (saved) {
           api.setToken(saved);
@@ -53,6 +60,7 @@ export default function RootLayout() {
             // Actualizar datos de usuario con la info más reciente del servidor
             if (meRes.data) {
               setItem(USER_KEY, JSON.stringify(meRes.data));
+              setSesionPermisos((meRes.data as any).rol, (meRes.data as any).permisos);
             }
             // Token válido — app/index.tsx se encarga del routing según el rol almacenado
           } catch {

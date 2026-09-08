@@ -15,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { SurfaceCard } from '../../../components/ui/SurfaceCard';
 import { Badge } from '../../../components/ui/Badge';
 import api from '../../../services/api';
+import { usePermisoGuard } from '../../../hooks/usePermisoGuard';
 
 type Estado = 'abierto' | 'en_revision' | 'resuelto';
 type Vista = 'activos' | 'historial';
@@ -45,6 +46,7 @@ const nextMes = (mes: string) => {
 };
 
 export default function TicketsScreen() {
+  usePermisoGuard('tickets');
   const isDark = useColorScheme() === 'dark';
   const theme = isDark ? Colors.dark : Colors.light;
   const { width } = useWindowDimensions();

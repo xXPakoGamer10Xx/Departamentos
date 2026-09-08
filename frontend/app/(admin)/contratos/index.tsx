@@ -12,11 +12,13 @@ import { SurfaceCard } from '../../../components/ui/SurfaceCard';
 import { Badge } from '../../../components/ui/Badge';
 import { LinearGradient } from 'expo-linear-gradient';
 import api from '../../../services/api';
+import { usePermisoGuard } from '../../../hooks/usePermisoGuard';
 
 type Estado = 'vigente' | 'porVencer' | 'vencido';
 type Filtro = 'todos' | 'vigentes' | 'porVencer' | 'vencidos';
 
 export default function ContratosScreen() {
+  usePermisoGuard('contratos');
   const [search, setSearch] = useState('');
   const [filtro, setFiltro] = useState<Filtro>('todos');
   const [inquilinos, setInquilinos] = useState<any[]>([]);

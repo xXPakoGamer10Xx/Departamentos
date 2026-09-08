@@ -21,6 +21,7 @@ import { Input } from '../../components/ui/Input';
 import { LinearGradient } from 'expo-linear-gradient';
 import api from '../../services/api';
 import { setItem, removeItem } from '../../services/storage';
+import { setSesionPermisos } from '../../constants/permisos';
 
 const TOKEN_KEY = 'auth_token';
 const USER_KEY = 'auth_user';
@@ -69,6 +70,7 @@ export default function LoginScreen() {
         return;
       }
       api.setToken(res.data.token);
+      setSesionPermisos(user.rol, user.permisos);
       if (remember) {
         setItem(TOKEN_KEY, res.data.token);
         setItem(USER_KEY, JSON.stringify(user));
@@ -76,7 +78,7 @@ export default function LoginScreen() {
         removeItem(TOKEN_KEY);
         removeItem(USER_KEY);
       }
-      const dest = rol === 'inquilino' ? '/(inquilino)' : rol === 'cobrador' ? '/(cobrador)/scan' : '/(admin)';
+      const dest = rol === 'inquilino' ? '/(inquilino)' : '/(admin)';
       router.replace(dest as any);
     } catch (e: any) {
       setError(e.message || 'Credenciales incorrectas. Verifica e intenta de nuevo.');

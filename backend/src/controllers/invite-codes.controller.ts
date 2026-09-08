@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import { pool } from '../config/database';
 import { AppError } from '../middleware/error.middleware';
 import { AuthRequest } from '../middleware/auth.middleware';
+import { sanitizePermisos, PRESETS } from '../config/permisos';
 
 /** Genera un código corto aleatorio del formato "XXXX-XXXX" */
 function generarCodigo(): string {
@@ -22,10 +23,21 @@ function calcularExpiracion(expira_dias: number | null): Date | null {
 // POST /api/invite-codes
 export async function crearCodigo(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { rol = 'inquilino', expira_dias = null } = req.body;
+    const { rol = 'inquilino', expira_dias = null, preset = null } = req.body;
 
     if (!['inquilino', 'cobrador'].includes(rol)) {
       throw new AppError('Rol inválido. Usa "inquilino" o "cobrador"', 400);
+    }
+
+    // Permisos: solo aplican a colaboradores. Si viene un preset conocido y no
+    // se mandan permisos explícitos, se usan los del preset.
+    let permisos: string[] = [];
+    if (rol === 'cobrador') {
+      if (Array.isArray(req.body.permisos)) {
+        permisos = sanitizePermisos(req.body.permisos);
+      } else if (preset && PRESETS[preset]) {
+        permisos = [...PRESETS[preset].permisos];
+      }
     }
 
     // Intentar generar un código único (máx. 10 intentos)
@@ -42,9 +54,9 @@ export async function crearCodigo(req: AuthRequest, res: Response, next: NextFun
     const expiraEn = calcularExpiracion(expira_dias !== null ? Number(expira_dias) : null);
 
     const result = await pool.query(
-      `INSERT INTO codigos_invitacion (admin_id, codigo, rol, expira_en)
-       VALUES ($1, $2, $3, $4) RETURNING *`,
-      [req.user!.id, codigo, rol, expiraEn]
+      `INSERT INTO codigos_invitacion (admin_id, codigo, rol, expira_en, permisos)
+       VALUES ($1, $2, $3, $4, $5::jsonb) RETURNING *`,
+      [req.user!.id, codigo, rol, expiraEn, JSON.stringify(permisos)]
     );
 
     res.status(201).json({ success: true, data: result.rows[0] });

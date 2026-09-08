@@ -4,13 +4,14 @@ import { pool } from '../config/database';
 import { AppError } from '../middleware/error.middleware';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { toTitleCase } from '../utils/formatters';
+import { sanitizePermisos } from '../config/permisos';
 
 // GET /api/usuarios — Solo devuelve el propio admin + los que invitó
 export async function getUsuarios(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     const adminId = req.user!.id;
     const result = await pool.query(
-      `SELECT u.id, u.email, u.nombre_completo, u.rol, u.avatar_url, u.activo, u.ultimo_acceso, u.created_at
+      `SELECT u.id, u.email, u.nombre_completo, u.rol, u.avatar_url, u.activo, u.ultimo_acceso, u.created_at, u.permisos
        FROM usuarios u
        WHERE u.id = $1
           OR u.id IN (
@@ -40,11 +41,17 @@ export async function createUsuario(req: AuthRequest, res: Response, next: NextF
     const existing = await pool.query(`SELECT id FROM usuarios WHERE email = $1`, [email.toLowerCase()]);
     if (existing.rows[0]) throw new AppError('Ya existe un usuario con ese email', 409);
 
+    const rolFinal = rol || 'admin';
     const hash = await bcrypt.hash(password, 12);
     const result = await pool.query(
-      `INSERT INTO usuarios (email, password_hash, nombre_completo, rol)
-       VALUES ($1, $2, $3, $4) RETURNING id, email, nombre_completo, rol, activo, created_at`,
-      [email.toLowerCase(), hash, toTitleCase(nombre_completo), rol || 'admin']
+      `INSERT INTO usuarios (email, password_hash, nombre_completo, rol, admin_id, permisos)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+       RETURNING id, email, nombre_completo, rol, activo, created_at, permisos`,
+      [
+        email.toLowerCase(), hash, toTitleCase(nombre_completo), rolFinal,
+        rolFinal === 'admin' ? null : req.user!.id,
+        JSON.stringify(rolFinal === 'cobrador' ? sanitizePermisos(req.body.permisos) : []),
+      ]
     );
 
     res.status(201).json({ success: true, data: result.rows[0] });
@@ -114,7 +121,34 @@ export async function updatePerfil(req: AuthRequest, res: Response, next: NextFu
         avatar_url = COALESCE($2, avatar_url)
        WHERE id = $3
        RETURNING id, email, nombre_completo, rol, avatar_url`,
-      [nombre_completo ? toTitleCase(nombre_completo) : null, avatar_url || null, req.user!.id]
+      [nombre_completo ? toTitleCase(nombre_completo) : null, avatar_url || null, req.user!.actorId ?? req.user!.id]
+    );
+    res.json({ success: true, data: result.rows[0] });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// PATCH /api/usuarios/:id/permisos — Admin ajusta los permisos de un colaborador
+export async function actualizarPermisos(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { id } = req.params;
+    const adminId = req.user!.id;
+    if (id === adminId) throw new AppError('El administrador tiene todos los permisos', 400);
+
+    const scopeCheck = await pool.query(
+      `SELECT rol FROM usuarios WHERE id = $1 AND (admin_id = $2
+         OR id IN (SELECT usado_por FROM codigos_invitacion WHERE admin_id = $2 AND usado_por IS NOT NULL))`,
+      [id, adminId]
+    );
+    if (!scopeCheck.rows[0]) throw new AppError('No tienes permiso para modificar este usuario', 403);
+    if (scopeCheck.rows[0].rol !== 'cobrador') throw new AppError('Solo los colaboradores tienen permisos configurables', 400);
+
+    const permisos = sanitizePermisos(req.body.permisos);
+    const result = await pool.query(
+      `UPDATE usuarios SET permisos = $1::jsonb, admin_id = COALESCE(admin_id, $3) WHERE id = $2
+       RETURNING id, email, nombre_completo, rol, activo, permisos`,
+      [JSON.stringify(permisos), id, adminId]
     );
     res.json({ success: true, data: result.rows[0] });
   } catch (err) {

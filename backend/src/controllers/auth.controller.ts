@@ -5,6 +5,7 @@ import { pool } from '../config/database';
 import { AppError } from '../middleware/error.middleware';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { toTitleCase } from '../utils/formatters';
+import { sanitizePermisos } from '../config/permisos';
 
 export async function login(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -15,7 +16,7 @@ export async function login(req: Request, res: Response, next: NextFunction): Pr
     }
 
     const result = await pool.query(
-      `SELECT id, email, password_hash, nombre_completo, rol, avatar_url, activo
+      `SELECT id, email, password_hash, nombre_completo, rol, avatar_url, activo, admin_id, permisos
        FROM usuarios WHERE email = $1`,
       [email.toLowerCase().trim()]
     );
@@ -36,12 +37,17 @@ export async function login(req: Request, res: Response, next: NextFunction): Pr
       [user.id]
     );
 
-    const payload = {
+    const permisos: string[] = Array.isArray(user.permisos) ? user.permisos : [];
+    const payload: Record<string, unknown> = {
       id: user.id,
       email: user.email,
       rol: user.rol,
       nombre_completo: user.nombre_completo,
     };
+    if (user.rol !== 'admin') {
+      payload.admin_id = user.admin_id || null;
+      payload.permisos = permisos;
+    }
 
     const token = jwt.sign(payload, process.env.JWT_SECRET!, {
       expiresIn: process.env.JWT_EXPIRES_IN || '7d',
@@ -57,6 +63,7 @@ export async function login(req: Request, res: Response, next: NextFunction): Pr
           nombre_completo: user.nombre_completo,
           rol: user.rol,
           avatar_url: user.avatar_url,
+          permisos: user.rol === 'admin' ? null : permisos,
         },
       },
     });
@@ -68,14 +75,18 @@ export async function login(req: Request, res: Response, next: NextFunction): Pr
 export async function me(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     const result = await pool.query(
-      `SELECT id, email, nombre_completo, rol, avatar_url, ultimo_acceso, created_at
+      `SELECT id, email, nombre_completo, rol, avatar_url, ultimo_acceso, created_at, permisos
        FROM usuarios WHERE id = $1`,
-      [req.user!.id]
+      [req.user!.actorId ?? req.user!.id]
     );
 
     if (!result.rows[0]) throw new AppError('Usuario no encontrado', 404);
 
-    res.json({ success: true, data: result.rows[0] });
+    const u = result.rows[0];
+    res.json({
+      success: true,
+      data: { ...u, permisos: u.rol === 'admin' ? null : (Array.isArray(u.permisos) ? u.permisos : []) },
+    });
   } catch (err) {
     next(err);
   }
@@ -98,6 +109,8 @@ export async function register(req: Request, res: Response, next: NextFunction):
     // Variables para saber qué se debe hacer post-registro
     let inquilinoIdToLink: string | null = null;
     let codigoInvitacionId: string | null = null;
+    let codigoAdminId: string | null = null;
+    let codigoPermisos: string[] = [];
 
     if (userRol !== 'admin') {
       if (!invite_code) {
@@ -106,7 +119,7 @@ export async function register(req: Request, res: Response, next: NextFunction):
 
       // 1️⃣ Verificar código en la tabla codigos_invitacion (nuevo sistema)
       const codigoResult = await pool.query(
-        `SELECT id, rol, expira_en FROM codigos_invitacion
+        `SELECT id, rol, expira_en, admin_id, permisos FROM codigos_invitacion
          WHERE codigo = $1 AND usado = false
            AND (expira_en IS NULL OR expira_en > NOW())`,
         [invite_code]
@@ -117,10 +130,12 @@ export async function register(req: Request, res: Response, next: NextFunction):
         const codigoRec = codigoResult.rows[0];
         userRol = codigoRec.rol as 'inquilino' | 'cobrador';
         codigoInvitacionId = codigoRec.id;
+        codigoAdminId = codigoRec.admin_id || null;
+        codigoPermisos = Array.isArray(codigoRec.permisos) ? codigoRec.permisos : [];
       } else {
         // 2️⃣ Fallback: verificar en invitation_token de inquilinos (sistema anterior)
         const tokenResult = await pool.query(
-          `SELECT id, email_invitacion FROM inquilinos WHERE invitation_token = $1 AND usuario_id IS NULL`,
+          `SELECT id, email_invitacion, admin_id FROM inquilinos WHERE invitation_token = $1 AND usuario_id IS NULL`,
           [invite_code]
         );
         if (tokenResult.rows.length === 0) {
@@ -132,7 +147,14 @@ export async function register(req: Request, res: Response, next: NextFunction):
         }
         userRol = 'inquilino';
         inquilinoIdToLink = invite_code; // guardamos el token para el UPDATE posterior
+        codigoAdminId = inquilinoRec.admin_id || null;
       }
+    }
+
+    // En un despliegue de un solo admin, si el código no trae admin_id, usar el único admin.
+    if (userRol !== 'admin' && !codigoAdminId) {
+      const soloAdmin = await pool.query(`SELECT id FROM usuarios WHERE rol = 'admin' ORDER BY created_at ASC LIMIT 1`);
+      codigoAdminId = soloAdmin.rows[0]?.id || null;
     }
 
     const existing = await pool.query(
@@ -144,11 +166,12 @@ export async function register(req: Request, res: Response, next: NextFunction):
     }
 
     const hash = await bcrypt.hash(password, 12);
+    const permisosFinal = userRol === 'cobrador' ? sanitizePermisos(codigoPermisos) : [];
     const result = await pool.query(
-      `INSERT INTO usuarios (email, password_hash, nombre_completo, rol)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO usuarios (email, password_hash, nombre_completo, rol, admin_id, permisos)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb)
        RETURNING id, email, nombre_completo, rol, avatar_url`,
-      [email.toLowerCase().trim(), hash, toTitleCase(nombre_completo), userRol]
+      [email.toLowerCase().trim(), hash, toTitleCase(nombre_completo), userRol, userRol === 'admin' ? null : codigoAdminId, JSON.stringify(permisosFinal)]
     );
 
     const user = result.rows[0];
@@ -168,13 +191,16 @@ export async function register(req: Request, res: Response, next: NextFunction):
       );
     }
 
-    const token = jwt.sign(
-      { id: user.id, email: user.email, rol: user.rol, nombre_completo: user.nombre_completo },
-      process.env.JWT_SECRET!,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' } as any
-    );
+    const jwtPayload: Record<string, unknown> = {
+      id: user.id, email: user.email, rol: user.rol, nombre_completo: user.nombre_completo,
+    };
+    if (user.rol !== 'admin') {
+      jwtPayload.admin_id = codigoAdminId;
+      jwtPayload.permisos = permisosFinal;
+    }
+    const token = jwt.sign(jwtPayload, process.env.JWT_SECRET!, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' } as any);
 
-    res.status(201).json({ success: true, data: { token, user } });
+    res.status(201).json({ success: true, data: { token, user: { ...user, permisos: user.rol === 'cobrador' ? permisosFinal : null } } });
   } catch (err) {
     next(err);
   }

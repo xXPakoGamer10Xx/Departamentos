@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import { pool, withTransaction } from '../config/database';
 import { AppError } from '../middleware/error.middleware';
 import { AuthRequest } from '../middleware/auth.middleware';
+import { ownerId } from '../utils/scope';
 
 // GET /api/cuentas-bancarias — lista las cuentas del admin
 export async function getCuentasBancarias(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
@@ -17,7 +18,7 @@ export async function getCuentasBancarias(req: AuthRequest, res: Response, next:
        FROM cuentas_bancarias cb
        WHERE cb.admin_id = $1
        ORDER BY cb.es_predeterminada DESC, cb.created_at ASC`,
-      [req.user!.id]
+      [ownerId(req)]
     );
     res.json({ success: true, data: result.rows });
   } catch (err) {

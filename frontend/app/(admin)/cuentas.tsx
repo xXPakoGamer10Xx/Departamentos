@@ -13,6 +13,7 @@ import { GlassCard } from '../../components/ui/GlassCard';
 import { SurfaceCard } from '../../components/ui/SurfaceCard';
 import { confirmar } from '../../utils/confirm';
 import api from '../../services/api';
+import { usePermisoGuard } from '../../hooks/usePermisoGuard';
 
 type CuentaForm = { id?: string; alias: string; banco_nombre: string; banco_clabe: string; banco_titular: string };
 
@@ -20,6 +21,7 @@ const money = (n: number) =>
   Number(n || 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
 
 export default function CuentasScreen() {
+  usePermisoGuard('cuentas');
   const isDark = useColorScheme() === 'dark';
   const theme = isDark ? Colors.dark : Colors.light;
   const { width } = useWindowDimensions();

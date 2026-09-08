@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { useRouter, usePathname } from 'expo-router';
 import { getItem, removeItem } from '../../services/storage';
+import { can, esAdmin, type Permiso } from '../../constants/permisos';
 
 const USER_KEY = 'auth_user';
 const TOKEN_KEY = 'auth_token';
@@ -15,25 +16,32 @@ interface NavItem {
   label: string;
   icon: any;
   activeColor: string;
-  tenantOnly?: boolean; // solo tiene sentido si los inquilinos usan la app
+  tenantOnly?: boolean;   // solo tiene sentido si los inquilinos usan la app
+  permiso?: Permiso;      // colaborador: solo se muestra si tiene este permiso
+  adminOnly?: boolean;    // solo el administrador
 }
 
 const NAV_ITEMS: NavItem[] = [
   { name: 'index', label: 'Dashboard', icon: 'grid', activeColor: '#3B82F6' },
-  { name: 'inquilinos', label: 'Inquilinos', icon: 'people', activeColor: '#F59E0B' },
-  { name: 'departamentos', label: 'Departamentos', icon: 'business', activeColor: '#10B981' },
-  { name: 'contratos', label: 'Contratos', icon: 'document-text', activeColor: '#3B82F6' },
-  { name: 'pagos', label: 'Pagos', icon: 'card', activeColor: '#3B82F6' },
-  { name: 'reportes', label: 'Reportes', icon: 'stats-chart', activeColor: '#8B5CF6' },
-  { name: 'cuentas', label: 'Cuentas', icon: 'wallet', activeColor: '#10B981' },
-  { name: 'tickets', label: 'Tickets', icon: 'chatbox-ellipses', activeColor: '#EF4444', tenantOnly: true },
-  { name: 'configuracion', label: 'Configuración', icon: 'settings', activeColor: '#6B7280' },
+  { name: 'inquilinos', label: 'Inquilinos', icon: 'people', activeColor: '#F59E0B', permiso: 'inquilinos' },
+  { name: 'departamentos', label: 'Departamentos', icon: 'business', activeColor: '#10B981', permiso: 'departamentos' },
+  { name: 'contratos', label: 'Contratos', icon: 'document-text', activeColor: '#3B82F6', permiso: 'contratos' },
+  { name: 'pagos', label: 'Pagos', icon: 'card', activeColor: '#3B82F6', permiso: 'pagos' },
+  { name: 'reportes', label: 'Reportes', icon: 'stats-chart', activeColor: '#8B5CF6', permiso: 'reportes' },
+  { name: 'cuentas', label: 'Cuentas', icon: 'wallet', activeColor: '#10B981', permiso: 'cuentas' },
+  { name: 'tickets', label: 'Tickets', icon: 'chatbox-ellipses', activeColor: '#EF4444', tenantOnly: true, permiso: 'tickets' },
+  { name: 'configuracion', label: 'Configuración', icon: 'settings', activeColor: '#6B7280', adminOnly: true },
 ];
 
 export function Sidebar({ isDark: passedIsDark, usaQr = true }: { isDark?: boolean; usaQr?: boolean }) {
   const colorScheme = useColorScheme();
   const isDark = passedIsDark !== undefined ? passedIsDark : colorScheme === 'dark';
-  const navItems = NAV_ITEMS.filter(item => usaQr || !item.tenantOnly);
+  const navItems = NAV_ITEMS.filter(item => {
+    if (item.tenantOnly && !usaQr) return false;
+    if (item.adminOnly && !esAdmin()) return false;
+    if (item.permiso && !can(item.permiso)) return false;
+    return true;
+  });
   const theme = isDark ? Colors.dark : Colors.light;
   const router = useRouter();
   const pathname = usePathname();

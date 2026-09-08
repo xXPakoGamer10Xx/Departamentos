@@ -13,16 +13,17 @@ import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { Sidebar } from '../../components/ui/Sidebar';
 import { TopBar } from '../../components/ui/TopBar';
+import { can, esAdmin } from '../../constants/permisos';
 
 const DOCK_ITEMS = [
   { name: 'index',         icon: 'grid',           iconFilled: 'grid',          color: '#3B82F6' },
-  { name: 'inquilinos',    icon: 'people-outline',  iconFilled: 'people',        color: '#F59E0B' },
-  { name: 'tickets',       icon: 'chatbox-ellipses-outline', iconFilled: 'chatbox-ellipses', color: '#EF4444' },
-  { name: 'pagos',         icon: 'card-outline',    iconFilled: 'card',          color: '#10B981' },
-  { name: 'scan',          icon: 'qr-code-outline', iconFilled: 'qr-code',       color: '#3B82F6' },
-  { name: 'cuentas',       icon: 'wallet-outline',  iconFilled: 'wallet',        color: '#10B981' },
-  { name: 'configuracion', icon: 'settings-outline', iconFilled: 'settings',    color: '#6B7280' },
-];
+  { name: 'inquilinos',    icon: 'people-outline',  iconFilled: 'people',        color: '#F59E0B', permiso: 'inquilinos' },
+  { name: 'tickets',       icon: 'chatbox-ellipses-outline', iconFilled: 'chatbox-ellipses', color: '#EF4444', permiso: 'tickets' },
+  { name: 'pagos',         icon: 'card-outline',    iconFilled: 'card',          color: '#10B981', permiso: 'pagos' },
+  { name: 'scan',          icon: 'qr-code-outline', iconFilled: 'qr-code',       color: '#3B82F6', permiso: 'pagos.marcar' },
+  { name: 'cuentas',       icon: 'wallet-outline',  iconFilled: 'wallet',        color: '#10B981', permiso: 'cuentas' },
+  { name: 'configuracion', icon: 'settings-outline', iconFilled: 'settings',    color: '#6B7280', adminOnly: true },
+] as { name: string; icon: string; iconFilled: string; color: string; permiso?: string; adminOnly?: boolean }[];
 
 function DockButton({
   focused,
@@ -129,6 +130,9 @@ export default function AdminLayout() {
                     // y en su lugar aparece acceso directo a Cuentas.
                     if ((dockItem.name === 'scan' || dockItem.name === 'tickets') && !usaQrInquilinos) return null;
                     if (dockItem.name === 'cuentas' && usaQrInquilinos) return null;
+                    // Gating por rol/permisos del colaborador.
+                    if (dockItem.adminOnly && !esAdmin()) return null;
+                    if (dockItem.permiso && !can(dockItem.permiso as any)) return null;
 
                     const isFocused = props.state.index === index;
                     const iconName = isFocused ? dockItem.iconFilled : dockItem.icon;

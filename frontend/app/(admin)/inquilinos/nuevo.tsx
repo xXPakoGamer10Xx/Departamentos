@@ -12,6 +12,7 @@ import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { api } from '../../../services/api';
 import { numberToWords } from '../../../utils/numberToWords';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import { usePermisoGuard } from '../../../hooks/usePermisoGuard';
 
 interface InputGroupProps {
   label: string;
@@ -140,6 +141,7 @@ const normalizeFechaPago = (value: string) => {
 };
 
 export default function NuevoInquilinoScreen() {
+  usePermisoGuard('inquilinos.editar');
   const router = useRouter();
   const { editId, fromId } = useLocalSearchParams<{ editId?: string; fromId?: string }>();
   const isEdit = !!editId;

@@ -10,8 +10,10 @@ import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import api from '../../../services/api';
 import { confirmar } from '../../../utils/confirm';
+import { usePermisoGuard } from '../../../hooks/usePermisoGuard';
 
 export default function DepartamentoDetailScreen() {
+  usePermisoGuard('departamentos');
   const { numero } = useLocalSearchParams();
   const router = useRouter();
   const colorScheme = useColorScheme();

@@ -4,6 +4,7 @@ import { AppError } from '../middleware/error.middleware';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { PdfService, buildDocxVars } from '../services/PdfService';
+import { ownerId } from '../utils/scope';
 
 // ────────────────────────────────────────────────────────────────────────────
 // Datos de muestra para previsualizar el contrato
@@ -43,7 +44,7 @@ export function sanitizeHtml(html: string): string {
 // ────────────────────────────────────────────────────────────────────────────
 export async function getConfig(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
-    let adminId = req.user!.id;
+    let adminId = ownerId(req);
     let deptoNumero: number | null = null;
 
     if (req.user!.rol === 'inquilino') {

@@ -10,7 +10,7 @@ function getInitialRoute(): string {
   try {
     const user = JSON.parse(getItem(USER_KEY) || 'null');
     if (user?.rol === 'inquilino') return '/(inquilino)';
-    if (user?.rol === 'cobrador') return '/(cobrador)/scan';
+    // Los colaboradores (cobrador) usan la app de admin, limitada por permisos.
     return '/(admin)';
   } catch {
     return '/(admin)';

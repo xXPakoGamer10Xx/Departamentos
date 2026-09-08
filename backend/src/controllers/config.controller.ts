@@ -120,7 +120,7 @@ export async function updateConfig(req: AuthRequest, res: Response, next: NextFu
       'admin_invite_code', 'app_url',
       'contrato_docx_template', 'contrato_docx_nombre',
       'contrato_html_template', 'dias_gracia_retraso',
-      'usa_qr_inquilinos',
+      'usa_qr_inquilinos', 'recordatorios_renta_dias',
     ];
 
     for (const [clave, rawValor] of Object.entries(updates)) {
@@ -131,10 +131,26 @@ export async function updateConfig(req: AuthRequest, res: Response, next: NextFu
           throw new AppError('Los días de gracia deben ser un número entre 0 y 90', 400);
         }
       }
+      if (clave === 'recordatorios_renta_dias') {
+        const raw = String(rawValor).trim();
+        if (raw !== '') {
+          const partes = raw.split(',').map(s => s.trim());
+          const valido = partes.length <= 6 && partes.every(s => /^\d{1,2}$/.test(s) && Number(s) >= 0 && Number(s) <= 30);
+          if (!valido) {
+            throw new AppError('Recordatorios inválidos: hasta 6 valores entre 0 y 30 días, separados por coma', 400);
+          }
+        }
+      }
       // Sanitiza el HTML del contrato: elimina <script>/<style> y atributos on*
-      const valor = clave === 'contrato_html_template'
+      let valor = clave === 'contrato_html_template'
         ? sanitizeHtml(rawValor)
         : rawValor;
+      // Normaliza la lista de recordatorios: enteros únicos, orden descendente.
+      if (clave === 'recordatorios_renta_dias' && String(rawValor).trim() !== '') {
+        valor = Array.from(new Set(
+          String(rawValor).split(',').map(s => parseInt(s.trim(), 10)).filter(n => Number.isInteger(n))
+        )).sort((a, b) => b - a).join(',');
+      }
       await pool.query(
         `INSERT INTO configuracion (admin_id, clave, valor) VALUES ($1, $2, $3)
          ON CONFLICT (admin_id, clave) DO UPDATE SET valor = $3, updated_at = NOW()`,

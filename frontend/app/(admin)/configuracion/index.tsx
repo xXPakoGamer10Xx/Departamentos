@@ -102,6 +102,11 @@ export default function ConfiguracionScreen() {
   const [loadingInquilinos, setLoadingInquilinos] = useState(false);
   const [vinculando, setVinculando] = useState(false);
 
+  // Recordatorios de pago de renta (días de antelación configurables)
+  const [showRecordatorios, setShowRecordatorios] = useState(false);
+  const [recordSel, setRecordSel] = useState<number[]>([1, 0]);
+  const [savingRecord, setSavingRecord] = useState(false);
+
   // Plantilla de contrato DOCX — flujo IA
   const [showPlantilla, setShowPlantilla] = useState(false);
   const [plantillaStep, setPlantillaStep] = useState<'inicio' | 'procesando' | 'preview'>('inicio');
@@ -162,6 +167,54 @@ export default function ConfiguracionScreen() {
     }
     setNotifEnabled(val);
     setNotifPref(val);
+  };
+
+  // ── Recordatorios de pago de renta ──────────────────────────────────
+  const RECORD_OPCIONES = [7, 5, 3, 2, 1, 0];
+
+  const parseRecordDias = (valor: string | undefined | null): number[] => {
+    if (valor == null) return [1, 0]; // no configurado → valor por defecto
+    if (valor.trim() === '') return []; // configurado como "sin recordatorios"
+    return Array.from(new Set(
+      valor.split(',').map(s => parseInt(s.trim(), 10)).filter(n => Number.isInteger(n) && n >= 0 && n <= 30)
+    )).sort((a, b) => b - a);
+  };
+
+  const etiquetaDia = (d: number) => d === 0 ? 'El día del pago' : d === 1 ? '1 día antes' : `${d} días antes`;
+
+  const formatRecordatorios = (valor: string | undefined | null): string => {
+    const dias = parseRecordDias(valor);
+    if (dias.length === 0) return 'Sin recordatorios';
+    const antes = dias.filter(d => d > 0);
+    const elDia = dias.includes(0);
+    const partes: string[] = [];
+    if (antes.length) partes.push(`${antes.join(', ')} día${antes.length === 1 && antes[0] === 1 ? '' : 's'} antes`);
+    if (elDia) partes.push('el día del pago');
+    return partes.join(' y ');
+  };
+
+  const openRecordatorios = () => {
+    setRecordSel(parseRecordDias(config['recordatorios_renta_dias']));
+    setShowRecordatorios(true);
+  };
+
+  const toggleRecordDia = (d: number) => {
+    setRecordSel(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d].sort((a, b) => b - a));
+  };
+
+  const guardarRecordatorios = async () => {
+    setSavingRecord(true);
+    try {
+      const valor = [...recordSel].sort((a, b) => b - a).join(',');
+      await api.updateConfig({ recordatorios_renta_dias: valor });
+      setConfig(prev => ({ ...prev, recordatorios_renta_dias: valor }));
+      setShowRecordatorios(false);
+    } catch (e: any) {
+      if (Platform.OS === 'web') window.alert(e?.message || 'No se pudo guardar');
+      else { const { Alert } = await import('react-native'); Alert.alert('Error', e?.message || 'No se pudo guardar'); }
+    } finally {
+      setSavingRecord(false);
+    }
   };
 
   const handleUsaQrToggle = async (val: boolean) => {
@@ -819,6 +872,13 @@ export default function ConfiguracionScreen() {
           onPress={() => openEdit('dias_gracia_retraso', 'Días de gracia para retraso')}
         />
         <SettingRow
+          icon="notifications-circle"
+          iconColor={theme.primary}
+          title="Recordatorios de pago de renta"
+          subtitle={loadingConfig ? 'Cargando…' : formatRecordatorios(config['recordatorios_renta_dias'])}
+          onPress={openRecordatorios}
+        />
+        <SettingRow
           icon="card"
           iconColor="#10B981"
           title="Cuentas Bancarias (SPEI)"
@@ -1043,6 +1103,60 @@ export default function ConfiguracionScreen() {
                   ? <ActivityIndicator size="small" color="#fff" />
                   : <Text style={{ color: '#fff', fontWeight: '700' }}>Guardar</Text>
                 }
+              </TouchableOpacity>
+            </View>
+          </GlassCard>
+        </View>
+      </Modal>
+
+      {/* Modal recordatorios de pago de renta */}
+      <Modal visible={showRecordatorios} transparent animationType="fade" onRequestClose={() => setShowRecordatorios(false)}>
+        <View style={styles.modalOverlay}>
+          <GlassCard style={styles.modalBox} borderRadius={Theme.borderRadius.xl} padding={24}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Recordatorios de pago</Text>
+            <Text style={[styles.settingSubtitle, { color: theme.textSecondary, marginBottom: 14 }]}>
+              Elige cuándo avisar al inquilino y al administrador antes de la fecha de pago de cada renta.
+            </Text>
+
+            {RECORD_OPCIONES.map(d => {
+              const on = recordSel.includes(d);
+              return (
+                <TouchableOpacity
+                  key={d}
+                  style={[styles.recordRow, { borderColor: on ? theme.primary : theme.border, backgroundColor: on ? theme.primary + '14' : 'transparent' }]}
+                  onPress={() => toggleRecordDia(d)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons
+                    name={on ? 'checkbox' : 'square-outline'}
+                    size={20}
+                    color={on ? theme.primary : theme.textSecondary}
+                  />
+                  <Text style={[styles.recordRowText, { color: theme.text }]}>{etiquetaDia(d)}</Text>
+                </TouchableOpacity>
+              );
+            })}
+
+            <Text style={[styles.charCounter, { color: theme.textSecondary, textAlign: 'left', marginTop: 6 }]}>
+              {recordSel.length === 0 ? 'No se enviará ningún recordatorio de renta.' : `Resumen: ${formatRecordatorios([...recordSel].sort((a, b) => b - a).join(','))}`}
+            </Text>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalBtn, { borderWidth: 1, borderColor: theme.border }]}
+                onPress={() => setShowRecordatorios(false)}
+                disabled={savingRecord}
+              >
+                <Text style={{ color: theme.text, fontWeight: '600' }}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalBtn, { backgroundColor: theme.primary, opacity: savingRecord ? 0.7 : 1 }]}
+                onPress={guardarRecordatorios}
+                disabled={savingRecord}
+              >
+                {savingRecord
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={{ color: '#fff', fontWeight: '700' }}>Guardar</Text>}
               </TouchableOpacity>
             </View>
           </GlassCard>
@@ -2217,6 +2331,11 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   charCounter: { fontSize: 11, textAlign: 'right', marginBottom: 8, opacity: 0.8 },
+  recordRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    borderWidth: 1, borderRadius: 12, paddingVertical: 13, paddingHorizontal: 14, marginBottom: 8,
+  },
+  recordRowText: { fontSize: 15, fontWeight: '600' },
   errorBox: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, borderRadius: 10, borderWidth: 1, marginBottom: 8 },
   errorText: { flex: 1, fontSize: 13 },
   modalActions: { flexDirection: 'row', gap: 12, marginTop: 8 },

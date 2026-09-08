@@ -7,6 +7,31 @@ function parseDiaPago(fechaPago: string): number | null {
   return match ? parseInt(match[1], 10) : null;
 }
 
+// Días de antelación en que se avisa del pago de renta. El admin lo configura
+// en `configuracion.recordatorios_renta_dias` (lista "3,1,0"). Si no está
+// configurado se usa este valor por defecto; si está definido pero vacío, no
+// se envía ningún recordatorio de renta.
+const DEFAULT_RECORDATORIOS_RENTA = [1, 0];
+
+function parseRecordatorioDias(valor: string | null | undefined): number[] {
+  if (valor == null) return DEFAULT_RECORDATORIOS_RENTA;
+  if (String(valor).trim() === '') return [];
+  const nums = String(valor)
+    .split(',')
+    .map(s => parseInt(s.trim(), 10))
+    .filter(n => Number.isInteger(n) && n >= 0 && n <= 30);
+  return Array.from(new Set(nums));
+}
+
+async function getRecordatoriosRentaPorAdmin(): Promise<Map<string, number[]>> {
+  const map = new Map<string, number[]>();
+  const { rows } = await pool.query(
+    `SELECT admin_id, valor FROM configuracion WHERE clave = 'recordatorios_renta_dias'`
+  );
+  for (const r of rows) map.set(r.admin_id, parseRecordatorioDias(r.valor));
+  return map;
+}
+
 function diasHastaFecha(targetDay: number): number {
   const hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
@@ -33,17 +58,20 @@ async function yaNotificadoHoy(usuarioId: string, tipo: string, subKey: string):
 
 async function checkRentaReminders(): Promise<void> {
   try {
+    const recordatoriosPorAdmin = await getRecordatoriosRentaPorAdmin();
+
     const { rows: inquilinos } = await pool.query(
       `SELECT i.id, i.usuario_id, i.fecha_pago, i.nombre_completo, i.depto_numero, i.admin_id
        FROM inquilinos i
        WHERE i.estado = 'activo'`
     );
 
-    const diasObjetivo = [7, 3, 2, 1, 0];
-
     for (const inq of inquilinos) {
       const diaPago = parseDiaPago(inq.fecha_pago);
       if (!diaPago) continue;
+
+      const diasObjetivo = recordatoriosPorAdmin.get(inq.admin_id) ?? DEFAULT_RECORDATORIOS_RENTA;
+      if (diasObjetivo.length === 0) continue;
 
       const diasRestantes = diasHastaFecha(diaPago);
       if (!diasObjetivo.includes(diasRestantes)) continue;

@@ -94,6 +94,9 @@ export default function AdminLayout() {
       <View style={[styles.mainContent, isDesktop && { borderLeftWidth: 0 }]}>
         {isDesktop && <TopBar isDark={isDark} />}
         <Tabs
+          // "history" hace que la flecha atrás vuelva a la pantalla anterior real
+          // (p. ej. la lista de Inquilinos) en vez de saltar siempre al Dashboard.
+          backBehavior="history"
           screenOptions={{
             headerShown: false,
             tabBarShowLabel: false,

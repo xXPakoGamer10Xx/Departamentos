@@ -20,6 +20,7 @@ const DOCK_ITEMS = [
   { name: 'inquilinos',    icon: 'people-outline',  iconFilled: 'people',        color: '#F59E0B', permiso: 'inquilinos' },
   { name: 'tickets',       icon: 'chatbox-ellipses-outline', iconFilled: 'chatbox-ellipses', color: '#EF4444', permiso: 'tickets' },
   { name: 'pagos',         icon: 'card-outline',    iconFilled: 'card',          color: '#10B981', permiso: 'pagos' },
+  { name: 'reportes',      icon: 'stats-chart-outline', iconFilled: 'stats-chart', color: '#8B5CF6', permiso: 'reportes' },
   { name: 'scan',          icon: 'qr-code-outline', iconFilled: 'qr-code',       color: '#3B82F6', permiso: 'pagos.marcar' },
   { name: 'cuentas',       icon: 'wallet-outline',  iconFilled: 'wallet',        color: '#10B981', permiso: 'cuentas' },
   { name: 'configuracion', icon: 'settings-outline', iconFilled: 'settings',    color: '#6B7280', adminOnly: true },
@@ -93,12 +94,6 @@ export default function AdminLayout() {
     <View style={[styles.root, { backgroundColor: theme.background }]}>
       {isDesktop && <Sidebar isDark={isDark} usaQr={usaQrInquilinos} />}
       <View style={[styles.mainContent, isDesktop && { borderLeftWidth: 0 }]}>
-        {/* En móvil no hay sidebar: la campana va flotando arriba a la derecha. */}
-        {!isDesktop && (
-          <View style={[styles.mobileBell, { top: insets.top + 8 }]} pointerEvents="box-none">
-            <NotificationBell isDark={isDark} />
-          </View>
-        )}
         <Tabs
           // "history" hace que la flecha atrás vuelva a la pantalla anterior real
           // (p. ej. la lista de Inquilinos) en vez de saltar siempre al Dashboard.
@@ -162,6 +157,10 @@ export default function AdminLayout() {
                       />
                     );
                   })}
+                  {/* La campana de notificaciones vive en el dock en móvil. */}
+                  <View style={styles.dockItem}>
+                    <NotificationBell isDark={isDark} style={styles.dockNotif} />
+                  </View>
                 </BlurView>
               </View>
             ) : null
@@ -193,11 +192,8 @@ const styles = StyleSheet.create({
     minWidth: 0, // Evita que el contenido desborde la sidebar en flex
     overflow: 'hidden',
   },
-  mobileBell: {
-    position: 'absolute',
-    right: 14,
-    zIndex: 900,
-    alignItems: 'flex-end',
+  dockNotif: {
+    width: 38, height: 38, borderRadius: 11, backgroundColor: 'transparent',
   },
   dockWrapper: {
     position: 'absolute',
@@ -222,15 +218,15 @@ const styles = StyleSheet.create({
     elevation: 12,
   },
   dockItem: {
-    paddingHorizontal: 7,
+    paddingHorizontal: 4,
     paddingVertical: 4,
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 44,
+    minWidth: 38,
   },
   dockIcon: {
-    width: 38,
-    height: 38,
+    width: 36,
+    height: 36,
     borderRadius: 11,
     justifyContent: 'center',
     alignItems: 'center',

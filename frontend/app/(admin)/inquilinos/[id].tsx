@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import api from '../../../services/api';
+import { confirmar } from '../../../utils/confirm';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -176,26 +177,22 @@ export default function InquilinoDetailScreen() {
             <TouchableOpacity
               style={[styles.actionButton, { backgroundColor: theme.danger + '15', opacity: eliminando ? 0.7 : 1 }]}
               disabled={eliminando}
-              onPress={() => Alert.alert(
-                'Eliminar Inquilino',
-                `¿Seguro que deseas eliminar a ${inquilino.nombre_completo}?`,
-                [
-                  { text: 'Cancelar', style: 'cancel' },
-                  {
-                    text: 'Eliminar', style: 'destructive',
-                    onPress: async () => {
-                      setEliminando(true);
-                      try {
-                        await api.deleteInquilino(id as string);
-                        router.back();
-                      } catch (e: any) {
-                        Alert.alert('Error', e.message);
-                        setEliminando(false);
-                      }
-                    },
-                  },
-                ]
-              )}
+              onPress={async () => {
+                const ok = await confirmar(
+                  'Eliminar Inquilino',
+                  `¿Seguro que deseas eliminar a ${inquilino.nombre_completo}? Se borrarán también sus pagos y su contrato.`,
+                  { confirmLabel: 'Eliminar', destructive: true },
+                );
+                if (!ok) return;
+                setEliminando(true);
+                try {
+                  await api.deleteInquilino(id as string);
+                  router.back();
+                } catch (e: any) {
+                  Alert.alert('Error', e.message);
+                  setEliminando(false);
+                }
+              }}
             >
               {eliminando
                 ? <ActivityIndicator size="small" color={theme.danger} />

@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import api from '../../../services/api';
+import { confirmar } from '../../../utils/confirm';
 
 export default function DepartamentoDetailScreen() {
   const { numero } = useLocalSearchParams();
@@ -164,24 +165,20 @@ export default function DepartamentoDetailScreen() {
         {depto.estado !== 'ocupado' && (
           <TouchableOpacity
             style={styles.deleteBtn}
-            onPress={() => Alert.alert(
-              'Eliminar Departamento',
-              `¿Seguro que deseas eliminar el Departamento ${depto.numero}?`,
-              [
-                { text: 'Cancelar', style: 'cancel' },
-                {
-                  text: 'Eliminar', style: 'destructive',
-                  onPress: async () => {
-                    try {
-                      await api.deleteDepartamento(Number(numero));
-                      router.back();
-                    } catch (e: any) {
-                      Alert.alert('Error', e.message || 'No se pudo eliminar');
-                    }
-                  },
-                },
-              ]
-            )}
+            onPress={async () => {
+              const ok = await confirmar(
+                'Eliminar Departamento',
+                `¿Seguro que deseas eliminar el Departamento ${depto.numero}?`,
+                { confirmLabel: 'Eliminar', destructive: true },
+              );
+              if (!ok) return;
+              try {
+                await api.deleteDepartamento(Number(numero));
+                router.back();
+              } catch (e: any) {
+                Alert.alert('Error', e.message || 'No se pudo eliminar');
+              }
+            }}
           >
             <Ionicons name="trash-outline" size={22} color={theme.danger} />
           </TouchableOpacity>

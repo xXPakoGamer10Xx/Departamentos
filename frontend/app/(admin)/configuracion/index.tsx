@@ -16,6 +16,7 @@ import { useState, useCallback, useEffect } from 'react';
 import api from '../../../services/api';
 import { getItem, setItem, removeItem } from '../../../services/storage';
 import { activateWebPush } from '../../../services/webNotifications';
+import { confirmar } from '../../../utils/confirm';
 
 const TOKEN_KEY = 'auth_token';
 const USER_KEY = 'auth_user';
@@ -679,20 +680,21 @@ export default function ConfiguracionScreen() {
   };
 
   const eliminarCuenta = async (id: string) => {
-    const { Alert } = await import('react-native');
-    Alert.alert('Eliminar cuenta', '¿Seguro que deseas eliminar esta cuenta bancaria?', [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Eliminar', style: 'destructive',
-        onPress: async () => {
-          try {
-            await api.deleteCuentaBancaria(id);
-            const res = await api.getCuentasBancarias();
-            setCuentas(res.data || []);
-          } catch { /* ignore */ }
-        },
-      },
-    ]);
+    const ok = await confirmar(
+      'Eliminar cuenta',
+      'Los departamentos que la usaban quedarán sin cuenta asignada (usarán la predeterminada).',
+      { confirmLabel: 'Eliminar', destructive: true },
+    );
+    if (!ok) return;
+    try {
+      await api.deleteCuentaBancaria(id);
+      const res = await api.getCuentasBancarias();
+      setCuentas(res.data || []);
+    } catch (e: any) {
+      const msg = e?.message || 'No se pudo eliminar la cuenta';
+      if (Platform.OS === 'web') window.alert(msg);
+      else { const { Alert } = await import('react-native'); Alert.alert('Error', msg); }
+    }
   };
 
   const abrirNuevoUsuario = () => {

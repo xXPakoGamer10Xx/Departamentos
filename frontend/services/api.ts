@@ -306,10 +306,10 @@ class ApiService {
     this.request<{ deuda_total: number; detalle: any[] }>('GET', `/pagos/saldo/${inquilino_id}`);
 
   getSaldosInquilinos = () =>
-    this.request<{ inquilino_id: string; deuda_total: number }[]>('GET', '/pagos/saldos');
+    this.request<{ inquilino_id: string; deuda_total: number; deuda_vencida: number }[]>('GET', '/pagos/saldos');
 
   getResumenDeuda = () =>
-    this.request<{ total_general: number; por_departamento: { inquilino_id: string; depto_numero: number; nombre_completo: string; deuda_total: number }[] }>('GET', '/pagos/saldos/resumen');
+    this.request<{ total_general: number; total_por_cobrar: number; por_departamento: { inquilino_id: string; depto_numero: number; nombre_completo: string; deuda_total: number; deuda_vencida: number }[] }>('GET', '/pagos/saldos/resumen');
 
   setPromesaPago = (pago_id: string, fecha_promesa: string | null) =>
     this.request<any>('PUT', `/pagos/${pago_id}/promesa`, { fecha_promesa });

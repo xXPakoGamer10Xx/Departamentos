@@ -933,11 +933,15 @@ const MES_VENCIDO = `CURRENT_DATE > (
               WHERE c.admin_id = i.admin_id AND c.clave = 'dias_gracia_retraso')::int, 0)
 )`;
 
-// Suma de la deuda de un inquilino contando solo los meses ya vencidos.
+const DEUDA_MES = `i.renta + COALESCE(cx.total, 0) - COALESCE(ab.total, 0)`;
+
+// deuda_vencida: solo meses cuya fecha de pago (+ gracia) ya pasó → lo realmente atrasado.
 const DEUDA_VENCIDA = `COALESCE(SUM(GREATEST(
-  CASE WHEN ${MES_VENCIDO}
-       THEN i.renta + COALESCE(cx.total, 0) - COALESCE(ab.total, 0)
-       ELSE 0 END, 0)), 0)`;
+  CASE WHEN ${MES_VENCIDO} THEN ${DEUDA_MES} ELSE 0 END, 0)), 0)`;
+
+// deuda_total: todo lo que falta por cobrar de este ciclo, incluido el mes en
+// curso aunque su fecha aún no llegue, más cualquier atraso acumulado.
+const DEUDA_TOTAL = `COALESCE(SUM(GREATEST(${DEUDA_MES}, 0)), 0)`;
 
 // GET /api/pagos/saldos — deuda total de todos los inquilinos activos (para la lista)
 export async function getSaldosInquilinos(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
@@ -948,7 +952,8 @@ export async function getSaldosInquilinos(req: AuthRequest, res: Response, next:
 
     const result = await pool.query(
       `SELECT i.id AS inquilino_id, i.depto_numero, i.nombre_completo,
-              ${DEUDA_VENCIDA} AS deuda_total
+              ${DEUDA_VENCIDA} AS deuda_vencida,
+              ${DEUDA_TOTAL} AS deuda_total
        FROM inquilinos i
        CROSS JOIN LATERAL generate_series(
          date_trunc('month', i.fecha_inicio), date_trunc('month', CURRENT_DATE), interval '1 month'
@@ -982,7 +987,8 @@ export async function getResumenDeuda(req: AuthRequest, res: Response, next: Nex
     const result = await pool.query(
       `SELECT * FROM (
          SELECT i.id AS inquilino_id, i.depto_numero, i.nombre_completo,
-                ${DEUDA_VENCIDA} AS deuda_total
+                ${DEUDA_VENCIDA} AS deuda_vencida,
+                ${DEUDA_TOTAL} AS deuda_total
          FROM inquilinos i
          CROSS JOIN LATERAL generate_series(
            date_trunc('month', i.fecha_inicio), date_trunc('month', CURRENT_DATE), interval '1 month'
@@ -1001,10 +1007,13 @@ export async function getResumenDeuda(req: AuthRequest, res: Response, next: Nex
       params
     );
 
-    const porDepartamento = result.rows.filter(r => parseFloat(r.deuda_total) > 0);
-    const totalGeneral = result.rows.reduce((sum, r) => sum + parseFloat(r.deuda_total), 0);
+    // "por_departamento" y total_general = solo atraso real (para la alerta del dashboard).
+    // total_por_cobrar = todo lo pendiente del ciclo, incluido el mes en curso.
+    const porDepartamento = result.rows.filter(r => parseFloat(r.deuda_vencida) > 0);
+    const totalGeneral = result.rows.reduce((sum, r) => sum + parseFloat(r.deuda_vencida), 0);
+    const totalPorCobrar = result.rows.reduce((sum, r) => sum + parseFloat(r.deuda_total), 0);
 
-    res.json({ success: true, data: { total_general: totalGeneral, por_departamento: porDepartamento } });
+    res.json({ success: true, data: { total_general: totalGeneral, total_por_cobrar: totalPorCobrar, por_departamento: porDepartamento } });
   } catch (err) {
     next(err);
   }

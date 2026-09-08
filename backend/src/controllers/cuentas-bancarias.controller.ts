@@ -128,7 +128,27 @@ export async function deleteCuentaBancaria(req: AuthRequest, res: Response, next
         [adminId]
       );
     }
-    res.json({ success: true, message: 'Cuenta eliminada' });
+
+    // Si el admin se quedó sin ninguna cuenta bancaria, ya no tiene caso que
+    // haya inquilinos marcados como transferencia/ambos: se pasan a efectivo.
+    const restantes = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM cuentas_bancarias WHERE admin_id = $1`, [adminId]
+    );
+    let inquilinosActualizados = 0;
+    if (restantes.rows[0].n === 0) {
+      const upd = await pool.query(
+        `UPDATE inquilinos SET metodo_pago = 'efectivo', updated_at = NOW()
+         WHERE admin_id = $1 AND metodo_pago IN ('transferencia', 'ambos')`,
+        [adminId]
+      );
+      inquilinosActualizados = upd.rowCount ?? 0;
+    }
+
+    res.json({
+      success: true,
+      message: 'Cuenta eliminada',
+      inquilinos_a_efectivo: inquilinosActualizados,
+    });
   } catch (err) {
     next(err);
   }

@@ -27,7 +27,8 @@ export default function PagosScreen() {
 
   const [inquilinos, setInquilinos] = useState<any[]>([]);
   const [estados, setEstados] = useState<Record<string, any>>({});
-  const [saldos, setSaldos] = useState<Record<string, number>>({});
+  const [saldos, setSaldos] = useState<Record<string, { total: number; vencida: number }>>({});
+  const [usaQr, setUsaQr] = useState(true);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<Tab>('todos');
@@ -39,15 +40,22 @@ export default function PagosScreen() {
       api.getInquilinos({ estado: 'activo' }),
       api.getEstadosPagosActuales().catch(() => ({ data: [] as any[] })),
       api.getSaldosInquilinos().catch(() => ({ data: [] as any[] })),
+      api.getConfig().catch(() => ({ data: {} as Record<string, string> })),
     ])
-      .then(([inqRes, estRes, saldosRes]) => {
+      .then(([inqRes, estRes, saldosRes, cfgRes]) => {
         setInquilinos(inqRes.data || []);
         const map: Record<string, any> = {};
         (estRes.data || []).forEach((e: any) => { map[e.inquilino_id] = e; });
         setEstados(map);
-        const saldoMap: Record<string, number> = {};
-        (saldosRes.data || []).forEach((s: any) => { saldoMap[s.inquilino_id] = parseFloat(s.deuda_total); });
+        const saldoMap: Record<string, { total: number; vencida: number }> = {};
+        (saldosRes.data || []).forEach((s: any) => {
+          saldoMap[s.inquilino_id] = {
+            total: parseFloat(s.deuda_total ?? 0),
+            vencida: parseFloat(s.deuda_vencida ?? s.deuda_total ?? 0),
+          };
+        });
         setSaldos(saldoMap);
+        setUsaQr((cfgRes.data as any)?.usa_qr_inquilinos !== 'false');
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -62,6 +70,11 @@ export default function PagosScreen() {
 
   useSSEEvent('payment_confirmed', () => cargar());
   useSSEEvent('comprobante_subido', () => cargar());
+
+  // Si se apaga el flujo de comprobantes, no dejar seleccionada la pestaña Revisión.
+  useEffect(() => {
+    if (!usaQr && (tab === 'revision')) setTab('todos');
+  }, [usaQr, tab]);
 
   const marcarPagado = useCallback(async (inquilinoId: string) => {
     setBusyId(inquilinoId);
@@ -78,13 +91,13 @@ export default function PagosScreen() {
     finally { setBusyId(null); }
   }, [cargar]);
 
-  // `saldos` viene del backend contando solo meses ya vencidos (día de pago +
-  // días de gracia). Deuda > 0 ⇒ atrasado; sin deuda y sin pagar ⇒ por pagar.
+  // `deuda.vencida` = meses cuya fecha de pago (+ gracia) ya pasó ⇒ atrasado.
+  // `deuda.total` = todo lo pendiente del ciclo (incluye el mes en curso).
   const rowState = useCallback((item: any): RowState => {
     const e = estados[item.id];
     if (e?.confirmado) return 'pagado';
     if (e?.comprobante_url && !e?.rechazado) return 'revision';
-    if ((saldos[item.id] ?? 0) > 0.5 || e?.rechazado) return 'atrasado';
+    if ((saldos[item.id]?.vencida ?? 0) > 0.5 || e?.rechazado) return 'atrasado';
     return 'pendiente';
   }, [estados, saldos]);
 
@@ -102,14 +115,18 @@ export default function PagosScreen() {
     const expected = inquilinos.reduce((a, i) => a + Number(i.renta || 0), 0);
     const recaudado = rows.filter(r => r.state === 'pagado').reduce((a, r) => a + Number(r.item.renta || 0), 0);
     const spei = inquilinos.filter(i => i.metodo_pago === 'transferencia' || i.metodo_pago === 'ambos').length;
+    // Por recaudar = todo lo pendiente del ciclo + atrasos acumulados de meses anteriores.
+    const porRecaudar = inquilinos.reduce((a, i) => a + (saldos[i.id]?.total ?? 0), 0);
+    const vencido = inquilinos.reduce((a, i) => a + (saldos[i.id]?.vencida ?? 0), 0);
     return {
       expected, recaudado,
-      porRecaudar: Math.max(expected - recaudado, 0),
+      porRecaudar,
+      vencido,
       pct: expected > 0 ? Math.round((recaudado / expected) * 100) : 0,
       porValidar: counts.revision,
       speiPct: inquilinos.length > 0 ? Math.round((spei / inquilinos.length) * 100) : 0,
     };
-  }, [inquilinos, rows, counts]);
+  }, [inquilinos, rows, counts, saldos]);
 
   const filtered = rows.filter(({ item, state }) => {
     if (tab === 'pagados' && state !== 'pagado') return false;
@@ -129,8 +146,10 @@ export default function PagosScreen() {
 
   const metodo = (m?: string) => {
     if (m === 'transferencia') return { icon: 'business-outline' as const, label: 'SPEI' };
-    if (m === 'ambos') return { icon: 'swap-horizontal' as const, label: 'SPEI / QR' };
-    return { icon: 'qr-code-outline' as const, label: 'Efectivo / QR' };
+    if (m === 'ambos') return { icon: 'swap-horizontal' as const, label: usaQr ? 'SPEI / QR' : 'SPEI / Efectivo' };
+    return usaQr
+      ? { icon: 'qr-code-outline' as const, label: 'Efectivo / QR' }
+      : { icon: 'cash-outline' as const, label: 'Efectivo' };
   };
 
   const stateChip = (s: RowState) => {
@@ -145,7 +164,8 @@ export default function PagosScreen() {
   const TAB_META: { key: Tab; label: string; color?: string }[] = [
     { key: 'todos', label: 'Todos' },
     { key: 'pagados', label: 'Pagados' },
-    { key: 'revision', label: 'Revisión', color: theme.warning },
+    // La pestaña de revisión de comprobantes solo aplica si se usa la app con inquilinos.
+    ...(usaQr ? [{ key: 'revision' as Tab, label: 'Revisión', color: theme.warning }] : []),
     { key: 'pendientes', label: 'Por pagar' },
     { key: 'atrasados', label: 'Atrasados', color: theme.danger },
   ];
@@ -173,15 +193,16 @@ export default function PagosScreen() {
           <Ionicons name="wallet-outline" size={15} color={theme.danger} />
         </View>
         <Text style={[styles.kpiValue, { color: theme.text }]}>{fmt0(kpi.porRecaudar)} <Text style={styles.kpiUnit}>MXN</Text></Text>
-        <Text style={[styles.kpiMini, { color: theme.textSecondary }]}>
-          {counts.atrasados > 0
-            ? `${counts.atrasados} vencido${counts.atrasados > 1 ? 's' : ''}${counts.pendientes > 0 ? ` · ${counts.pendientes} por vencer` : ''}`
+        <Text style={[styles.kpiMini, { color: kpi.vencido > 0 ? theme.danger : theme.textSecondary }]}>
+          {kpi.vencido > 0
+            ? `${fmt0(kpi.vencido)} vencido${counts.pendientes > 0 ? ` · ${counts.pendientes} por vencer` : ''}`
             : counts.pendientes > 0
               ? `${counts.pendientes} por pagar · al corriente`
               : 'Todo cobrado'}
         </Text>
       </SurfaceCard>
 
+      {usaQr && (
       <SurfaceCard style={[styles.kpi, kpi.porValidar > 0 && { borderColor: theme.warning + '55' }]} padding={Theme.spacing.md}>
         <View style={styles.kpiHead}>
           <Text style={[styles.kpiLabel, { color: theme.textMuted }]}>POR VALIDAR</Text>
@@ -194,6 +215,7 @@ export default function PagosScreen() {
           {kpi.porValidar > 0 ? 'pendiente de aprobación' : 'todo revisado'}
         </Text>
       </SurfaceCard>
+      )}
 
       <SurfaceCard style={styles.kpi} padding={Theme.spacing.md}>
         <View style={styles.kpiHead}>
@@ -296,8 +318,8 @@ export default function PagosScreen() {
 
         <View style={{ flex: 2 }}>
           <Text style={[styles.rowMonto, { color: theme.text }]}>{fmt(item.renta)}</Text>
-          {atrasado && (saldos[item.id] ?? 0) > Number(item.renta) && (
-            <Text style={[styles.rowMora, { color: theme.danger }]}>Debe {fmt0(saldos[item.id])}</Text>
+          {atrasado && (saldos[item.id]?.total ?? 0) > Number(item.renta) + 0.5 && (
+            <Text style={[styles.rowMora, { color: theme.danger }]}>Debe {fmt0(saldos[item.id]?.total ?? 0)} en total</Text>
           )}
         </View>
 

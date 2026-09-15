@@ -450,8 +450,8 @@ export default function PagosScreen() {
 
         <View style={{ flex: 2 }}>
           <Text style={[styles.rowMonto, { color: theme.text }]}>{fmt(item.renta)}</Text>
-          {atrasado && (saldos[item.id]?.total ?? 0) > Number(item.renta) + 0.5 && (
-            <Text style={[styles.rowMora, { color: theme.danger }]}>Debe {fmt0(saldos[item.id]?.total ?? 0)} en total</Text>
+          {atrasado && (saldos[item.id]?.vencida ?? 0) > 0.5 && (
+            <Text style={[styles.rowMora, { color: theme.danger }]}>Debe {fmt0(saldos[item.id]?.vencida ?? 0)} en total</Text>
           )}
         </View>
 
@@ -554,9 +554,9 @@ export default function PagosScreen() {
                 </Text>
               </View>
             )}
-            {atrasado && (saldos[item.id]?.total ?? 0) > Number(item.renta) + 0.5 && (
+            {atrasado && (saldos[item.id]?.vencida ?? 0) > 0.5 && (
               <Text style={[styles.rowMeta, { fontSize: 11, fontWeight: '700', color: theme.danger }]}>
-                Debe {fmt0(saldos[item.id]?.total ?? 0)} en total
+                Debe {fmt0(saldos[item.id]?.vencida ?? 0)} en total
               </Text>
             )}
             <Badge label={chip.label} variant={chip.variant} size="sm" />

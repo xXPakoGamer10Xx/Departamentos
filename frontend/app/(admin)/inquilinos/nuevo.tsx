@@ -766,7 +766,10 @@ export default function NuevoInquilinoScreen() {
                             setFechaPagoManuallyEdited(true);
                             setFormData(prev => ({
                               ...prev,
-                              fechaPago: num ? buildFechaPago(num.padStart(2, '0')) : '',
+                              // No rellenar con cero mientras se escribe (p.ej. "1" -> "01")
+                              // porque eso ya ocupa las 2 posiciones y trunca el siguiente
+                              // dígito. El padding a 2 dígitos se aplica al guardar.
+                              fechaPago: num ? buildFechaPago(num) : '',
                             }));
                           }}
                           keyboardType="numeric"

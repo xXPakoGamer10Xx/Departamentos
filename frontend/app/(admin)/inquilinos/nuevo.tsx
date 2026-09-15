@@ -664,8 +664,8 @@ export default function NuevoInquilinoScreen() {
               </SectionCard>
 
               <SectionCard title="Obligado Solidario / Fiador (opcional)" theme={theme}>
-                <View style={styles.row}>
-                  <View style={styles.rowItemL}>
+                <View style={[styles.row, !isDesktop && styles.rowMobile]}>
+                  <View style={[styles.rowItemL, !isDesktop && styles.rowItemMobile]}>
                     <InputGroup
                       label="Nombre del Fiador"
                       value={formData.fiador}
@@ -675,7 +675,7 @@ export default function NuevoInquilinoScreen() {
                       theme={theme}
                     />
                   </View>
-                  <View style={styles.rowItemR}>
+                  <View style={[styles.rowItemR, !isDesktop && styles.rowItemMobile]}>
                     <InputGroup
                       label="Teléfono del Fiador"
                       value={formData.telFiador}
@@ -705,8 +705,8 @@ export default function NuevoInquilinoScreen() {
             {/* Columna derecha */}
             <View style={[styles.col, isDesktop && styles.colRightDesktop]}>
               <SectionCard title="Condiciones Financieras" theme={theme}>
-                <View style={styles.row}>
-                  <View style={styles.rowItemL}>
+                <View style={[styles.row, !isDesktop && styles.rowMobile]}>
+                  <View style={[styles.rowItemL, !isDesktop && styles.rowItemMobile]}>
                     <InputGroup
                       label="Renta Mensual"
                       isRequired
@@ -719,7 +719,7 @@ export default function NuevoInquilinoScreen() {
                       maxLength={6}
                     />
                   </View>
-                  <View style={styles.rowItemR}>
+                  <View style={[styles.rowItemR, !isDesktop && styles.rowItemMobile]}>
                     <InputGroup
                       label="Depósito"
                       isRequired
@@ -748,8 +748,8 @@ export default function NuevoInquilinoScreen() {
 
                 <View style={[styles.divider, { borderTopColor: theme.border }]} />
 
-                <View style={styles.row}>
-                  <View style={styles.rowItemL}>
+                <View style={[styles.row, !isDesktop && styles.rowMobile]}>
+                  <View style={[styles.rowItemL, !isDesktop && styles.rowItemMobile]}>
                     <View style={styles.inputGroup}>
                       <View style={styles.labelRow}>
                         <Text style={[styles.label, { color: theme.textSecondary }]}>Día de Corte</Text>
@@ -781,7 +781,7 @@ export default function NuevoInquilinoScreen() {
                       </View>
                     </View>
                   </View>
-                  <View style={styles.rowItemR}>
+                  <View style={[styles.rowItemR, !isDesktop && styles.rowItemMobile]}>
                     <InputGroup
                       label="Fecha Inicio"
                       isRequired
@@ -891,8 +891,8 @@ export default function NuevoInquilinoScreen() {
                   </View>
                   {depositoTipo === 'personalizado' && (
                     <View style={{ marginTop: 12 }}>
-                      <View style={styles.row}>
-                        <View style={styles.rowItemL}>
+                      <View style={[styles.row, !isDesktop && styles.rowMobile]}>
+                        <View style={[styles.rowItemL, !isDesktop && styles.rowItemMobile]}>
                           <Text style={[styles.label, { color: theme.textSecondary, marginBottom: 8 }]}>N.º de pagos</Text>
                           <View style={[styles.stepper, { borderColor: theme.border, backgroundColor: theme.card }]}>
                             <TouchableOpacity
@@ -918,7 +918,7 @@ export default function NuevoInquilinoScreen() {
                             </TouchableOpacity>
                           </View>
                         </View>
-                        <View style={styles.rowItemR}>
+                        <View style={[styles.rowItemR, !isDesktop && styles.rowItemMobile]}>
                           <Text style={[styles.label, { color: theme.textSecondary, marginBottom: 8 }]}>Día de cada mes</Text>
                           <View style={[styles.inputContainer, { borderColor: theme.border, backgroundColor: theme.card }]}>
                             <Ionicons name="calendar-outline" size={18} color={theme.icon} style={styles.inputIcon} />
@@ -1148,6 +1148,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
+  rowMobile: {
+    flexDirection: 'column',
+  },
   rowItemL: {
     flex: 1,
     marginRight: 8,
@@ -1155,6 +1158,11 @@ const styles = StyleSheet.create({
   rowItemR: {
     flex: 1,
     marginLeft: 8,
+  },
+  rowItemMobile: {
+    marginRight: 0,
+    marginLeft: 0,
+    marginBottom: 14,
   },
   divider: {
     borderTopWidth: 1,

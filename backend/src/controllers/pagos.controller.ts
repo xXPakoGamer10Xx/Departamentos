@@ -992,6 +992,10 @@ const DEUDA_VENCIDA = `COALESCE(SUM(GREATEST(
 // curso aunque su fecha aún no llegue, más cualquier atraso acumulado.
 const DEUDA_TOTAL = `COALESCE(SUM(GREATEST(${DEUDA_MES}, 0)), 0)`;
 
+// periodo más antiguo con deuda ya vencida (p.ej. '2026-08'); es el mes que
+// realmente hay que mostrarle al admin como atrasado, no el mes en curso.
+const PERIODO_VENCIDO = `MIN(CASE WHEN ${MES_VENCIDO} AND ${DEUDA_MES} > 0.5 THEN to_char(gs, 'YYYY-MM') END)`;
+
 // GET /api/pagos/saldos — deuda total de todos los inquilinos activos (para la lista)
 export async function getSaldosInquilinos(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -1002,7 +1006,8 @@ export async function getSaldosInquilinos(req: AuthRequest, res: Response, next:
     const result = await pool.query(
       `SELECT i.id AS inquilino_id, i.depto_numero, i.nombre_completo,
               ${DEUDA_VENCIDA} AS deuda_vencida,
-              ${DEUDA_TOTAL} AS deuda_total
+              ${DEUDA_TOTAL} AS deuda_total,
+              ${PERIODO_VENCIDO} AS periodo_vencido
        FROM inquilinos i
        CROSS JOIN LATERAL generate_series(
          date_trunc('month', i.fecha_inicio), date_trunc('month', CURRENT_DATE), interval '1 month'

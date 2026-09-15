@@ -40,7 +40,7 @@ export default function PagosScreen() {
 
   const [inquilinos, setInquilinos] = useState<any[]>([]);
   const [estados, setEstados] = useState<Record<string, any>>({});
-  const [saldos, setSaldos] = useState<Record<string, { total: number; vencida: number }>>({});
+  const [saldos, setSaldos] = useState<Record<string, { total: number; vencida: number; periodoVencido: string | null }>>({});
   const [usaQr, setUsaQr] = useState(true);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -62,11 +62,12 @@ export default function PagosScreen() {
         const map: Record<string, any> = {};
         (estRes.data || []).forEach((e: any) => { map[e.inquilino_id] = e; });
         setEstados(map);
-        const saldoMap: Record<string, { total: number; vencida: number }> = {};
+        const saldoMap: Record<string, { total: number; vencida: number; periodoVencido: string | null }> = {};
         (saldosRes.data || []).forEach((s: any) => {
           saldoMap[s.inquilino_id] = {
             total: parseFloat(s.deuda_total ?? 0),
             vencida: parseFloat(s.deuda_vencida ?? s.deuda_total ?? 0),
+            periodoVencido: s.periodo_vencido ?? null,
           };
         });
         setSaldos(saldoMap);
@@ -434,7 +435,7 @@ export default function PagosScreen() {
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={[styles.rowName, { color: theme.text }]} numberOfLines={1}>{item.nombre_completo}</Text>
             <Text style={[styles.rowMeta, { color: theme.textSecondary }]} numberOfLines={1}>
-              Renta mensual · {mesLabel()}
+              Renta mensual · {rentaLabel(item, atrasado)}
             </Text>
             {diaPago(item) != null && (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
@@ -506,6 +507,21 @@ export default function PagosScreen() {
   };
 
   function mesLabel() { return mesActual.charAt(0).toUpperCase() + mesActual.slice(1); }
+
+  // Mes real que está vencido (p.ej. "Agosto de 2026"), no el mes en curso —
+  // un atraso de un mes anterior no debe aparecer etiquetado con el mes actual.
+  function periodoVencidoLabel(periodo?: string | null): string | null {
+    if (!periodo) return null;
+    const [y, m] = periodo.split('-').map(Number);
+    if (!y || !m) return null;
+    const s = new Intl.DateTimeFormat('es-MX', { month: 'long', year: 'numeric' }).format(new Date(y, m - 1, 1));
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+
+  function rentaLabel(item: any, atrasado: boolean): string {
+    if (atrasado) return periodoVencidoLabel(saldos[item.id]?.periodoVencido) ?? mesLabel();
+    return mesLabel();
+  }
 
   /* ---------------- Card móvil ---------------- */
   const mobileCard = ({ item, state }: { item: any; state: RowState }) => {

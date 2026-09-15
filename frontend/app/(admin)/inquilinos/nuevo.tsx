@@ -185,6 +185,9 @@ export default function NuevoInquilinoScreen() {
   const [extrayendoINE, setExtrayendoINE] = useState(false);
   const [depositoFechas, setDepositoFechas] = useState<string[]>([]);
   const [depositoManuallyEdited, setDepositoManuallyEdited] = useState(false);
+  // Una vez que el admin toca "Día de Corte" a mano (o se cargó un inquilino
+  // existente), la Fecha Inicio deja de pisarlo — son independientes.
+  const [fechaPagoManuallyEdited, setFechaPagoManuallyEdited] = useState(false);
 
   const resetForm = () => {
     const today = new Date();
@@ -204,6 +207,7 @@ export default function NuevoInquilinoScreen() {
     setDepositoDia('');
     setDepositoPagos(2);
     setDepositoManuallyEdited(false);
+    setFechaPagoManuallyEdited(false);
   };
 
   useEffect(() => {
@@ -235,6 +239,7 @@ export default function NuevoInquilinoScreen() {
           setDepositoPagos(fechas.length);
         }
         setDepositoManuallyEdited(true);
+        setFechaPagoManuallyEdited(true);
         setFormData({
           nombre: d.nombre_completo || '',
           depto: String(d.depto_numero || ''),
@@ -330,7 +335,9 @@ export default function NuevoInquilinoScreen() {
         ...prev,
         fechaInicio: dateString,
         fechaTermino: dateTermino,
-        fechaPago: buildFechaPago(day),
+        // Solo autocompletamos el Día de Corte si el admin no lo ha fijado
+        // ya a mano; si no, la Fecha Inicio nunca debe pisar ese valor.
+        ...(fechaPagoManuallyEdited ? {} : { fechaPago: buildFechaPago(day) }),
       }));
       // Recalcular fechas del depósito diferido con el nuevo mes de inicio
       if (depositoTipo === 'quincenas') {
@@ -756,6 +763,7 @@ export default function NuevoInquilinoScreen() {
                             const num = text.replace(/[^0-9]/g, '').slice(0, 2);
                             const n = parseInt(num, 10);
                             if (num && n > 31) return;
+                            setFechaPagoManuallyEdited(true);
                             setFormData(prev => ({
                               ...prev,
                               fechaPago: num ? buildFechaPago(num.padStart(2, '0')) : '',

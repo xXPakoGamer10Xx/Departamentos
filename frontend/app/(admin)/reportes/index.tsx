@@ -1,5 +1,5 @@
 import {
-  StyleSheet, View, Text, ScrollView, TouchableOpacity,
+  StyleSheet, View, Text, ScrollView, TouchableOpacity, Pressable,
   useColorScheme, ActivityIndicator, useWindowDimensions, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,6 +15,10 @@ import api from '../../../services/api';
 import { usePermisoGuard } from '../../../hooks/usePermisoGuard';
 
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+const MESES_FULL = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+];
 
 export default function ReportesScreen() {
   usePermisoGuard('reportes');
@@ -34,6 +38,7 @@ export default function ReportesScreen() {
   const [ocup, setOcup] = useState<{ ocupados: number; total: number }>({ ocupados: 0, total: 0 });
   const [deuda, setDeuda] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
 
   const cargar = useCallback((y: number) => {
     setLoading(true);
@@ -68,7 +73,8 @@ export default function ReportesScreen() {
   const extraPct = totalGeneral > 0 ? Math.round(((reporte?.extra_total || 0) / totalGeneral) * 100) : 0;
   const depoPct = Math.max(0, 100 - rentaPct - extraPct);
 
-  const maxMes = Math.max(1, ...meses.map(m => (m.total ?? m.renta + m.extra)));
+  const mesesData = meses.length ? meses : MESES.map((_, i) => ({ mes: i + 1, renta: 0, extra: 0, deposito: 0, total: 0 }));
+  const maxMes = Math.max(1, ...mesesData.map((m: any) => (m.total ?? m.renta + m.extra + m.deposito)));
 
   /* ---------------- KPI ---------------- */
   const kpis = (
@@ -134,24 +140,66 @@ export default function ReportesScreen() {
               <View key={i} style={[styles.grid, { bottom: `${f * 100}%`, borderColor: theme.border }]} />
             ))}
             <View style={styles.bars}>
-              {(meses.length ? meses : MESES.map((_, i) => ({ mes: i + 1, renta: 0, extra: 0, deposito: 0, total: 0 }))).map((m: any, i) => {
+              {mesesData.map((m: any, i) => {
                 const depoH = (m.deposito / maxMes) * 100;
                 const extraH = (m.extra / maxMes) * 100;
                 const rentaH = (m.renta / maxMes) * 100;
                 const round = { borderTopLeftRadius: 3, borderTopRightRadius: 3 };
+                const active = hoverIdx === i;
                 return (
-                  <View key={i} style={styles.barStack}>
+                  <Pressable
+                    key={i}
+                    style={[styles.barStack, active && { opacity: 0.85 }]}
+                    onHoverIn={() => setHoverIdx(i)}
+                    onHoverOut={() => setHoverIdx(prev => (prev === i ? null : prev))}
+                    onPress={() => setHoverIdx(prev => (prev === i ? null : i))}
+                  >
                     {depoH > 0 && <View style={[styles.barSeg, { height: `${depoH}%`, backgroundColor: theme.warning }, round]} />}
                     {extraH > 0 && <View style={[styles.barSeg, { height: `${extraH}%`, backgroundColor: theme.primary }, depoH > 0 ? null : round]} />}
                     <View style={[styles.barSeg, { height: `${Math.max(rentaH, m.renta > 0 ? 2 : 0)}%`, backgroundColor: theme.success }, (depoH > 0 || extraH > 0) ? null : round]} />
-                  </View>
+                  </Pressable>
                 );
               })}
             </View>
+            {hoverIdx !== null && (() => {
+              const m = mesesData[hoverIdx];
+              const total = m.total ?? (m.renta + m.extra + m.deposito);
+              const leftPct = ((hoverIdx + 0.5) / mesesData.length) * 100;
+              return (
+                <View
+                  pointerEvents="none"
+                  style={[
+                    styles.tooltip,
+                    { left: `${leftPct}%`, borderColor: theme.border, backgroundColor: theme.card },
+                  ]}
+                >
+                  <Text style={[styles.tooltipMonth, { color: theme.text }]}>{MESES_FULL[hoverIdx]} {year}</Text>
+                  {m.renta > 0 && (
+                    <View style={styles.tooltipRow}>
+                      <View style={[styles.legendDot, { backgroundColor: theme.success }]} />
+                      <Text style={[styles.tooltipText, { color: theme.textSecondary }]}>Renta {fmt(m.renta)}</Text>
+                    </View>
+                  )}
+                  {m.extra > 0 && (
+                    <View style={styles.tooltipRow}>
+                      <View style={[styles.legendDot, { backgroundColor: theme.primary }]} />
+                      <Text style={[styles.tooltipText, { color: theme.textSecondary }]}>Extras {fmt(m.extra)}</Text>
+                    </View>
+                  )}
+                  {m.deposito > 0 && (
+                    <View style={styles.tooltipRow}>
+                      <View style={[styles.legendDot, { backgroundColor: theme.warning }]} />
+                      <Text style={[styles.tooltipText, { color: theme.textSecondary }]}>Depósitos {fmt(m.deposito)}</Text>
+                    </View>
+                  )}
+                  <Text style={[styles.tooltipTotal, { color: theme.text }]}>Total {fmt(total)}</Text>
+                </View>
+              );
+            })()}
           </View>
           <View style={styles.xAxis}>
             {MESES.map((mn, i) => (
-              <Text key={i} style={[styles.xLabel, { color: theme.textMuted }]}>{mn[0]}</Text>
+              <Text key={i} style={[styles.xLabel, { color: hoverIdx === i ? theme.text : theme.textMuted }]}>{mn[0]}</Text>
             ))}
           </View>
         </View>
@@ -210,36 +258,44 @@ export default function ReportesScreen() {
   );
 
   /* ---------------- Matriz depto × mes ---------------- */
+  const mtxDeptoStyle = [styles.mtxDepto, isDesktop && styles.mtxDeptoFlex];
+  const mtxCellStyle = [styles.mtxCell, isDesktop && styles.mtxCellFlex];
+  const mtxTotalStyle = [styles.mtxTotal, isDesktop && styles.mtxTotalFlex];
+
+  const tablaContent = (
+    <View>
+      <View style={[styles.mtxRow, { borderBottomColor: theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(15,23,42,0.03)' }]}>
+        <Text style={[...mtxDeptoStyle, styles.mtxHead, { color: theme.textMuted }]}>Depto</Text>
+        {MESES.map(mn => <Text key={mn} style={[...mtxCellStyle, styles.mtxHead, { color: theme.textMuted }]}>{mn}</Text>)}
+        <Text style={[...mtxTotalStyle, styles.mtxHead, { color: theme.text }]}>Total</Text>
+      </View>
+      {porDepto.map(d => (
+        <View key={d.depto_numero} style={[styles.mtxRow, { borderBottomColor: theme.border }]}>
+          <Text style={[...mtxDeptoStyle, { color: theme.text }]}>#{d.depto_numero}</Text>
+          {d.meses.map((v, i) => (
+            <Text key={i} style={[...mtxCellStyle, { color: v > 0 ? theme.text : theme.textMuted }]}>{v > 0 ? fmtCell(v) : '·'}</Text>
+          ))}
+          <Text style={[...mtxTotalStyle, { color: theme.success }]}>{fmt(d.total)}</Text>
+        </View>
+      ))}
+      <View style={[styles.mtxRow, { borderBottomWidth: 0, backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(15,23,42,0.03)' }]}>
+        <Text style={[...mtxDeptoStyle, { color: theme.text, fontWeight: '800' }]}>Total</Text>
+        {meses.map((m, i) => (
+          <Text key={i} style={[...mtxCellStyle, { color: theme.text, fontWeight: '700' }]}>{m.total > 0 ? fmtCell(m.total) : '·'}</Text>
+        ))}
+        <Text style={[...mtxTotalStyle, { color: theme.primary, fontWeight: '800' }]}>{fmt(meses.reduce((s, m) => s + m.total, 0))}</Text>
+      </View>
+    </View>
+  );
+
   const matrizDeptos = porDepto.length > 0 && (
     <SurfaceCard padding={0} style={{ overflow: 'hidden' }}>
       <View style={[styles.compHead, { borderBottomColor: theme.border }]}>
         <Text style={[styles.panelTitle, { color: theme.textSecondary }]}>INGRESO POR DEPARTAMENTO · {year}</Text>
       </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator>
-        <View>
-          <View style={[styles.mtxRow, { borderBottomColor: theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(15,23,42,0.03)' }]}>
-            <Text style={[styles.mtxDepto, styles.mtxHead, { color: theme.textMuted }]}>Depto</Text>
-            {MESES.map(mn => <Text key={mn} style={[styles.mtxCell, styles.mtxHead, { color: theme.textMuted }]}>{mn}</Text>)}
-            <Text style={[styles.mtxTotal, styles.mtxHead, { color: theme.text }]}>Total</Text>
-          </View>
-          {porDepto.map(d => (
-            <View key={d.depto_numero} style={[styles.mtxRow, { borderBottomColor: theme.border }]}>
-              <Text style={[styles.mtxDepto, { color: theme.text }]}>#{d.depto_numero}</Text>
-              {d.meses.map((v, i) => (
-                <Text key={i} style={[styles.mtxCell, { color: v > 0 ? theme.text : theme.textMuted }]}>{v > 0 ? fmtCell(v) : '·'}</Text>
-              ))}
-              <Text style={[styles.mtxTotal, { color: theme.success }]}>{fmt(d.total)}</Text>
-            </View>
-          ))}
-          <View style={[styles.mtxRow, { borderBottomWidth: 0, backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(15,23,42,0.03)' }]}>
-            <Text style={[styles.mtxDepto, { color: theme.text, fontWeight: '800' }]}>Total</Text>
-            {meses.map((m, i) => (
-              <Text key={i} style={[styles.mtxCell, { color: theme.text, fontWeight: '700' }]}>{m.total > 0 ? fmtCell(m.total) : '·'}</Text>
-            ))}
-            <Text style={[styles.mtxTotal, { color: theme.primary, fontWeight: '800' }]}>{fmt(meses.reduce((s, m) => s + m.total, 0))}</Text>
-          </View>
-        </View>
-      </ScrollView>
+      {isDesktop ? tablaContent : (
+        <ScrollView horizontal showsHorizontalScrollIndicator>{tablaContent}</ScrollView>
+      )}
       <Text style={[styles.kpiMini, { color: theme.textMuted, padding: 12 }]}>
         Cifras en miles (k). Cuenta el dinero por el mes en que se recibió (renta, cuotas y depósitos), incluidos inquilinos que ya se dieron de baja.
       </Text>
@@ -328,16 +384,26 @@ const styles = StyleSheet.create({
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendText: { fontSize: 11, fontWeight: '600' },
 
-  chartBody: { flexDirection: 'row', gap: 8 },
-  yAxis: { justifyContent: 'space-between', height: 220, width: 34 },
+  chartBody: { flexDirection: 'row', gap: 8, flex: 1 },
+  yAxis: { justifyContent: 'space-between', minHeight: 220, width: 34 },
   yLabel: { fontSize: 9.5, fontWeight: '600', fontVariant: ['tabular-nums'], textAlign: 'right' },
-  plot: { height: 220, position: 'relative' },
+  plot: { flex: 1, minHeight: 220, position: 'relative' },
   grid: { position: 'absolute', left: 0, right: 0, borderTopWidth: StyleSheet.hairlineWidth },
   bars: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-around' },
-  barStack: { flex: 1, height: '100%', marginHorizontal: 3, maxWidth: 26, flexDirection: 'column', justifyContent: 'flex-end' },
+  barStack: { flex: 1, height: '100%', marginHorizontal: 3, maxWidth: 26, flexDirection: 'column', justifyContent: 'flex-end', cursor: 'pointer' as any },
   barSeg: { width: '100%', minHeight: 1 },
   xAxis: { height: 20, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center' },
   xLabel: { fontSize: 9, fontWeight: '700', flex: 1, textAlign: 'center' },
+
+  tooltip: {
+    position: 'absolute', top: 4, width: 152, marginLeft: -76,
+    borderWidth: 1, borderRadius: Theme.borderRadius.sm, padding: 10, gap: 4,
+    shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 6,
+  },
+  tooltipMonth: { fontSize: 11.5, fontWeight: '800', marginBottom: 2 },
+  tooltipRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  tooltipText: { fontSize: 11, fontWeight: '600' },
+  tooltipTotal: { fontSize: 12, fontWeight: '800', marginTop: 4 },
 
   side: { flex: 1, gap: 12 },
   gaugeCard: { alignItems: 'center', gap: 16, minHeight: 200, justifyContent: 'center' },
@@ -352,6 +418,11 @@ const styles = StyleSheet.create({
   mtxDepto: { width: 60, paddingHorizontal: 12, paddingVertical: 11, fontSize: 12.5, fontWeight: '700' },
   mtxCell: { width: 46, textAlign: 'center', paddingVertical: 11, fontSize: 11.5 },
   mtxTotal: { width: 92, textAlign: 'right', paddingHorizontal: 12, paddingVertical: 11, fontSize: 12, fontWeight: '700' },
+  // En desktop la tabla no necesita scroll horizontal: las columnas se
+  // estiran (flex) para llenar el ancho completo de la tarjeta.
+  mtxDeptoFlex: { width: undefined, flex: 1.1 },
+  mtxCellFlex: { width: undefined, flex: 1 },
+  mtxTotalFlex: { width: undefined, flex: 1.4 },
   compLabel: { fontSize: 12.5, fontWeight: '600' },
   compVal: { fontSize: 11.5, fontVariant: ['tabular-nums'] },
   compPct: { fontSize: 12.5, fontWeight: '700', minWidth: 36, textAlign: 'right', fontVariant: ['tabular-nums'] },

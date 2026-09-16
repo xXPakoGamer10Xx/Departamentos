@@ -232,7 +232,13 @@ export default function CuentasScreen() {
                   }}
                   placeholder={f.placeholder}
                   placeholderTextColor={theme.textSecondary}
-                  keyboardType={f.numeric ? 'numeric' : 'default'}
+                  // En web, inputMode "numeric" hace que algunos navegadores
+                  // rechacen por completo el pegado si el texto copiado trae
+                  // espacios (p.ej. una CLABE agrupada "0121 8001 ..."). El
+                  // filtro de solo-dígitos ya limpia el texto en onChangeText,
+                  // así que en web dejamos el teclado normal para que el
+                  // pegado siempre llegue; en la app nativa sí usamos numeric.
+                  keyboardType={f.numeric ? (Platform.OS === 'web' ? 'default' : 'numeric') : 'default'}
                 />
               </View>
             ))}

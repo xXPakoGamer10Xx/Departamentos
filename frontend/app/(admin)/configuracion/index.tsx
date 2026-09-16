@@ -2356,7 +2356,11 @@ export default function ConfiguracionScreen() {
               onChangeText={t => { setCuentaForm(f => f ? { ...f, banco_clabe: t.replace(/\D/g, '').slice(0, 18) } : f); setCuentaError(''); }}
               placeholder="18 dígitos"
               placeholderTextColor={theme.textSecondary}
-              keyboardType="numeric"
+              // keyboardType="numeric" en web rechaza el pegado completo si el
+              // texto copiado trae algo que no sea dígito (p.ej. una CLABE
+              // agrupada con espacios); el filtro de solo-dígitos de arriba
+              // ya limpia el valor, así que en web usamos el teclado normal.
+              keyboardType={Platform.OS === 'web' ? 'default' : 'numeric'}
               maxLength={18}
             />
 

@@ -152,6 +152,13 @@ export default function NuevoInquilinoScreen() {
   const { width } = useWindowDimensions();
   const isDesktop = width >= Theme.breakpoints.tablet;
 
+  // En web, inputMode "numeric" hace que algunos navegadores rechacen por
+  // completo el pegado si el texto copiado trae algo que no sea dígito
+  // (p.ej. un monto "$3,100" o una CLABE agrupada con espacios). El filtro
+  // de solo-dígitos ya limpia el texto en cada onChange, así que en web
+  // usamos el teclado normal para que el pegado siempre llegue.
+  const numericKeyboard = Platform.OS === 'web' ? 'default' : 'numeric';
+
   const [loading, setLoading] = useState(false);
   const [fetchingDeptos, setFetchingDeptos] = useState(true);
   const [availableDeptos, setAvailableDeptos] = useState<any[]>([]);
@@ -713,7 +720,7 @@ export default function NuevoInquilinoScreen() {
                       value={formData.renta}
                       onChange={handleRentaChange}
                       placeholder="3500"
-                      keyboardType="numeric"
+                      keyboardType={numericKeyboard}
                       icon="cash-outline"
                       theme={theme}
                       maxLength={6}
@@ -729,7 +736,7 @@ export default function NuevoInquilinoScreen() {
                         setFormData(prev => ({ ...prev, deposito: text.replace(/[^0-9]/g, '') }));
                       }}
                       placeholder="3500"
-                      keyboardType="numeric"
+                      keyboardType={numericKeyboard}
                       icon="wallet-outline"
                       theme={theme}
                       maxLength={6}
@@ -772,7 +779,7 @@ export default function NuevoInquilinoScreen() {
                               fechaPago: num ? buildFechaPago(num) : '',
                             }));
                           }}
-                          keyboardType="numeric"
+                          keyboardType={numericKeyboard}
                           maxLength={2}
                           placeholder="15"
                           placeholderTextColor={theme.textSecondary + '80'}
@@ -931,7 +938,7 @@ export default function NuevoInquilinoScreen() {
                                 setDepositoDia(n);
                                 applyDepositoDiferido(n, depositoPagos);
                               }}
-                              keyboardType="numeric"
+                              keyboardType={numericKeyboard}
                               maxLength={2}
                               placeholder="15"
                               placeholderTextColor={theme.textSecondary + '80'}

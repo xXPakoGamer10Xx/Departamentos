@@ -15,6 +15,7 @@ import { getItem, removeItem } from '../../services/storage';
 import { useSSEEvent } from '../../hooks/useSSE';
 import { showWebNotification } from '../../services/webNotifications';
 import { NotificationBell } from '../../components/ui/NotificationBell';
+import { getBankBrand, detectBankInfo } from '../../utils/bankBrand';
 
 const TOKEN_KEY = 'auth_token';
 const USER_KEY = 'auth_user';
@@ -175,15 +176,6 @@ export default function InquilinoHome() {
   const getPeriodoLabel = () =>
     new Date().toLocaleDateString('es-MX', { month: 'long', year: 'numeric' }).toUpperCase();
 
-  const detectBankInfo = (numero: string): { tipo: string; formato: string } => {
-    if (!numero) return { tipo: 'CLABE', formato: '•••• •••• •••• ••••' };
-    const c = numero.replace(/\D/g, '');
-    if (c.length === 18) return { tipo: 'CLABE', formato: `${c.slice(0, 4)} ${c.slice(4, 8)} ${c.slice(8, 12)} ${c.slice(12, 16)} ${c.slice(16)}` };
-    if (c.length === 16) return { tipo: 'No. de tarjeta', formato: `${c.slice(0, 4)} ${c.slice(4, 8)} ${c.slice(8, 12)} ${c.slice(12)}` };
-    if (c.length >= 10) return { tipo: 'No. de cuenta', formato: c };
-    return { tipo: 'Cuenta', formato: numero };
-  };
-
   if (loading) {
     return (
       <View style={[styles.container, styles.center, { backgroundColor: theme.background }]}>
@@ -253,25 +245,28 @@ export default function InquilinoHome() {
         {/* Transferencia bancaria */}
         {esTransferencia && (() => {
           const bankInfo = detectBankInfo(config.banco_clabe || '');
+          const brand = getBankBrand(config.banco_nombre);
           return (
             <View style={{ gap: 8 }}>
               <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Datos para transferencia</Text>
               {(config.banco_clabe || config.banco_nombre) ? (
                 <>
                   <LinearGradient
-                    colors={['#1a56c4', '#0a3d8a']}
+                    colors={brand.gradient}
                     start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
                     style={styles.bankCard}
                   >
-                    <View style={styles.chip}><View style={styles.chipInner} /></View>
+                    <View style={[styles.bankCardDecoCircle, { backgroundColor: brand.accent }]} />
+                    <View style={[styles.bankCardDecoCircleSmall, { borderColor: brand.accent }]} />
+                    <View style={[styles.chip, { backgroundColor: brand.chip }]}><View style={styles.chipInner} /></View>
                     <View style={{ gap: 6 }}>
                       <Text style={styles.bankName}>{config.banco_nombre || 'BANCO'}</Text>
                       <Text style={styles.bankClabe}>{bankInfo.formato}</Text>
                       <Text style={styles.bankTitular}>{config.banco_titular || ''}</Text>
                     </View>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-                      <Ionicons name="card" size={26} color="rgba(255,255,255,0.4)" />
-                      <Text style={styles.bankType}>{bankInfo.tipo}</Text>
+                      <Ionicons name="card" size={26} color={brand.accent} />
+                      <Text style={[styles.bankType, { color: brand.accent }]}>{bankInfo.tipo}</Text>
                     </View>
                   </LinearGradient>
                   
@@ -569,8 +564,15 @@ const styles = StyleSheet.create({
   bankCard: {
     borderRadius: 18, padding: 22, height: 190,
     justifyContent: 'space-between',
-    shadowColor: '#1a56c4', shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35, shadowRadius: 16, elevation: 8, overflow: 'hidden',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3, shadowRadius: 16, elevation: 8, overflow: 'hidden',
+  },
+  bankCardDecoCircle: {
+    position: 'absolute', top: -55, right: -35, width: 150, height: 150, borderRadius: 75, opacity: 0.12,
+  },
+  bankCardDecoCircleSmall: {
+    position: 'absolute', bottom: -28, right: 36, width: 84, height: 84, borderRadius: 42,
+    borderWidth: 1.5, opacity: 0.18,
   },
   chip: {
     width: 40, height: 30, borderRadius: 5,

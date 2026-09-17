@@ -15,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Print from 'expo-print';
 import api from '../../../services/api';
 import { buildReciboHtml } from '../../../utils/recibo';
+import { getBankBrand, detectBankInfo } from '../../../utils/bankBrand';
 import { usePermisoGuard } from '../../../hooks/usePermisoGuard';
 
 export default function PagoDetalleScreen() {
@@ -953,16 +954,19 @@ export default function PagoDetalleScreen() {
         {/* Transferencia: tarjeta bancaria */}
         {esTransferencia && (() => {
           const bankInfo = detectBankInfo(config.banco_clabe || '');
+          const brand = getBankBrand(config.banco_nombre);
           return (
           <View>
             <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Datos para transferencia</Text>
             <LinearGradient
-              colors={['#1a56c4', '#0a3d8a']}
+              colors={brand.gradient}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.bankCard}
             >
-              <View style={styles.chip}>
+              <View style={[styles.bankCardDecoCircle, { backgroundColor: brand.accent }]} />
+              <View style={[styles.bankCardDecoCircleSmall, { borderColor: brand.accent }]} />
+              <View style={[styles.chip, { backgroundColor: brand.chip }]}>
                 <View style={styles.chipInner} />
               </View>
               <View style={styles.bankCardBody}>
@@ -971,8 +975,8 @@ export default function PagoDetalleScreen() {
                 <Text style={styles.bankTitular}>{config.banco_titular || 'Titular no configurado'}</Text>
               </View>
               <View style={styles.bankCardFooter}>
-                <Ionicons name="card" size={28} color="rgba(255,255,255,0.4)" />
-                <Text style={styles.bankCardType}>{bankInfo.tipo}</Text>
+                <Ionicons name="card" size={28} color={brand.accent} />
+                <Text style={[styles.bankCardType, { color: brand.accent }]}>{bankInfo.tipo}</Text>
               </View>
             </LinearGradient>
 
@@ -1680,15 +1684,6 @@ export default function PagoDetalleScreen() {
   );
 }
 
-function detectBankInfo(numero: string): { tipo: string; formato: string } {
-  if (!numero) return { tipo: 'CLABE', formato: '•••• •••• •••• ••••' };
-  const c = numero.replace(/\D/g, '');
-  if (c.length === 18) return { tipo: 'CLABE', formato: `${c.slice(0, 4)} ${c.slice(4, 8)} ${c.slice(8, 12)} ${c.slice(12, 16)} ${c.slice(16)}` };
-  if (c.length === 16) return { tipo: 'No. de tarjeta', formato: `${c.slice(0, 4)} ${c.slice(4, 8)} ${c.slice(8, 12)} ${c.slice(12)}` };
-  if (c.length >= 10) return { tipo: 'No. de cuenta', formato: c };
-  return { tipo: 'Cuenta', formato: numero };
-}
-
 const styles = StyleSheet.create({
   container: { flex: 1 },
   center: { justifyContent: 'center', alignItems: 'center', gap: 12 },
@@ -1822,12 +1817,31 @@ const styles = StyleSheet.create({
     padding: 24,
     height: 200,
     justifyContent: 'space-between',
-    shadowColor: '#1a56c4',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
+    shadowOpacity: 0.35,
     shadowRadius: 20,
     elevation: 10,
     overflow: 'hidden',
+  },
+  bankCardDecoCircle: {
+    position: 'absolute',
+    top: -60,
+    right: -40,
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    opacity: 0.12,
+  },
+  bankCardDecoCircleSmall: {
+    position: 'absolute',
+    bottom: -30,
+    right: 40,
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    borderWidth: 1.5,
+    opacity: 0.18,
   },
   chip: {
     width: 44,

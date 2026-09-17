@@ -59,6 +59,10 @@ export async function getConfig(req: AuthRequest, res: Response, next: NextFunct
         res.json({ success: true, data: {} });
         return;
       }
+    } else if (req.query.depto_numero) {
+      // El admin puede pedir la config con la cuenta bancaria resuelta para
+      // un departamento en particular (pantalla "Cobrar Renta").
+      deptoNumero = Number(req.query.depto_numero);
     }
 
     const result = await pool.query(
@@ -75,10 +79,10 @@ export async function getConfig(req: AuthRequest, res: Response, next: NextFunct
       }
     }
 
-    // Resolver la cuenta bancaria que aplica para el inquilino: la asignada a su
-    // departamento; si no tiene, la predeterminada del admin. Sobreescribe los
-    // campos banco_* para que la pantalla del inquilino los muestre sin cambios.
-    if (req.user!.rol === 'inquilino') {
+    // Resolver la cuenta bancaria que aplica para el departamento (asignada, o
+    // si no tiene, la predeterminada del admin). Sobreescribe los campos
+    // banco_* tanto para el inquilino como para el admin en "Cobrar Renta".
+    if (deptoNumero != null) {
       const cuenta = await pool.query(
         `SELECT cb.banco_nombre, cb.banco_clabe, cb.banco_titular
          FROM cuentas_bancarias cb

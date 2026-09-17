@@ -208,8 +208,8 @@ class ApiService {
     this.request<any>('POST', '/backups/manual');
 
   // Config
-  getConfig = () =>
-    this.request<Record<string, string>>('GET', '/config');
+  getConfig = (deptoNumero?: number) =>
+    this.request<Record<string, string>>('GET', deptoNumero ? `/config?depto_numero=${deptoNumero}` : '/config');
 
   updateConfig = (data: object) =>
     this.request<void>('PUT', '/config', data);

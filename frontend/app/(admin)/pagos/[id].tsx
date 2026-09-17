@@ -168,13 +168,13 @@ export default function PagoDetalleScreen() {
   const cargar = useCallback((showLoader = false) => {
     if (!id) return;
     if (showLoader) setLoading(true);
-    Promise.all([
-      api.getInquilinoById(id),
-      api.getConfig(),
+    api.getInquilinoById(id).then(inqRes => Promise.all([
+      Promise.resolve(inqRes),
+      api.getConfig(inqRes.data?.depto_numero),
       api.getEstadoPago(id),
       api.getSaldoDeposito(id),
       api.getAbonosDeposito(id),
-    ]).then(async ([inqRes, cfgRes, estadoRes, depSaldoRes, depAbonosRes]) => {
+    ])).then(async ([inqRes, cfgRes, estadoRes, depSaldoRes, depAbonosRes]) => {
       setInquilino(inqRes.data);
       setConfig(cfgRes.data || {});
       setPago(estadoRes.data || null);

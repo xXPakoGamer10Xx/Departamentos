@@ -38,6 +38,19 @@ export function getBankBrand(nombreBanco?: string | null): BankBrand {
   return found ? found.brand : DEFAULT_BRAND;
 }
 
+export type CardNetwork = 'visa' | 'mastercard' | 'amex' | null;
+
+// Identifica la red de la tarjeta por el rango del número (BIN), solo cuando
+// el dato capturado es un número de tarjeta de 15-16 dígitos (no aplica a
+// CLABE de 18 dígitos, que es transferencia SPEI y no usa red de tarjeta).
+export function detectCardNetwork(numero: string): CardNetwork {
+  const c = (numero || '').replace(/\D/g, '');
+  if (c.length === 16 && /^4/.test(c)) return 'visa';
+  if (c.length === 16 && (/^5[1-5]/.test(c) || /^2(2[2-9][0-9]|[3-6][0-9]{2}|7[01][0-9]|720)/.test(c))) return 'mastercard';
+  if (c.length === 15 && /^3[47]/.test(c)) return 'amex';
+  return null;
+}
+
 export function detectBankInfo(numero: string): { tipo: string; formato: string } {
   if (!numero) return { tipo: 'CLABE', formato: '•••• •••• •••• ••••' };
   const c = numero.replace(/\D/g, '');

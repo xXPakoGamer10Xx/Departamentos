@@ -15,7 +15,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Print from 'expo-print';
 import api from '../../../services/api';
 import { buildReciboHtml } from '../../../utils/recibo';
-import { getBankBrand, detectBankInfo } from '../../../utils/bankBrand';
+import { getBankBrand, detectBankInfo, detectCardNetwork } from '../../../utils/bankBrand';
+import { CardNetworkMark } from '../../../components/ui/CardNetworkMark';
 import { usePermisoGuard } from '../../../hooks/usePermisoGuard';
 
 export default function PagoDetalleScreen() {
@@ -955,6 +956,7 @@ export default function PagoDetalleScreen() {
         {esTransferencia && (() => {
           const bankInfo = detectBankInfo(config.banco_clabe || '');
           const brand = getBankBrand(config.banco_nombre);
+          const network = detectCardNetwork(config.banco_clabe || '');
           return (
           <View>
             <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Datos para transferencia</Text>
@@ -966,8 +968,11 @@ export default function PagoDetalleScreen() {
             >
               <View style={[styles.bankCardDecoCircle, { backgroundColor: brand.accent }]} />
               <View style={[styles.bankCardDecoCircleSmall, { borderColor: brand.accent }]} />
-              <View style={[styles.chip, { backgroundColor: brand.chip }]}>
-                <View style={styles.chipInner} />
+              <View style={styles.chipRow}>
+                <View style={[styles.chip, { backgroundColor: brand.chip }]}>
+                  <View style={styles.chipInner} />
+                </View>
+                <Ionicons name="wifi" size={20} color="rgba(255,255,255,0.55)" style={styles.contactless} />
               </View>
               <View style={styles.bankCardBody}>
                 <Text style={styles.bankName}>{config.banco_nombre || 'BANCO'}</Text>
@@ -975,7 +980,11 @@ export default function PagoDetalleScreen() {
                 <Text style={styles.bankTitular}>{config.banco_titular || 'Titular no configurado'}</Text>
               </View>
               <View style={styles.bankCardFooter}>
-                <Ionicons name="card" size={28} color={brand.accent} />
+                {network ? (
+                  <CardNetworkMark network={network} size={30} />
+                ) : (
+                  <Ionicons name="card" size={28} color={brand.accent} />
+                )}
                 <Text style={[styles.bankCardType, { color: brand.accent }]}>{bankInfo.tipo}</Text>
               </View>
             </LinearGradient>
@@ -1842,6 +1851,14 @@ const styles = StyleSheet.create({
     borderRadius: 45,
     borderWidth: 1.5,
     opacity: 0.18,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  contactless: {
+    transform: [{ rotate: '90deg' }],
   },
   chip: {
     width: 44,

@@ -15,7 +15,8 @@ import { getItem, removeItem } from '../../services/storage';
 import { useSSEEvent } from '../../hooks/useSSE';
 import { showWebNotification } from '../../services/webNotifications';
 import { NotificationBell } from '../../components/ui/NotificationBell';
-import { getBankBrand, detectBankInfo } from '../../utils/bankBrand';
+import { getBankBrand, detectBankInfo, detectCardNetwork } from '../../utils/bankBrand';
+import { CardNetworkMark } from '../../components/ui/CardNetworkMark';
 
 const TOKEN_KEY = 'auth_token';
 const USER_KEY = 'auth_user';
@@ -246,6 +247,7 @@ export default function InquilinoHome() {
         {esTransferencia && (() => {
           const bankInfo = detectBankInfo(config.banco_clabe || '');
           const brand = getBankBrand(config.banco_nombre);
+          const network = detectCardNetwork(config.banco_clabe || '');
           return (
             <View style={{ gap: 8 }}>
               <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Datos para transferencia</Text>
@@ -258,14 +260,21 @@ export default function InquilinoHome() {
                   >
                     <View style={[styles.bankCardDecoCircle, { backgroundColor: brand.accent }]} />
                     <View style={[styles.bankCardDecoCircleSmall, { borderColor: brand.accent }]} />
-                    <View style={[styles.chip, { backgroundColor: brand.chip }]}><View style={styles.chipInner} /></View>
+                    <View style={styles.chipRow}>
+                      <View style={[styles.chip, { backgroundColor: brand.chip }]}><View style={styles.chipInner} /></View>
+                      <Ionicons name="wifi" size={18} color="rgba(255,255,255,0.55)" style={styles.contactless} />
+                    </View>
                     <View style={{ gap: 6 }}>
                       <Text style={styles.bankName}>{config.banco_nombre || 'BANCO'}</Text>
                       <Text style={styles.bankClabe}>{bankInfo.formato}</Text>
                       <Text style={styles.bankTitular}>{config.banco_titular || ''}</Text>
                     </View>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-                      <Ionicons name="card" size={26} color={brand.accent} />
+                      {network ? (
+                        <CardNetworkMark network={network} size={28} />
+                      ) : (
+                        <Ionicons name="card" size={26} color={brand.accent} />
+                      )}
                       <Text style={[styles.bankType, { color: brand.accent }]}>{bankInfo.tipo}</Text>
                     </View>
                   </LinearGradient>
@@ -574,6 +583,8 @@ const styles = StyleSheet.create({
     position: 'absolute', bottom: -28, right: 36, width: 84, height: 84, borderRadius: 42,
     borderWidth: 1.5, opacity: 0.18,
   },
+  chipRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  contactless: { transform: [{ rotate: '90deg' }] },
   chip: {
     width: 40, height: 30, borderRadius: 5,
     backgroundColor: 'rgba(255,200,0,0.8)', justifyContent: 'center', alignItems: 'center',

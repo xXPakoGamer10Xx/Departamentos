@@ -15,15 +15,20 @@ import { Sidebar } from '../../components/ui/Sidebar';
 import { NotificationBell } from '../../components/ui/NotificationBell';
 import { can, esAdmin } from '../../constants/permisos';
 
+// El orden de este arreglo ES el orden visual del dock (de izquierda a
+// derecha), sin importar en qué orden se declaren los <Tabs.Screen> abajo.
+// Agrupado por lógica de uso: inicio → las dos entidades principales
+// (departamentos/inquilinos) → dinero (pagos/cuentas) → analítica →
+// ajustes (siempre al final, como en la mayoría de apps).
 const DOCK_ITEMS = [
   { name: 'index',         icon: 'grid',           iconFilled: 'grid',          color: '#3B82F6' },
+  { name: 'departamentos', icon: 'business-outline', iconFilled: 'business',     color: '#10B981', permiso: 'departamentos' },
   { name: 'inquilinos',    icon: 'people-outline',  iconFilled: 'people',        color: '#F59E0B', permiso: 'inquilinos' },
   { name: 'tickets',       icon: 'chatbox-ellipses-outline', iconFilled: 'chatbox-ellipses', color: '#EF4444', permiso: 'tickets' },
   { name: 'pagos',         icon: 'card-outline',    iconFilled: 'card',          color: '#10B981', permiso: 'pagos' },
-  { name: 'departamentos', icon: 'business-outline', iconFilled: 'business',     color: '#10B981', permiso: 'departamentos' },
-  { name: 'reportes',      icon: 'stats-chart-outline', iconFilled: 'stats-chart', color: '#8B5CF6', permiso: 'reportes' },
   { name: 'scan',          icon: 'qr-code-outline', iconFilled: 'qr-code',       color: '#3B82F6', permiso: 'pagos.marcar' },
   { name: 'cuentas',       icon: 'wallet-outline',  iconFilled: 'wallet',        color: '#10B981', permiso: 'cuentas' },
+  { name: 'reportes',      icon: 'stats-chart-outline', iconFilled: 'stats-chart', color: '#8B5CF6', permiso: 'reportes' },
   { name: 'configuracion', icon: 'settings-outline', iconFilled: 'settings',    color: '#6B7280', adminOnly: true },
 ] as { name: string; icon: string; iconFilled: string; color: string; permiso?: string; adminOnly?: boolean }[];
 
@@ -120,13 +125,10 @@ export default function AdminLayout() {
                     }
                   ]}
                 >
-                  {props.state.routes.map((route, index) => {
-                    const dockItem = DOCK_ITEMS.find(
-                      d => route.name === d.name ||
-                           route.name === `${d.name}/index` ||
-                           route.name === d.name
-                    );
-                    if (!dockItem) return null;
+                  {DOCK_ITEMS.map((dockItem) => {
+                    const routeIndex = props.state.routes.findIndex(r => r.name === dockItem.name);
+                    if (routeIndex === -1) return null;
+                    const route = props.state.routes[routeIndex];
                     // Modo solo-admin (sin app para inquilinos): fuera QR y Tickets,
                     // y en su lugar aparece acceso directo a Cuentas.
                     if ((dockItem.name === 'scan' || dockItem.name === 'tickets') && !usaQrInquilinos) return null;
@@ -135,7 +137,7 @@ export default function AdminLayout() {
                     if (dockItem.adminOnly && !esAdmin()) return null;
                     if (dockItem.permiso && !can(dockItem.permiso as any)) return null;
 
-                    const isFocused = props.state.index === index;
+                    const isFocused = props.state.index === routeIndex;
                     const iconName = isFocused ? dockItem.iconFilled : dockItem.icon;
 
                     return (
@@ -158,7 +160,8 @@ export default function AdminLayout() {
                       />
                     );
                   })}
-                  {/* La campana de notificaciones vive en el dock en móvil. */}
+                  {/* La campana de notificaciones vive en el dock en móvil, separada de la navegación. */}
+                  <View style={[styles.dockDivider, { backgroundColor: theme.glassBorder }]} />
                   <View style={styles.dockItem}>
                     <NotificationBell isDark={isDark} style={styles.dockNotif} />
                   </View>
@@ -194,7 +197,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   dockNotif: {
-    width: 38, height: 38, borderRadius: 11, backgroundColor: 'transparent',
+    width: 33, height: 33, borderRadius: 10, backgroundColor: 'transparent',
   },
   dockWrapper: {
     position: 'absolute',
@@ -207,11 +210,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingHorizontal: 8,
     paddingVertical: 7,
-    borderRadius: 28,
+    borderRadius: 26,
     borderWidth: 1,
     overflow: 'hidden',
     alignItems: 'center',
-    gap: 2,
+    gap: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.18,
@@ -219,18 +222,23 @@ const styles = StyleSheet.create({
     elevation: 12,
   },
   dockItem: {
-    paddingHorizontal: 4,
+    paddingHorizontal: 1,
     paddingVertical: 4,
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 38,
+    minWidth: 33,
   },
   dockIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 11,
+    width: 33,
+    height: 33,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  dockDivider: {
+    width: StyleSheet.hairlineWidth * 2,
+    height: 22,
+    marginHorizontal: 2,
   },
   dockDot: {
     width: 4,

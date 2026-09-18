@@ -247,6 +247,60 @@ export default function DepartamentoDetailScreen() {
       ) : null}
 
       <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
+        <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>CUENTA PARA TRANSFERENCIAS</Text>
+        <Text style={[styles.hint, { color: theme.textSecondary }]}>
+          El inquilino de este departamento verá esta cuenta al pagar. Si no eliges ninguna, se usa la predeterminada.
+        </Text>
+
+        <TouchableOpacity
+          style={[styles.cuentaRow, { borderColor: !depto.cuenta_bancaria_id ? theme.primary : theme.border }]}
+          onPress={() => asignarCuenta(null)}
+          disabled={asignandoCuenta}
+        >
+          <Ionicons
+            name={!depto.cuenta_bancaria_id ? 'radio-button-on' : 'radio-button-off'}
+            size={20}
+            color={!depto.cuenta_bancaria_id ? theme.primary : theme.textSecondary}
+          />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.itemText, { color: theme.text }]}>Cuenta predeterminada</Text>
+          </View>
+        </TouchableOpacity>
+
+        {cuentas.map(c => {
+          const selected = depto.cuenta_bancaria_id === c.id;
+          return (
+            <TouchableOpacity
+              key={c.id}
+              style={[styles.cuentaRow, { borderColor: selected ? theme.primary : theme.border }]}
+              onPress={() => asignarCuenta(c.id)}
+              disabled={asignandoCuenta}
+            >
+              <Ionicons
+                name={selected ? 'radio-button-on' : 'radio-button-off'}
+                size={20}
+                color={selected ? theme.primary : theme.textSecondary}
+              />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.itemText, { color: theme.text }]}>
+                  {c.alias || c.banco_nombre || 'Cuenta'}{c.es_predeterminada ? '  (predet.)' : ''}
+                </Text>
+                <Text style={[styles.desc, { color: theme.textSecondary }]}>
+                  {c.banco_nombre ? `${c.banco_nombre} · ` : ''}{c.banco_clabe}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+
+        {cuentas.length === 0 && (
+          <Text style={[styles.hint, { color: theme.textSecondary, marginTop: 8 }]}>
+            No hay cuentas registradas. Agrégalas en Configuración → Cuentas Bancarias.
+          </Text>
+        )}
+      </View>
+
+      <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
         <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>INVENTARIO BASE</Text>
         <Text style={[styles.hint, { color: theme.textSecondary }]}>
           Artículos incluidos al momento de arrendar este departamento.
@@ -306,60 +360,6 @@ export default function DepartamentoDetailScreen() {
             </>
           )}
         </TouchableOpacity>
-      </View>
-
-      <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
-        <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>CUENTA PARA TRANSFERENCIAS</Text>
-        <Text style={[styles.hint, { color: theme.textSecondary }]}>
-          El inquilino de este departamento verá esta cuenta al pagar. Si no eliges ninguna, se usa la predeterminada.
-        </Text>
-
-        <TouchableOpacity
-          style={[styles.cuentaRow, { borderColor: !depto.cuenta_bancaria_id ? theme.primary : theme.border }]}
-          onPress={() => asignarCuenta(null)}
-          disabled={asignandoCuenta}
-        >
-          <Ionicons
-            name={!depto.cuenta_bancaria_id ? 'radio-button-on' : 'radio-button-off'}
-            size={20}
-            color={!depto.cuenta_bancaria_id ? theme.primary : theme.textSecondary}
-          />
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.itemText, { color: theme.text }]}>Cuenta predeterminada</Text>
-          </View>
-        </TouchableOpacity>
-
-        {cuentas.map(c => {
-          const selected = depto.cuenta_bancaria_id === c.id;
-          return (
-            <TouchableOpacity
-              key={c.id}
-              style={[styles.cuentaRow, { borderColor: selected ? theme.primary : theme.border }]}
-              onPress={() => asignarCuenta(c.id)}
-              disabled={asignandoCuenta}
-            >
-              <Ionicons
-                name={selected ? 'radio-button-on' : 'radio-button-off'}
-                size={20}
-                color={selected ? theme.primary : theme.textSecondary}
-              />
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.itemText, { color: theme.text }]}>
-                  {c.alias || c.banco_nombre || 'Cuenta'}{c.es_predeterminada ? '  (predet.)' : ''}
-                </Text>
-                <Text style={[styles.desc, { color: theme.textSecondary }]}>
-                  {c.banco_nombre ? `${c.banco_nombre} · ` : ''}{c.banco_clabe}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          );
-        })}
-
-        {cuentas.length === 0 && (
-          <Text style={[styles.hint, { color: theme.textSecondary, marginTop: 8 }]}>
-            No hay cuentas registradas. Agrégalas en Configuración → Cuentas Bancarias.
-          </Text>
-        )}
       </View>
 
       {depto.historial_inquilinos?.length > 0 ? (

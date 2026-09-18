@@ -20,6 +20,7 @@ const DOCK_ITEMS = [
   { name: 'inquilinos',    icon: 'people-outline',  iconFilled: 'people',        color: '#F59E0B', permiso: 'inquilinos' },
   { name: 'tickets',       icon: 'chatbox-ellipses-outline', iconFilled: 'chatbox-ellipses', color: '#EF4444', permiso: 'tickets' },
   { name: 'pagos',         icon: 'card-outline',    iconFilled: 'card',          color: '#10B981', permiso: 'pagos' },
+  { name: 'departamentos', icon: 'business-outline', iconFilled: 'business',     color: '#10B981', permiso: 'departamentos' },
   { name: 'reportes',      icon: 'stats-chart-outline', iconFilled: 'stats-chart', color: '#8B5CF6', permiso: 'reportes' },
   { name: 'scan',          icon: 'qr-code-outline', iconFilled: 'qr-code',       color: '#3B82F6', permiso: 'pagos.marcar' },
   { name: 'cuentas',       icon: 'wallet-outline',  iconFilled: 'wallet',        color: '#10B981', permiso: 'cuentas' },

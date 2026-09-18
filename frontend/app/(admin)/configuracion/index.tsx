@@ -1843,7 +1843,7 @@ export default function ConfiguracionScreen() {
                 <TouchableOpacity
                   key={r}
                   style={[
-                    styles.rolOption, { flex: 0, paddingHorizontal: 12 },
+                    styles.rolOptionCompact,
                     {
                       backgroundColor: nuRol === r ? color + '20' : (isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'),
                       borderColor: nuRol === r ? color : theme.border,
@@ -1852,7 +1852,7 @@ export default function ConfiguracionScreen() {
                   onPress={() => setNuRol(r)}
                 >
                   <Ionicons name={icon} size={15} color={nuRol === r ? color : theme.textSecondary} />
-                  <Text style={[styles.rolOptionText, { color: nuRol === r ? color : theme.textSecondary }]}>
+                  <Text style={[styles.rolOptionText, { color: nuRol === r ? color : theme.textSecondary }]} numberOfLines={1}>
                     {label}
                   </Text>
                 </TouchableOpacity>
@@ -2536,6 +2536,14 @@ const styles = StyleSheet.create({
   rolOption: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 6, height: 44, borderRadius: 12, borderWidth: 1,
+  },
+  // Variante para filas de 3 botones lado a lado que deben repartirse el
+  // espacio (no usa flex:1 del estilo de arriba, que en RN Web combinado con
+  // flexWrap hacía que los botones se encimaran en vez de acomodarse).
+  rolOptionCompact: {
+    flexGrow: 1, flexShrink: 1, flexBasis: 90,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, height: 44, borderRadius: 12, borderWidth: 1, paddingHorizontal: 8,
   },
   rolOptionText: { fontSize: 13, fontWeight: '600' },
   emptyText: { textAlign: 'center', fontSize: 14, marginTop: 20, opacity: 0.7 },

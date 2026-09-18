@@ -122,7 +122,11 @@ export default function DepartamentosScreen() {
   const total = stats.total ?? departamentos.length;
   const pctOcup = total > 0 ? Math.round(((stats.ocupados ?? 0) / total) * 100) : 0;
 
-  const numColumns = isDesktop ? 4 : 2;
+  // En celulares angostos, 2 columnas dejaba las tarjetas tan apretadas que
+  // el nombre del inquilino se truncaba. Con menos de 600px de ancho se usa
+  // 1 sola columna (tarjeta a todo el ancho); de 600 a la marca de desktop,
+  // 2 columnas siguen viéndose bien (tablets, celulares grandes en horizontal).
+  const numColumns = isDesktop ? 4 : width < 600 ? 1 : 2;
   const filteredRaw = departamentos.filter(d => {
     if (filtroPiso === 'Todos') return true;
     return `Piso ${pisoDe(d.numero)}` === filtroPiso;
@@ -287,14 +291,15 @@ export default function DepartamentosScreen() {
         data={filtered}
         keyExtractor={item => String(item.numero)}
         numColumns={numColumns}
-        key={isDesktop ? 'desktop' : 'mobile'}
+        key={numColumns}
         ListHeaderComponent={listHeader}
         contentContainerStyle={[
           styles.grid,
+          !isDesktop && { paddingHorizontal: Theme.spacing.lg },
           isDesktop && { maxWidth: Theme.layout.maxWidth, alignSelf: 'center', width: '100%', paddingHorizontal: 40 },
           { paddingBottom },
         ]}
-        columnWrapperStyle={styles.rowGap}
+        columnWrapperStyle={numColumns > 1 ? styles.rowGap : undefined}
         showsVerticalScrollIndicator={false}
         renderItem={renderCard}
         ListEmptyComponent={

@@ -126,7 +126,11 @@ export default function AdminLayout() {
                   ]}
                 >
                   {DOCK_ITEMS.map((dockItem) => {
-                    const routeIndex = props.state.routes.findIndex(r => r.name === dockItem.name);
+                    // Las pantallas que son carpeta (ej. app/(admin)/inquilinos/index.tsx)
+                    // se registran como "inquilinos/index", no como "inquilinos".
+                    const routeIndex = props.state.routes.findIndex(
+                      r => r.name === dockItem.name || r.name === `${dockItem.name}/index`
+                    );
                     if (routeIndex === -1) return null;
                     const route = props.state.routes[routeIndex];
                     // Modo solo-admin (sin app para inquilinos): fuera QR y Tickets,

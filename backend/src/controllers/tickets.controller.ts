@@ -11,13 +11,15 @@ function getCurrentPeriodo(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
 
-// GET /api/tickets — admin: todos; inquilino: los suyos
+// GET /api/tickets — admin/cobrador: todos los del negocio; inquilino: los suyos
 export async function getTickets(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     let query: string;
     let params: any[];
 
-    if (req.user!.rol === 'admin') {
+    // authMiddleware ya reescribió req.user.id al id del admin para un cobrador,
+    // así que el filtro por admin_id funciona igual que para el propio admin.
+    if (req.user!.rol === 'admin' || req.user!.rol === 'cobrador') {
       const { estado, mes } = req.query as { estado?: string; mes?: string };
 
       if (mes) {
@@ -187,12 +189,12 @@ export async function updateTicket(req: AuthRequest, res: Response, next: NextFu
   }
 }
 
-// DELETE /api/tickets/:id — admin: cualquiera; inquilino: solo los suyos en los primeros 5 min
+// DELETE /api/tickets/:id — admin/cobrador: cualquiera del negocio; inquilino: solo los suyos en los primeros 5 min
 export async function deleteTicket(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     const { id } = req.params;
 
-    if (req.user!.rol === 'admin') {
+    if (req.user!.rol === 'admin' || req.user!.rol === 'cobrador') {
       const result = await pool.query(
         `DELETE FROM tickets t USING inquilinos i WHERE t.id = $1 AND t.inquilino_id = i.id AND i.admin_id = $2 RETURNING t.id`, 
         [id, req.user!.id]

@@ -15,6 +15,7 @@ import { Input } from '../../components/ui/Input';
 import { LinearGradient } from 'expo-linear-gradient';
 import api from '../../services/api';
 import { setItem } from '../../services/storage';
+import { setSesionPermisos } from '../../constants/permisos';
 
 const TOKEN_KEY = 'auth_token';
 const USER_KEY = 'auth_user';
@@ -43,7 +44,7 @@ export default function RegisterScreen() {
     if (!emailTrim || !emailTrim.includes('@')) { setError('Ingresa un correo electrónico válido'); return; }
     if (password.length < 8) { setError('La contraseña debe tener al menos 8 caracteres'); return; }
     if (password !== confirmPassword) { setError('Las contraseñas no coinciden'); return; }
-    if (rol === 'inquilino' && !inviteTrim) { setError('Se requiere código de invitación para inquilinos'); return; }
+    if (!inviteTrim) { setError('Se requiere un código de invitación'); return; }
 
     setError('');
     setLoading(true);
@@ -53,20 +54,22 @@ export default function RegisterScreen() {
         password,
         nombre_completo: nombreTrim,
         rol,
+        invite_code: inviteTrim,
       };
-      if (rol === 'inquilino') {
-        payload.invite_code = inviteTrim;
-      }
 
       const res = await api.register(payload);
       if (res.data?.token) {
+        const user = res.data.user;
         api.setToken(res.data.token);
         setItem(TOKEN_KEY, res.data.token);
-        setItem(USER_KEY, JSON.stringify(res.data.user));
-        if (rol === 'admin') {
-          router.replace('/(admin)' as any);
-        } else {
+        setItem(USER_KEY, JSON.stringify(user));
+        setSesionPermisos(user.rol, user.permisos);
+        // El código puede resolver a un rol distinto al de la pestaña elegida
+        // (ej. un código de colaborador) — usar siempre el rol que devuelve el servidor.
+        if (user.rol === 'inquilino') {
           router.replace('/(inquilino)' as any);
+        } else {
+          router.replace('/(admin)' as any);
         }
       }
     } catch (e: any) {
@@ -116,7 +119,7 @@ export default function RegisterScreen() {
                   style={[styles.tab, rol === 'inquilino' && styles.tabActive]}
                   onPress={() => setRol('inquilino')}
                 >
-                  <Text style={[styles.tabText, rol === 'inquilino' && styles.tabTextActive, { color: rol === 'inquilino' ? theme.primary : theme.textSecondary }]}>Inquilino</Text>
+                  <Text style={[styles.tabText, rol === 'inquilino' && styles.tabTextActive, { color: rol === 'inquilino' ? theme.primary : theme.textSecondary }]}>Tengo un código</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.tab, rol === 'admin' && styles.tabActive]}
@@ -146,16 +149,19 @@ export default function RegisterScreen() {
                 returnKeyType="next"
               />
               
-              {rol === 'inquilino' && (
-                <Input
-                  label="Código de Invitación"
-                  icon="key-outline"
-                  placeholder="Ej. d5f4-3d2b..."
-                  value={inviteCode}
-                  onChangeText={t => { setError(''); setInviteCode(t); }}
-                  autoCapitalize="none"
-                  returnKeyType="next"
-                />
+              <Input
+                label="Código de Invitación"
+                icon="key-outline"
+                placeholder="Ej. d5f4-3d2b..."
+                value={inviteCode}
+                onChangeText={t => { setError(''); setInviteCode(t); }}
+                autoCapitalize="none"
+                returnKeyType="next"
+              />
+              {rol === 'admin' && (
+                <Text style={[styles.helperText, { color: theme.textSecondary }]}>
+                  Crear una cuenta de Administrador nueva requiere un código proporcionado por quien administra el servicio.
+                </Text>
               )}
 
               <Input
@@ -266,6 +272,7 @@ const styles = StyleSheet.create({
     padding: 12, borderRadius: 12, borderWidth: 1, marginBottom: 4,
   },
   errorText: { flex: 1, fontSize: 13, fontWeight: '600', lineHeight: 18 },
+  helperText: { fontSize: 12, lineHeight: 16, marginTop: -6, marginBottom: 6 },
   loginLink: { marginTop: 12, alignItems: 'center', paddingVertical: 4 },
   loginLinkText: { fontSize: 14 },
   footer: { marginTop: Theme.spacing.xxl, fontSize: 12, fontWeight: '500', textAlign: 'center' },

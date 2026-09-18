@@ -41,6 +41,9 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-depas_secret_2024}
       JWT_SECRET: ${JWT_SECRET:-cambia_este_secreto_en_produccion}
       JWT_EXPIRES_IN: 7d
+      # Código requerido para registrar una cuenta de Administrador nueva e
+      # independiente desde /register. Sin definir, ese registro queda cerrado.
+      ADMIN_SIGNUP_CODE: ${ADMIN_SIGNUP_CODE:-}
       # Orígenes permitidos por CORS en producción (separados por coma).
       FRONTEND_URL: ${FRONTEND_URL:-https://nethrent.duckdns.org}
       # Clave de Google Gemini para el procesado IA del contrato (opcional).

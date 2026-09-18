@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
                 CHECK (rol IN ('admin', 'inquilino', 'cobrador')),
   avatar_url  VARCHAR(500),
   activo      BOOLEAN NOT NULL DEFAULT TRUE,
+  rol_label   VARCHAR(50),
   ultimo_acceso TIMESTAMPTZ,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -177,6 +178,7 @@ CREATE TABLE IF NOT EXISTS codigos_invitacion (
   usado      BOOLEAN NOT NULL DEFAULT FALSE,
   usado_en   TIMESTAMPTZ,
   usado_por  UUID REFERENCES usuarios(id) ON DELETE SET NULL,
+  rol_label  VARCHAR(50),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

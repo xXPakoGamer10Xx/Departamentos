@@ -28,8 +28,9 @@ inquilinosRouter.post('/:id/contrato-preview', requirePermiso('contratos'), prev
 inquilinosRouter.get('/mi-depto', getMiDepto);
 inquilinosRouter.post('/extraer-ine', adminOnly, extraerIne);
 
-inquilinosRouter.get('/', getInquilinos);
-inquilinosRouter.get('/:id', getInquilinoById);
+const verInquilinos = requirePermiso('inquilinos');
+inquilinosRouter.get('/', verInquilinos, getInquilinos);
+inquilinosRouter.get('/:id', verInquilinos, getInquilinoById);
 inquilinosRouter.post('/', requirePermiso('inquilinos.editar'), auditLog('inquilinos', 'crear'), createInquilino);
 inquilinosRouter.put('/:id', requirePermiso('inquilinos.editar'), auditLog('inquilinos', 'editar'), updateInquilino);
 inquilinosRouter.put('/:id/vincular-usuario', adminOnly, vincularUsuario);

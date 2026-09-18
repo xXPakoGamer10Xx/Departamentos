@@ -11,9 +11,10 @@ export async function getUsuarios(req: AuthRequest, res: Response, next: NextFun
   try {
     const adminId = req.user!.id;
     const result = await pool.query(
-      `SELECT u.id, u.email, u.nombre_completo, u.rol, u.avatar_url, u.activo, u.ultimo_acceso, u.created_at, u.permisos
+      `SELECT u.id, u.email, u.nombre_completo, u.rol, u.avatar_url, u.activo, u.ultimo_acceso, u.created_at, u.permisos, u.rol_label
        FROM usuarios u
        WHERE u.id = $1
+          OR u.admin_id = $1
           OR u.id IN (
             SELECT usado_por FROM codigos_invitacion WHERE admin_id = $1 AND usado_por IS NOT NULL
           )
@@ -29,7 +30,7 @@ export async function getUsuarios(req: AuthRequest, res: Response, next: NextFun
 // POST /api/usuarios
 export async function createUsuario(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { email, password, nombre_completo, rol } = req.body;
+    const { email, password, nombre_completo, rol, rol_label } = req.body;
 
     if (!email || !password || !nombre_completo) {
       throw new AppError('Email, contraseña y nombre son requeridos', 400);
@@ -37,20 +38,24 @@ export async function createUsuario(req: AuthRequest, res: Response, next: NextF
     if (password.length < 8) {
       throw new AppError('La contraseña debe tener al menos 8 caracteres', 400);
     }
+    if (!['admin', 'cobrador', 'inquilino'].includes(rol)) {
+      throw new AppError('Rol inválido. Usa "admin", "cobrador" o "inquilino"', 400);
+    }
 
     const existing = await pool.query(`SELECT id FROM usuarios WHERE email = $1`, [email.toLowerCase()]);
     if (existing.rows[0]) throw new AppError('Ya existe un usuario con ese email', 409);
 
-    const rolFinal = rol || 'admin';
+    const rolFinal = rol;
     const hash = await bcrypt.hash(password, 12);
     const result = await pool.query(
-      `INSERT INTO usuarios (email, password_hash, nombre_completo, rol, admin_id, permisos)
-       VALUES ($1, $2, $3, $4, $5, $6::jsonb)
-       RETURNING id, email, nombre_completo, rol, activo, created_at, permisos`,
+      `INSERT INTO usuarios (email, password_hash, nombre_completo, rol, admin_id, permisos, rol_label)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)
+       RETURNING id, email, nombre_completo, rol, activo, created_at, permisos, rol_label`,
       [
         email.toLowerCase(), hash, toTitleCase(nombre_completo), rolFinal,
         rolFinal === 'admin' ? null : req.user!.id,
         JSON.stringify(rolFinal === 'cobrador' ? sanitizePermisos(req.body.permisos) : []),
+        rolFinal === 'cobrador' ? (rol_label || null) : null,
       ]
     );
 
@@ -69,7 +74,8 @@ export async function toggleUsuario(req: AuthRequest, res: Response, next: NextF
 
     // Verificar que el usuario pertenece al scope del admin
     const scopeCheck = await pool.query(
-      `SELECT 1 FROM codigos_invitacion WHERE admin_id = $1 AND usado_por = $2`,
+      `SELECT 1 FROM usuarios WHERE id = $2 AND (admin_id = $1
+         OR id IN (SELECT usado_por FROM codigos_invitacion WHERE admin_id = $1 AND usado_por IS NOT NULL))`,
       [adminId, id]
     );
     if (!scopeCheck.rows[0]) throw new AppError('No tienes permiso para modificar este usuario', 403);
@@ -145,10 +151,11 @@ export async function actualizarPermisos(req: AuthRequest, res: Response, next: 
     if (scopeCheck.rows[0].rol !== 'cobrador') throw new AppError('Solo los colaboradores tienen permisos configurables', 400);
 
     const permisos = sanitizePermisos(req.body.permisos);
+    const rolLabel: string | null = typeof req.body.rol_label === 'string' ? req.body.rol_label : null;
     const result = await pool.query(
-      `UPDATE usuarios SET permisos = $1::jsonb, admin_id = COALESCE(admin_id, $3) WHERE id = $2
-       RETURNING id, email, nombre_completo, rol, activo, permisos`,
-      [JSON.stringify(permisos), id, adminId]
+      `UPDATE usuarios SET permisos = $1::jsonb, rol_label = $4, admin_id = COALESCE(admin_id, $3) WHERE id = $2
+       RETURNING id, email, nombre_completo, rol, activo, permisos, rol_label`,
+      [JSON.stringify(permisos), id, adminId, rolLabel]
     );
     res.json({ success: true, data: result.rows[0] });
   } catch (err) {
@@ -168,7 +175,8 @@ export async function deleteUsuario(req: AuthRequest, res: Response, next: NextF
 
     // Verificar que el usuario pertenece al scope del admin
     const scopeCheck = await pool.query(
-      `SELECT 1 FROM codigos_invitacion WHERE admin_id = $1 AND usado_por = $2`,
+      `SELECT 1 FROM usuarios WHERE id = $2 AND (admin_id = $1
+         OR id IN (SELECT usado_por FROM codigos_invitacion WHERE admin_id = $1 AND usado_por IS NOT NULL))`,
       [adminId, id]
     );
     if (!scopeCheck.rows[0]) throw new AppError('No tienes permiso para eliminar este usuario', 403);

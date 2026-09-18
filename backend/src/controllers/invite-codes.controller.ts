@@ -32,7 +32,15 @@ export async function crearCodigo(req: AuthRequest, res: Response, next: NextFun
     // Permisos: solo aplican a colaboradores. Si viene un preset conocido y no
     // se mandan permisos explícitos, se usan los del preset.
     let permisos: string[] = [];
+    let rolLabel: string | null = null;
     if (rol === 'cobrador') {
+      if (preset && PRESETS[preset]) {
+        rolLabel = PRESETS[preset].label;
+      } else if (typeof req.body.rol_label === 'string' && req.body.rol_label.trim()) {
+        rolLabel = req.body.rol_label.trim();
+      } else if (Array.isArray(req.body.permisos)) {
+        rolLabel = 'Personalizado';
+      }
       if (Array.isArray(req.body.permisos)) {
         permisos = sanitizePermisos(req.body.permisos);
       } else if (preset && PRESETS[preset]) {
@@ -54,9 +62,9 @@ export async function crearCodigo(req: AuthRequest, res: Response, next: NextFun
     const expiraEn = calcularExpiracion(expira_dias !== null ? Number(expira_dias) : null);
 
     const result = await pool.query(
-      `INSERT INTO codigos_invitacion (admin_id, codigo, rol, expira_en, permisos)
-       VALUES ($1, $2, $3, $4, $5::jsonb) RETURNING *`,
-      [req.user!.id, codigo, rol, expiraEn, JSON.stringify(permisos)]
+      `INSERT INTO codigos_invitacion (admin_id, codigo, rol, expira_en, permisos, rol_label)
+       VALUES ($1, $2, $3, $4, $5::jsonb, $6) RETURNING *`,
+      [req.user!.id, codigo, rol, expiraEn, JSON.stringify(permisos), rolLabel]
     );
 
     res.status(201).json({ success: true, data: result.rows[0] });

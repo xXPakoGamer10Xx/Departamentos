@@ -107,6 +107,10 @@ ALTER TABLE usuarios ADD CONSTRAINT usuarios_rol_check
 ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS permisos JSONB NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE codigos_invitacion ADD COLUMN IF NOT EXISTS permisos JSONB NOT NULL DEFAULT '[]'::jsonb;
 
+-- Etiqueta de rol/preset elegido (solo informativa, para mostrar en la lista de accesos).
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS rol_label VARCHAR(50);
+ALTER TABLE codigos_invitacion ADD COLUMN IF NOT EXISTS rol_label VARCHAR(50);
+
 -- admin_id: a qué administrador pertenece un colaborador/inquilino (multi-tenant).
 ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS admin_id UUID REFERENCES usuarios(id) ON DELETE CASCADE;
 -- Backfill: en un despliegue de un solo admin, todos los no-admin cuelgan de él.

@@ -359,8 +359,8 @@ class ApiService {
     }>('GET', '/reportes/mensual', undefined, { year: String(year) });
 
   // Invite codes
-  generarCodigoInvitacion = (rol: string, expira_dias: number | null, permisos?: string[]) =>
-    this.request<any>('POST', '/invite-codes', { rol, expira_dias, permisos });
+  generarCodigoInvitacion = (rol: string, expira_dias: number | null, permisos?: string[], preset?: string, rol_label?: string) =>
+    this.request<any>('POST', '/invite-codes', { rol, expira_dias, permisos, preset, rol_label });
 
   getCodigosInvitacion = () =>
     this.request<any[]>('GET', '/invite-codes');
@@ -368,8 +368,8 @@ class ApiService {
   revocarCodigoInvitacion = (id: string) =>
     this.request<void>('DELETE', `/invite-codes/${id}`);
 
-  actualizarPermisosUsuario = (id: string, permisos: string[]) =>
-    this.request<any>('PATCH', `/usuarios/${id}/permisos`, { permisos });
+  actualizarPermisosUsuario = (id: string, permisos: string[], rol_label?: string) =>
+    this.request<any>('PATCH', `/usuarios/${id}/permisos`, { permisos, rol_label });
 
   // INE OCR
   extraerDatosINE = (imagen_base64: string) =>

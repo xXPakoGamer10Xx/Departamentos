@@ -75,7 +75,7 @@ export async function login(req: Request, res: Response, next: NextFunction): Pr
 export async function me(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     const result = await pool.query(
-      `SELECT id, email, nombre_completo, rol, avatar_url, ultimo_acceso, created_at, permisos
+      `SELECT id, email, nombre_completo, rol, avatar_url, ultimo_acceso, created_at, permisos, rol_label
        FROM usuarios WHERE id = $1`,
       [req.user!.actorId ?? req.user!.id]
     );
@@ -106,11 +106,22 @@ export async function register(req: Request, res: Response, next: NextFunction):
     // Rol por defecto según el que viene en el body
     let userRol: 'admin' | 'inquilino' | 'cobrador' = rol === 'admin' ? 'admin' : 'inquilino';
 
+    // Crear un administrador nuevo e independiente requiere el código de la
+    // plataforma (variable de entorno) — no es algo que un tenant existente
+    // pueda gatear para otro; evita que cualquiera abra una cuenta gratis.
+    if (userRol === 'admin') {
+      const platformCode = process.env.ADMIN_SIGNUP_CODE;
+      if (!platformCode || !invite_code || invite_code !== platformCode) {
+        throw new AppError('Código de invitación de administrador inválido', 403);
+      }
+    }
+
     // Variables para saber qué se debe hacer post-registro
     let inquilinoIdToLink: string | null = null;
     let codigoInvitacionId: string | null = null;
     let codigoAdminId: string | null = null;
     let codigoPermisos: string[] = [];
+    let codigoRolLabel: string | null = null;
 
     if (userRol !== 'admin') {
       if (!invite_code) {
@@ -119,7 +130,7 @@ export async function register(req: Request, res: Response, next: NextFunction):
 
       // 1️⃣ Verificar código en la tabla codigos_invitacion (nuevo sistema)
       const codigoResult = await pool.query(
-        `SELECT id, rol, expira_en, admin_id, permisos FROM codigos_invitacion
+        `SELECT id, rol, expira_en, admin_id, permisos, rol_label FROM codigos_invitacion
          WHERE codigo = $1 AND usado = false
            AND (expira_en IS NULL OR expira_en > NOW())`,
         [invite_code]
@@ -132,6 +143,7 @@ export async function register(req: Request, res: Response, next: NextFunction):
         codigoInvitacionId = codigoRec.id;
         codigoAdminId = codigoRec.admin_id || null;
         codigoPermisos = Array.isArray(codigoRec.permisos) ? codigoRec.permisos : [];
+        codigoRolLabel = codigoRec.rol_label || null;
       } else {
         // 2️⃣ Fallback: verificar en invitation_token de inquilinos (sistema anterior)
         const tokenResult = await pool.query(
@@ -168,10 +180,14 @@ export async function register(req: Request, res: Response, next: NextFunction):
     const hash = await bcrypt.hash(password, 12);
     const permisosFinal = userRol === 'cobrador' ? sanitizePermisos(codigoPermisos) : [];
     const result = await pool.query(
-      `INSERT INTO usuarios (email, password_hash, nombre_completo, rol, admin_id, permisos)
-       VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+      `INSERT INTO usuarios (email, password_hash, nombre_completo, rol, admin_id, permisos, rol_label)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)
        RETURNING id, email, nombre_completo, rol, avatar_url`,
-      [email.toLowerCase().trim(), hash, toTitleCase(nombre_completo), userRol, userRol === 'admin' ? null : codigoAdminId, JSON.stringify(permisosFinal)]
+      [
+        email.toLowerCase().trim(), hash, toTitleCase(nombre_completo), userRol,
+        userRol === 'admin' ? null : codigoAdminId, JSON.stringify(permisosFinal),
+        userRol === 'cobrador' ? codigoRolLabel : null,
+      ]
     );
 
     const user = result.rows[0];

@@ -1174,7 +1174,7 @@ export default function PagoDetalleScreen() {
         )}
 
         {/* Cargos extra */}
-        {!pago?.confirmado && (
+        {(!pago?.confirmado || cuotas.length > 0) && (
           <View>
             <TouchableOpacity
               style={[styles.historialToggle, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#fff', borderColor: theme.border }]}
@@ -1194,13 +1194,15 @@ export default function PagoDetalleScreen() {
 
             {showCargosExtra && (
               <View style={{ marginTop: 12 }}>
-                <TouchableOpacity
-                  style={[styles.addCuotaBtn, { backgroundColor: theme.primary, alignSelf: 'flex-start', marginBottom: 8 }]}
-                  onPress={() => { setCuotaConcepto(''); setCuotaMonto(''); setCuotaError(''); setShowCuota(true); }}
-                >
-                  <Ionicons name="add" size={14} color="#fff" />
-                  <Text style={styles.addCuotaBtnText}>Agregar</Text>
-                </TouchableOpacity>
+                {!pago?.confirmado && (
+                  <TouchableOpacity
+                    style={[styles.addCuotaBtn, { backgroundColor: theme.primary, alignSelf: 'flex-start', marginBottom: 8 }]}
+                    onPress={() => { setCuotaConcepto(''); setCuotaMonto(''); setCuotaError(''); setShowCuota(true); }}
+                  >
+                    <Ionicons name="add" size={14} color="#fff" />
+                    <Text style={styles.addCuotaBtnText}>Agregar</Text>
+                  </TouchableOpacity>
+                )}
                 {cuotas.length === 0 ? (
                   <Text style={[styles.noCuotas, { color: theme.textSecondary }]}>Sin cargos adicionales este mes</Text>
                 ) : (

@@ -148,9 +148,16 @@ export async function pagarCuota(req: AuthRequest, res: Response, next: NextFunc
     const inqRes = await pool.query(`SELECT * FROM inquilinos WHERE id = $1`, [cuota.inquilino_id]);
     const inquilino = inqRes.rows[0];
 
-    const periodo = getCurrentPeriodo();
-    const pago = await getOrCrearPago(inquilino, periodo);
-    if (pago.confirmado) throw new AppError('Este periodo ya está pagado por completo', 400);
+    // Se busca el pago del periodo DEL CARGO (no el actual): puede ser de un
+    // mes anterior, o su pago ya estar confirmado (renta pagada) mientras
+    // este cargo extra sigue pendiente.
+    let pago = (await pool.query(
+      `SELECT * FROM pagos WHERE inquilino_id = $1 AND periodo = $2`,
+      [cuota.inquilino_id, cuota.periodo]
+    )).rows[0];
+    if (!pago) {
+      pago = await getOrCrearPago(inquilino, cuota.periodo);
+    }
 
     await pool.query(
       `INSERT INTO abonos_pago (pago_id, monto, metodo, nota, registrado_por)

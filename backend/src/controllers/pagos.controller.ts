@@ -512,7 +512,7 @@ export async function cancelarPago(req: AuthRequest, res: Response, next: NextFu
     const { pago_id } = req.params;
 
     const pagoRes = await pool.query(
-      `SELECT p.id, p.periodo, p.confirmado_en, p.created_at, i.usuario_id
+      `SELECT p.id, p.inquilino_id, p.periodo, p.confirmado_en, p.created_at, i.usuario_id
        FROM pagos p JOIN inquilinos i ON i.id = p.inquilino_id
        WHERE p.id = $1 AND i.admin_id = $2`,
       [pago_id, req.user!.id]
@@ -526,7 +526,14 @@ export async function cancelarPago(req: AuthRequest, res: Response, next: NextFu
       throw new AppError('Ya pasó más de un día. Para corregir este pago usa un abono manual.', 400);
     }
 
-    // abonos_pago y promesas_pago se borran en cascada.
+    // abonos_pago y promesas_pago se borran en cascada. Los cargos extra que
+    // este pago había dejado como "pagados" vuelven a pendientes: la plata
+    // que los cubría (el abono) se acaba de borrar con el pago.
+    await pool.query(
+      `UPDATE cuotas_extra SET estado = 'pendiente', pagado_en = NULL
+       WHERE inquilino_id = $1 AND periodo = $2 AND estado = 'pagado'`,
+      [pago.inquilino_id, pago.periodo]
+    );
     await pool.query(`DELETE FROM pagos WHERE id = $1`, [pago_id]);
 
     res.json({ success: true, message: 'Pago cancelado' });

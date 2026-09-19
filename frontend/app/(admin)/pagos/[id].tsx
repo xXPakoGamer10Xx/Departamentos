@@ -67,6 +67,9 @@ export default function PagoDetalleScreen() {
   const [showPromesasHistorial, setShowPromesasHistorial] = useState(false);
   const [eliminandoPromesaId, setEliminandoPromesaId] = useState<string | null>(null);
 
+  // Modal: elegir si "marcar pagado" incluye los cargos extra pendientes
+  const [showMarcarPagadoChoice, setShowMarcarPagadoChoice] = useState(false);
+
   // Cuota extra modal
   const [showCuota, setShowCuota] = useState(false);
   const [cuotaConcepto, setCuotaConcepto] = useState('');
@@ -311,11 +314,12 @@ export default function PagoDetalleScreen() {
     }
   }, [id, cuotaConcepto, cuotaMonto, cargar]);
 
-  const marcarPagadoManual = useCallback(async () => {
+  const marcarPagadoManual = useCallback(async (soloRenta?: boolean) => {
     if (!inquilino) return;
+    setShowMarcarPagadoChoice(false);
     setMarcandoPagado(true);
     try {
-      await api.marcarPagadoAdmin(inquilino.id);
+      await api.marcarPagadoAdmin(inquilino.id, soloRenta);
       cargar();
     } catch (e) {
       console.error(e);
@@ -323,6 +327,15 @@ export default function PagoDetalleScreen() {
       setMarcandoPagado(false);
     }
   }, [inquilino, cargar]);
+
+  const onPressMarcarPagado = useCallback(() => {
+    const hayPendientes = cuotas.some((c: any) => c.estado !== 'pagado');
+    if (hayPendientes) {
+      setShowMarcarPagadoChoice(true);
+    } else {
+      marcarPagadoManual(false);
+    }
+  }, [cuotas, marcarPagadoManual]);
 
   const removeCuota = useCallback(async (cuotaId: string) => {
     try {
@@ -938,7 +951,7 @@ export default function PagoDetalleScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.confirmBtn, { flex: 1, marginTop: 0, backgroundColor: '#10B981', opacity: marcandoPagado ? 0.7 : 1 }]}
-              onPress={marcarPagadoManual}
+              onPress={onPressMarcarPagado}
               disabled={marcandoPagado}
             >
               {marcandoPagado
@@ -1588,6 +1601,40 @@ export default function PagoDetalleScreen() {
               </TouchableOpacity>
               <TouchableOpacity style={[styles.modalConfirmBtn, { backgroundColor: theme.primary, opacity: savingCuota ? 0.7 : 1 }]} onPress={addCuota} disabled={savingCuota}>
                 {savingCuota ? <ActivityIndicator size="small" color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '700' }}>Agregar</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+      {/* Modal: elegir qué se pagó al marcar como pagado */}
+      <Modal visible={showMarcarPagadoChoice} transparent animationType="fade" onRequestClose={() => setShowMarcarPagadoChoice(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, { backgroundColor: isDark ? '#232842' : '#fff' }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>¿Qué se pagó?</Text>
+            <Text style={{ color: theme.textSecondary, fontSize: 13, marginBottom: 16, lineHeight: 18 }}>
+              Este periodo tiene cargos extra pendientes por {fmtRenta(totalExtra)}. Elige qué cubre este pago.
+            </Text>
+            <TouchableOpacity
+              style={[styles.addCuotaBtn, { backgroundColor: '#10B981', justifyContent: 'center', marginBottom: 10, height: 46 }]}
+              onPress={() => marcarPagadoManual(false)}
+              disabled={marcandoPagado}
+            >
+              <Text style={[styles.addCuotaBtnText, { fontSize: 14 }]}>
+                Todo: renta + cargos extra ({fmtRenta(parseFloat(String(inquilino.renta)) + totalExtra)})
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.addCuotaBtn, { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: theme.primary, justifyContent: 'center', marginBottom: 4, height: 46 }]}
+              onPress={() => marcarPagadoManual(true)}
+              disabled={marcandoPagado}
+            >
+              <Text style={{ color: theme.primary, fontWeight: '700', fontSize: 14 }}>
+                Solo la renta ({fmtRenta(inquilino.renta)}) · cargos extra quedan pendientes
+              </Text>
+            </TouchableOpacity>
+            <View style={styles.modalBtns}>
+              <TouchableOpacity style={[styles.modalCancelBtn, { borderColor: theme.border, flex: 1 }]} onPress={() => setShowMarcarPagadoChoice(false)} disabled={marcandoPagado}>
+                <Text style={{ color: theme.text, fontWeight: '600' }}>Cancelar</Text>
               </TouchableOpacity>
             </View>
           </View>

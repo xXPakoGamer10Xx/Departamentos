@@ -281,8 +281,8 @@ class ApiService {
   confirmarPagoPorId = (pago_id: string) =>
     this.request<any>('POST', `/pagos/confirmar-admin/${pago_id}`);
 
-  marcarPagadoAdmin = (inquilino_id: string) =>
-    this.request<any>('POST', `/pagos/marcar-pagado/${inquilino_id}`);
+  marcarPagadoAdmin = (inquilino_id: string, soloRenta?: boolean) =>
+    this.request<any>('POST', `/pagos/marcar-pagado/${inquilino_id}`, soloRenta ? { soloRenta: true } : undefined);
 
   // Deshace un pago registrado por error (solo dentro de las 24 h siguientes).
   cancelarPago = (pago_id: string) =>

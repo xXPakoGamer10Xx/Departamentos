@@ -414,6 +414,7 @@ export async function getHistorialPagos(req: AuthRequest, res: Response, next: N
 export async function marcarPagadoAdmin(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     const { inquilino_id } = req.params;
+    const soloRenta = req.body?.soloRenta === true;
     const periodo = getCurrentPeriodo();
 
     const inqRes = await pool.query(
@@ -453,12 +454,25 @@ export async function marcarPagadoAdmin(req: AuthRequest, res: Response, next: N
       `SELECT COALESCE(SUM(monto), 0) AS total FROM abonos_pago WHERE pago_id = $1`,
       [pagoId]
     );
-    const saldoPendiente = Math.max(parseFloat(pagoRes.rows[0].monto) - parseFloat(sumRes.rows[0].total), 0);
-    if (saldoPendiente > 0) {
+    const totalAbonado = parseFloat(sumRes.rows[0].total);
+    const saldoPendiente = Math.max(parseFloat(pagoRes.rows[0].monto) - totalAbonado, 0);
+
+    // "Solo renta": el admin confirma que cobró la renta pero no los cargos
+    // extra pendientes del periodo. Se abona únicamente la parte de renta que
+    // aún falte y los cargos extra quedan pendientes (no se marcan pagados).
+    let montoAAbonar = saldoPendiente;
+    let nota = 'Marcado como pagado completo por admin';
+    if (soloRenta) {
+      const rentaPendiente = Math.max(parseFloat(inquilino.renta) - totalAbonado, 0);
+      montoAAbonar = Math.min(rentaPendiente, saldoPendiente);
+      nota = 'Marcado como pagado (solo renta, cargos extra pendientes) por admin';
+    }
+
+    if (montoAAbonar > 0) {
       await pool.query(
         `INSERT INTO abonos_pago (pago_id, monto, metodo, nota, registrado_por)
          VALUES ($1, $2, $3, $4, $5)`,
-        [pagoId, saldoPendiente, inquilino.metodo_pago || 'efectivo', 'Marcado como pagado completo por admin', actorId(req)]
+        [pagoId, montoAAbonar, inquilino.metodo_pago || 'efectivo', nota, actorId(req)]
       );
     }
     const { pago: pagoActualizado } = await recalcularPago(pagoId);

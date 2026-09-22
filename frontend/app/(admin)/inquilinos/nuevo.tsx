@@ -450,23 +450,43 @@ export default function NuevoInquilinoScreen() {
   const buildDepositoObs = (tipo: string, fechas: string[]): string => {
     if (tipo === 'ninguno') return '';
     if (!Array.isArray(fechas) || fechas.length === 0) {
-      return tipo === 'quincenas' ? 'Se pagará el depósito en 2 quincenas, los días 15 y 30 del mes en curso.' : '';
+      return tipo === 'quincenas' ? 'Se pagará la compensación en 2 quincenas, los días 15 y 30 del mes en curso.' : '';
     }
     if (tipo === 'quincenas') {
-      return `Se pagará el depósito en 2 quincenas: ${fechas.map(fmtFechaCorta).join(' y ')}.`;
+      return `Se pagará la compensación en 2 quincenas: ${fechas.map(fmtFechaCorta).join(' y ')}.`;
     }
     // personalizado: N pagos el mismo día de cada mes
     const dia = new Date(fechas[0] + 'T12:00:00').getDate();
-    return `Se pagará el depósito en ${fechas.length} pago${fechas.length > 1 ? 's' : ''}, el día ${dia} de cada mes: ${fechas.map(fmtFechaCorta).join(', ')}.`;
+    return `Se pagará la compensación en ${fechas.length} pago${fechas.length > 1 ? 's' : ''}, el día ${dia} de cada mes: ${fechas.map(fmtFechaCorta).join(', ')}.`;
   };
 
   const quincenaFechas = (startISO: string): string[] => {
     const start = startISO ? new Date(startISO + 'T12:00:00') : new Date();
     const y = start.getFullYear();
     const m = start.getMonth();
-    const lastDay = new Date(y, m + 1, 0).getDate();
-    const mm = String(m + 1).padStart(2, '0');
-    return [`${y}-${mm}-15`, `${y}-${mm}-${String(Math.min(30, lastDay)).padStart(2, '0')}`];
+    const day = start.getDate();
+    const finQuincena = (yy: number, mm: number) => Math.min(30, new Date(yy, mm + 1, 0).getDate());
+    const fmt = (yy: number, mm: number, dd: number) => `${yy}-${String(mm + 1).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
+    const nextMonth = (yy: number, mm: number) => (mm === 11 ? { y: yy + 1, m: 0 } : { y: yy, m: mm + 1 });
+
+    const finEsteMes = finQuincena(y, m);
+
+    if (day < 15) {
+      // Aún no llega el 15: las próximas quincenas son 15 y el fin de mes en curso
+      return [fmt(y, m, 15), fmt(y, m, finEsteMes)];
+    }
+    if (day < finEsteMes) {
+      // Es el 15 o ya pasó (pero no el día de fin de quincena): el mero 15 ya no
+      // da tiempo de pagarlo ese mismo día, así que toca el fin de mes en curso
+      // y el 15 del mes siguiente
+      const { y: ny, m: nm } = nextMonth(y, m);
+      return [fmt(y, m, finEsteMes), fmt(ny, nm, 15)];
+    }
+    // Es el día de fin de quincena (30, o 28/29 en febrero) o ya pasó: igual que
+    // con el 15, ese mismo día ya no da tiempo de cobrarlo, así que las próximas
+    // quincenas son 15 y fin de mes del mes siguiente
+    const { y: ny, m: nm } = nextMonth(y, m);
+    return [fmt(ny, nm, 15), fmt(ny, nm, finQuincena(ny, nm))];
   };
 
   const handleDepositoTipo = (tipo: 'ninguno' | 'quincenas' | 'personalizado') => {

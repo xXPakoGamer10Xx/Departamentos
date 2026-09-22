@@ -14,7 +14,7 @@ export const DEFAULT_CONTRATO_HTML = `<h1>CONTRATO DE ARRENDATARIO</h1>
 
 <p>El arrendatario pagará a la arrendadora a quien sus derechos representan, la suma de <strong>{{renta}}</strong> los días <strong>{{fecha_pago}}</strong>, en moneda nacional de curso legal por mensualidad adelantada y dentro de los cinco días que corresponda acuerdo con el contrato establecido, precisar en el domicilio del arrendador.</p>
 
-<p>El arrendatario entregará un depósito en garantía de <strong>{{deposito}}</strong>, pagadero en {{metodo_pago}} al inicio del presente contrato, con el carácter y los efectos previstos en la cláusula de pena convencional y gastos de restitución.</p>
+<p>El arrendatario entregará al arrendador, por concepto de compensación, la cantidad de <strong>{{deposito}}</strong>, pagadera en {{metodo_pago}} al inicio del presente contrato. Esta compensación es adicional a la renta mensual y, conforme a lo pactado en la cláusula de Compensación no reembolsable, en ningún caso será devuelta ni aplicada como pago de rentas.</p>
 
 <p>El presente contrato da inicio el <strong>{{fecha_inicio}}</strong> y vence el <strong>{{fecha_termino}}</strong>.</p>
 
@@ -38,7 +38,7 @@ export const DEFAULT_CONTRATO_HTML = `<h1>CONTRATO DE ARRENDATARIO</h1>
 
 <p><strong>10.-</strong> Es importante que al dejar el departamento se avise con un mínimo de 15 días de anticipación. La falta de este aviso se considera incumplimiento para todos los efectos de este contrato.</p>
 
-<p><strong>11.-</strong> Pena convencional y gastos de restitución. Las partes convienen que la suma entregada al inicio de este contrato tiene carácter de garantía de cumplimiento y acondicionamiento final, por lo que en ningún caso habrá devolución de dinero en efectivo ni podrá aplicarse como pago de mensualidades ordinarias de renta. En caso de desocupación anticipada o incumplimiento por parte del arrendatario, dicha cantidad quedará íntegramente a favor del arrendador como pena convencional. Al vencimiento natural del contrato, dicha suma se destinará a cubrir los gastos de pintura, mantenimiento y restauración del inmueble para devolverlo a su estado original, no existiendo saldo remanente exigible de devolución.</p>
+<p><strong>11.-</strong> Compensación no reembolsable. Las partes convienen que la cantidad entregada por concepto de compensación es adicional e independiente de la renta mensual. Dicha cantidad no tiene el carácter de depósito en garantía ni de fondo para mantenimiento, pintura o restauración del inmueble, y en ningún caso —ya sea al vencimiento natural del contrato, por desocupación anticipada o por incumplimiento del arrendatario— existirá devolución de dicha cantidad en efectivo, ni podrá aplicarse como pago de mensualidades de renta. Cualquier daño, deterioro o reparación imputable al arrendatario será cubierto por éste de manera adicional y por separado, conforme a lo dispuesto en la cláusula sexta de este contrato.</p>
 
 <p><strong>12.-</strong> Se anexan Normas de Convivencia: Mantener limpio el espacio del Depto. Evitar reuniones de más de 2 personas en horarios de descanso. No mascotas. Notificar oportunamente cualquier falla para poder solucionarla y determinar quién es responsable del pago. Formar parte de una comunidad con respeto. Evitar visitas en estado de ebriedad. En caso de ausencia evidente y prolongada sin comunicación previa, el arrendador podrá confirmar la continuación de la ocupación. No prestar llaves a terceras personas. Cuidar las salidas y entradas cerrando bien las puertas. El uso del lavadero es para toda la comunidad; úsalo con responsabilidad, retira tu ropa el mismo día, horario hasta las 6 pm.</p>
 
@@ -59,7 +59,7 @@ export const CONTRACT_VARS: ContractVar[] = [
   { key: 'depto_numero',        label: 'N° departamento' },
   { key: 'renta',               label: 'Renta ($)' },
   { key: 'renta_letra',         label: 'Renta (letra)' },
-  { key: 'deposito',            label: 'Depósito ($)' },
+  { key: 'deposito',            label: 'Compensación ($)' },
   { key: 'fecha_inicio',        label: 'Fecha inicio' },
   { key: 'fecha_termino',       label: 'Fecha término' },
   { key: 'fecha_pago',          label: 'Día de pago' },

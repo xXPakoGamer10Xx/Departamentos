@@ -178,6 +178,7 @@ export default function AdminLayout() {
           <Tabs.Screen name="inquilinos" options={{ title: 'Inquilinos' }} />
           <Tabs.Screen name="tickets" options={{ title: 'Tickets' }} />
           <Tabs.Screen name="pagos" options={{ title: 'Pagos' }} />
+          <Tabs.Screen name="comprobantes" options={{ title: 'Comprobantes' }} />
           <Tabs.Screen name="scan" options={{ title: 'Escanear' }} />
           <Tabs.Screen name="cuentas" options={{ title: 'Cuentas' }} />
           <Tabs.Screen name="departamentos" options={{ title: 'Departamentos' }} />

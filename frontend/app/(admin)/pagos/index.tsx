@@ -17,7 +17,7 @@ import api from '../../../services/api';
 import { usePermisoGuard } from '../../../hooks/usePermisoGuard';
 
 type RowState = 'pagado' | 'revision' | 'atrasado' | 'pendiente';
-type Tab = 'todos' | 'pagados' | 'revision' | 'pendientes' | 'atrasados';
+type Tab = 'todos' | 'pagados' | 'revision' | 'pendientes' | 'atrasados' | 'cuotas_extra' | 'deposito';
 type SortMode = 'depto' | 'dia_asc' | 'dia_desc' | 'monto_desc' | 'monto_asc' | 'nombre';
 
 const SORT_OPTS: { key: SortMode; label: string }[] = [
@@ -40,7 +40,7 @@ export default function PagosScreen() {
 
   const [inquilinos, setInquilinos] = useState<any[]>([]);
   const [estados, setEstados] = useState<Record<string, any>>({});
-  const [saldos, setSaldos] = useState<Record<string, { total: number; vencida: number; periodoVencido: string | null }>>({});
+  const [saldos, setSaldos] = useState<Record<string, { total: number; vencida: number; periodoVencido: string | null; cuotasExtra: number; deposito: number; }>>({});
   const [usaQr, setUsaQr] = useState(true);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -62,12 +62,14 @@ export default function PagosScreen() {
         const map: Record<string, any> = {};
         (estRes.data || []).forEach((e: any) => { map[e.inquilino_id] = e; });
         setEstados(map);
-        const saldoMap: Record<string, { total: number; vencida: number; periodoVencido: string | null }> = {};
+        const saldoMap: Record<string, { total: number; vencida: number; periodoVencido: string | null; cuotasExtra: number; deposito: number; }> = {};
         (saldosRes.data || []).forEach((s: any) => {
           saldoMap[s.inquilino_id] = {
             total: parseFloat(s.deuda_total ?? 0),
             vencida: parseFloat(s.deuda_vencida ?? s.deuda_total ?? 0),
             periodoVencido: s.periodo_vencido ?? null,
+            cuotasExtra: parseFloat(s.deuda_cuotas_extra ?? 0),
+            deposito: parseFloat(s.deuda_deposito ?? 0),
           };
         });
         setSaldos(saldoMap);
@@ -160,7 +162,9 @@ export default function PagosScreen() {
     revision: rows.filter(r => r.state === 'revision').length,
     pendientes: rows.filter(r => r.state === 'pendiente').length,
     atrasados: rows.filter(r => r.state === 'atrasado').length,
-  }), [rows]);
+    cuotas_extra: rows.filter(r => (saldos[r.item.id]?.cuotasExtra ?? 0) > 0.5).length,
+    deposito: rows.filter(r => (saldos[r.item.id]?.deposito ?? 0) > 0.5).length,
+  }), [rows, saldos]);
 
   const kpi = useMemo(() => {
     const expected = inquilinos.reduce((a, i) => a + Number(i.renta || 0), 0);
@@ -199,6 +203,8 @@ export default function PagosScreen() {
     if (tab === 'revision' && state !== 'revision') return false;
     if (tab === 'pendientes' && state !== 'pendiente') return false;
     if (tab === 'atrasados' && state !== 'atrasado') return false;
+    if (tab === 'cuotas_extra' && (saldos[item.id]?.cuotasExtra ?? 0) <= 0.5) return false;
+    if (tab === 'deposito' && (saldos[item.id]?.deposito ?? 0) <= 0.5) return false;
     if (!search) return true;
     const q = search.toLowerCase();
     return item.nombre_completo?.toLowerCase().includes(q) || String(item.depto_numero).includes(search);
@@ -247,6 +253,8 @@ export default function PagosScreen() {
     ...(usaQr ? [{ key: 'revision' as Tab, label: 'Revisión', color: theme.warning }] : []),
     { key: 'pendientes', label: 'Por pagar' },
     { key: 'atrasados', label: 'Atrasados', color: theme.danger },
+    { key: 'cuotas_extra', label: 'Cuotas Extra', color: theme.warning },
+    { key: 'deposito', label: 'Falta Depósito', color: theme.primary },
   ];
 
   /* ---------------- KPI cards ---------------- */
@@ -418,13 +426,15 @@ export default function PagosScreen() {
     </Modal>
   );
 
-  /* ---------------- Fila tabla (desktop) ---------------- */
   const tableRow = ({ item, state }: { item: any; state: RowState }, i: number) => {
     const e = estados[item.id];
     const m = metodo(item.metodo_pago);
     const chip = stateChip(state);
     const busy = busyId === item.id;
     const atrasado = state === 'atrasado';
+    const totalDeuda = saldos[item.id]?.total ?? 0;
+    const amountToShow = totalDeuda > 0 ? totalDeuda : item.renta;
+
     return (
       <View key={item.id} style={[styles.tr, { borderColor: theme.border }, i === visible.length - 1 && { borderBottomWidth: 0 }, atrasado && { backgroundColor: theme.danger + '08' }]}>
         <TouchableOpacity style={[styles.tdInq, { flex: 4 }]} onPress={() => router.push(`/(admin)/pagos/${item.id}`)} activeOpacity={0.7}>
@@ -449,9 +459,11 @@ export default function PagosScreen() {
         </TouchableOpacity>
 
         <View style={{ flex: 2 }}>
-          <Text style={[styles.rowMonto, { color: theme.text }]}>{fmt(item.renta)}</Text>
-          {atrasado && (saldos[item.id]?.vencida ?? 0) > 0.5 && (
-            <Text style={[styles.rowMora, { color: theme.danger }]}>Debe {fmt0(saldos[item.id]?.vencida ?? 0)} en total</Text>
+          <Text style={[styles.rowMonto, { color: theme.text }]}>{fmt(amountToShow)}</Text>
+          {totalDeuda > 0 && totalDeuda !== Number(item.renta) && (
+             <Text style={[styles.rowMora, { color: atrasado ? theme.danger : theme.textSecondary }]}>
+               Renta: {fmt0(item.renta)}
+             </Text>
           )}
         </View>
 
@@ -467,6 +479,12 @@ export default function PagosScreen() {
               <Ionicons name="image-outline" size={11} color={theme.textMuted} />
               <Text style={[styles.compTagText, { color: theme.textSecondary }]}>comprobante</Text>
             </View>
+          )}
+          {(saldos[item.id]?.cuotasExtra ?? 0) > 0.5 && (
+            <Badge variant="warning" label={`Cuotas Extra: ${fmt0(saldos[item.id]?.cuotasExtra ?? 0)}`} size="sm" />
+          )}
+          {(saldos[item.id]?.deposito ?? 0) > 0.5 && (
+            <Badge variant="primary" label={`Depósito: ${fmt0(saldos[item.id]?.deposito ?? 0)}`} size="sm" />
           )}
         </View>
 
@@ -530,6 +548,9 @@ export default function PagosScreen() {
     const chip = stateChip(state);
     const busy = busyId === item.id;
     const atrasado = state === 'atrasado';
+    const totalDeuda = saldos[item.id]?.total ?? 0;
+    const amountToShow = totalDeuda > 0 ? totalDeuda : item.renta;
+
     return (
       <SurfaceCard key={item.id} style={styles.mCard} padding={0}>
         <TouchableOpacity style={styles.mBody} onPress={() => router.push(`/(admin)/pagos/${item.id}`)} activeOpacity={0.75}>
@@ -540,7 +561,7 @@ export default function PagosScreen() {
           <View style={{ flex: 1, minWidth: 0, gap: 5 }}>
             <Text style={[styles.rowName, { color: theme.text }]} numberOfLines={1}>{item.nombre_completo}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Text style={[styles.rowMonto, { color: theme.text }]}>{fmt(item.renta)}</Text>
+              <Text style={[styles.rowMonto, { color: theme.text }]}>{fmt(amountToShow)}</Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                 <Ionicons name={m.icon} size={13} color={theme.textSecondary} />
                 <Text style={[styles.rowMeta, { color: theme.textSecondary }]}>{m.label}</Text>
@@ -554,12 +575,20 @@ export default function PagosScreen() {
                 </Text>
               </View>
             )}
-            {atrasado && (saldos[item.id]?.vencida ?? 0) > 0.5 && (
-              <Text style={[styles.rowMeta, { fontSize: 11, fontWeight: '700', color: theme.danger }]}>
-                Debe {fmt0(saldos[item.id]?.vencida ?? 0)} en total
+            {totalDeuda > 0 && totalDeuda !== Number(item.renta) && (
+              <Text style={[styles.rowMeta, { fontSize: 11, fontWeight: '700', color: atrasado ? theme.danger : theme.textSecondary }]}>
+                Renta mensual: {fmt0(item.renta)}
               </Text>
             )}
-            <Badge label={chip.label} variant={chip.variant} size="sm" />
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
+              <Badge label={chip.label} variant={chip.variant} size="sm" />
+              {(saldos[item.id]?.cuotasExtra ?? 0) > 0.5 && (
+                <Badge variant="warning" label={`Cuotas Extra: ${fmt0(saldos[item.id]?.cuotasExtra ?? 0)}`} size="sm" />
+              )}
+              {(saldos[item.id]?.deposito ?? 0) > 0.5 && (
+                <Badge variant="primary" label={`Depósito: ${fmt0(saldos[item.id]?.deposito ?? 0)}`} size="sm" />
+              )}
+            </View>
           </View>
         </TouchableOpacity>
         <View style={[styles.mActions, { borderTopColor: theme.border }]}>

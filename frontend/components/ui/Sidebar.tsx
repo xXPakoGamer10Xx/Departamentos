@@ -28,6 +28,7 @@ const NAV_ITEMS: NavItem[] = [
   { name: 'departamentos', label: 'Departamentos', icon: 'business', activeColor: '#10B981', permiso: 'departamentos' },
   { name: 'contratos', label: 'Contratos', icon: 'document-text', activeColor: '#3B82F6', permiso: 'contratos' },
   { name: 'pagos', label: 'Pagos', icon: 'card', activeColor: '#3B82F6', permiso: 'pagos' },
+  { name: 'comprobantes', label: 'Comprobantes', icon: 'document-attach', activeColor: '#10B981', permiso: 'pagos.marcar' },
   { name: 'reportes', label: 'Reportes', icon: 'stats-chart', activeColor: '#8B5CF6', permiso: 'reportes' },
   { name: 'cuentas', label: 'Cuentas', icon: 'wallet', activeColor: '#10B981', permiso: 'cuentas' },
   { name: 'tickets', label: 'Tickets', icon: 'chatbox-ellipses', activeColor: '#EF4444', tenantOnly: true, permiso: 'tickets' },

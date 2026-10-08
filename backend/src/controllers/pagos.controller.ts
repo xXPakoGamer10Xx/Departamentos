@@ -1028,7 +1028,9 @@ export async function getSaldosInquilinos(req: AuthRequest, res: Response, next:
       `SELECT i.id AS inquilino_id, i.depto_numero, i.nombre_completo,
               ${DEUDA_VENCIDA} AS deuda_vencida,
               ${DEUDA_TOTAL} AS deuda_total,
-              ${PERIODO_VENCIDO} AS periodo_vencido
+              ${PERIODO_VENCIDO} AS periodo_vencido,
+              COALESCE((SELECT SUM(monto) FROM cuotas_extra WHERE inquilino_id = i.id AND estado = 'pendiente'), 0) AS deuda_cuotas_extra,
+              GREATEST(MAX(i.deposito) - COALESCE((SELECT SUM(monto) FROM abonos_deposito WHERE inquilino_id = i.id), 0), 0) AS deuda_deposito
        FROM inquilinos i
        CROSS JOIN LATERAL generate_series(
          date_trunc('month', i.fecha_inicio), date_trunc('month', CURRENT_DATE), interval '1 month'
@@ -1063,7 +1065,9 @@ export async function getResumenDeuda(req: AuthRequest, res: Response, next: Nex
       `SELECT * FROM (
          SELECT i.id AS inquilino_id, i.depto_numero, i.nombre_completo,
                 ${DEUDA_VENCIDA} AS deuda_vencida,
-                ${DEUDA_TOTAL} AS deuda_total
+                ${DEUDA_TOTAL} AS deuda_total,
+                COALESCE((SELECT SUM(monto) FROM cuotas_extra WHERE inquilino_id = i.id AND estado = 'pendiente'), 0) AS deuda_cuotas_extra,
+                GREATEST(MAX(i.deposito) - COALESCE((SELECT SUM(monto) FROM abonos_deposito WHERE inquilino_id = i.id), 0), 0) AS deuda_deposito
          FROM inquilinos i
          CROSS JOIN LATERAL generate_series(
            date_trunc('month', i.fecha_inicio), date_trunc('month', CURRENT_DATE), interval '1 month'

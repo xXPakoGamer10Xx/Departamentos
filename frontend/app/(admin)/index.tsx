@@ -140,6 +140,7 @@ export default function DashboardScreen() {
 
   const quickActions: QuickAction[] = [
     can('pagos') && { icon: 'add', label: 'Registrar Pago', primary: true, onPress: () => router.push('/pagos') },
+    can('pagos.marcar') && { icon: 'document-attach-outline', label: 'Comprobantes', onPress: () => router.push('/(admin)/comprobantes') },
     can('inquilinos.editar') && { icon: 'person-add-outline', label: 'Nuevo Inquilino', onPress: () => router.push('/inquilinos/nuevo') },
     can('contratos') && { icon: 'document-text-outline', label: 'Generar Contrato', onPress: () => router.push('/contratos') },
     usaQr

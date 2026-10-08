@@ -10,6 +10,7 @@ ENV EXPO_PUBLIC_API_URL=/api
 ENV EXPO_PUBLIC_VAPID_PUBLIC_KEY=BHyeq9PZ1co5YK671ZOWXLfUn2VwPvRMPFjZVpWf3EB_WbgXAhTlIKfGuAhbZnkipi2Mgr9yGqOtcaHQcOxMIt8
 RUN npx expo export -p web
 RUN if [ -d public ]; then cp -r public/* dist/ 2>/dev/null || true; fi
+RUN sed -i 's|</head>|<link rel="manifest" href="/manifest.json" /><meta name="theme-color" content="#0E1321" /><meta name="apple-mobile-web-app-capable" content="yes" /><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" /><meta name="apple-mobile-web-app-title" content="NethRent" /><meta name="mobile-web-app-capable" content="yes" /><link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" /><link rel="apple-touch-icon" href="/icons/icon-192x192.png" /><link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192x192.png" /><link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512x512.png" /></head>|' dist/index.html
 
 # ---- Build Backend ----
 FROM node:22-alpine AS backend-builder

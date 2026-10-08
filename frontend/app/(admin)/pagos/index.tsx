@@ -29,6 +29,11 @@ const SORT_OPTS: { key: SortMode; label: string }[] = [
   { key: 'nombre', label: 'Nombre del inquilino (A–Z)' },
 ];
 
+type Saldo = { total: number; vencida: number; periodoVencido: string | null; cuotasExtra: number; deposito: number };
+
+// Umbral para ignorar centavos de redondeo al decidir si hay deuda.
+const EPS = 0.5;
+
 const fmt = (n: number) => '$' + Number(n).toLocaleString('es-MX', { minimumFractionDigits: 2 });
 const fmt0 = (n: number) => '$' + Number(n).toLocaleString('es-MX', { maximumFractionDigits: 0 });
 const initials = (n: string) => n?.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase() || '??';
@@ -44,7 +49,7 @@ export default function PagosScreen() {
 
   const [inquilinos, setInquilinos] = useState<any[]>([]);
   const [estados, setEstados] = useState<Record<string, any>>({});
-  const [saldos, setSaldos] = useState<Record<string, { total: number; rentaActual: number; vencida: number; periodoVencido: string | null; cuotasExtra: number; deposito: number; }>>({});
+  const [saldos, setSaldos] = useState<Record<string, Saldo>>({});
   const [usaQr, setUsaQr] = useState(true);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -66,12 +71,11 @@ export default function PagosScreen() {
         const map: Record<string, any> = {};
         (estRes.data || []).forEach((e: any) => { map[e.inquilino_id] = e; });
         setEstados(map);
-        const saldoMap: Record<string, { total: number; rentaActual: number; vencida: number; periodoVencido: string | null; cuotasExtra: number; deposito: number; }> = {};
+        const saldoMap: Record<string, Saldo> = {};
         (saldosRes.data || []).forEach((s: any) => {
           saldoMap[s.inquilino_id] = {
             total: parseFloat(s.deuda_total ?? 0),
             vencida: parseFloat(s.deuda_vencida ?? 0),
-            rentaActual: parseFloat(s.deuda_renta_actual ?? 0),
             periodoVencido: s.periodo_vencido ?? null,
             cuotasExtra: parseFloat(s.deuda_cuotas_extra ?? 0),
             deposito: parseFloat(s.deuda_deposito ?? 0),
@@ -155,7 +159,7 @@ export default function PagosScreen() {
     const e = estados[item.id];
     if (e?.confirmado) return 'pagado';
     if (e?.comprobante_url && !e?.rechazado) return 'revision';
-    if ((saldos[item.id]?.vencida ?? 0) > 0.5 || e?.rechazado) return 'atrasado';
+    if ((saldos[item.id]?.vencida ?? 0) > EPS || e?.rechazado) return 'atrasado';
     return 'pendiente';
   }, [estados, saldos]);
 
@@ -168,8 +172,8 @@ export default function PagosScreen() {
     // Por pagar = todo el que aún no paga la renta de este mes (incluye atrasados).
     pendientes: rows.filter(r => r.state === 'pendiente' || r.state === 'atrasado').length,
     atrasados: rows.filter(r => r.state === 'atrasado').length,
-    cuotas_extra: rows.filter(r => (saldos[r.item.id]?.cuotasExtra ?? 0) > 0.5).length,
-    deposito: rows.filter(r => (saldos[r.item.id]?.deposito ?? 0) > 0.5).length,
+    cuotas_extra: rows.filter(r => (saldos[r.item.id]?.cuotasExtra ?? 0) > EPS).length,
+    deposito: rows.filter(r => (saldos[r.item.id]?.deposito ?? 0) > EPS).length,
   }), [rows, saldos]);
 
   const kpi = useMemo(() => {
@@ -225,7 +229,9 @@ export default function PagosScreen() {
         break;
       default:
         porRecaudarLabel = 'POR RECAUDAR TOTAL';
-        porRecaudarSub = '';
+        porRecaudarSub = vencido > EPS
+          ? `${fmt0(vencido)} vencido${counts.pendientes > counts.atrasados ? ` · ${counts.pendientes - counts.atrasados} por vencer` : ''}`
+          : counts.pendientes > 0 ? `${counts.pendientes} por pagar · al corriente` : 'Todo cobrado';
         break;
     }
 
@@ -261,8 +267,8 @@ export default function PagosScreen() {
     if (tab === 'revision' && state !== 'revision') return false;
     if (tab === 'pendientes' && state !== 'pendiente' && state !== 'atrasado') return false;
     if (tab === 'atrasados' && state !== 'atrasado') return false;
-    if (tab === 'cuotas_extra' && (saldos[item.id]?.cuotasExtra ?? 0) <= 0.5) return false;
-    if (tab === 'deposito' && (saldos[item.id]?.deposito ?? 0) <= 0.5) return false;
+    if (tab === 'cuotas_extra' && (saldos[item.id]?.cuotasExtra ?? 0) <= EPS) return false;
+    if (tab === 'deposito' && (saldos[item.id]?.deposito ?? 0) <= EPS) return false;
     if (!search) return true;
     const q = search.toLowerCase();
     return item.nombre_completo?.toLowerCase().includes(q) || String(item.depto_numero).includes(search);
@@ -521,7 +527,7 @@ export default function PagosScreen() {
                Mes vencido
              </Text>
           )}
-          {!atrasado && totalDeuda > 0 && totalDeuda !== Number(item.renta) && (
+          {!atrasado && totalDeuda > 0 && Math.abs(totalDeuda - Number(item.renta)) > EPS && (
              <Text style={[styles.rowMora, { color: theme.textSecondary }]}>
                Renta: {fmt0(item.renta)}
              </Text>
@@ -541,10 +547,10 @@ export default function PagosScreen() {
               <Text style={[styles.compTagText, { color: theme.textSecondary }]}>comprobante</Text>
             </View>
           )}
-          {(saldos[item.id]?.cuotasExtra ?? 0) > 0.5 && (
+          {(saldos[item.id]?.cuotasExtra ?? 0) > EPS && (
             <Badge variant="warning" label={`Cuotas Extra: ${fmt0(saldos[item.id]?.cuotasExtra ?? 0)}`} size="sm" />
           )}
-          {(saldos[item.id]?.deposito ?? 0) > 0.5 && (
+          {(saldos[item.id]?.deposito ?? 0) > EPS && (
             <Badge variant="primary" label={`Depósito: ${fmt0(saldos[item.id]?.deposito ?? 0)}`} size="sm" />
           )}
         </View>
@@ -653,17 +659,17 @@ export default function PagosScreen() {
                 </Text>
               </View>
             )}
-            {!atrasado && totalDeuda > 0 && totalDeuda !== Number(item.renta) && (
+            {!atrasado && totalDeuda > 0 && Math.abs(totalDeuda - Number(item.renta)) > EPS && (
               <Text style={[styles.rowMeta, { fontSize: 11, fontWeight: '700', color: theme.textSecondary }]}>
                 Renta mensual: {fmt0(item.renta)}
               </Text>
             )}
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
               <Badge label={chip.label} variant={chip.variant} size="sm" />
-              {(saldos[item.id]?.cuotasExtra ?? 0) > 0.5 && (
+              {(saldos[item.id]?.cuotasExtra ?? 0) > EPS && (
                 <Badge variant="warning" label={`Cuotas Extra: ${fmt0(saldos[item.id]?.cuotasExtra ?? 0)}`} size="sm" />
               )}
-              {(saldos[item.id]?.deposito ?? 0) > 0.5 && (
+              {(saldos[item.id]?.deposito ?? 0) > EPS && (
                 <Badge variant="primary" label={`Depósito: ${fmt0(saldos[item.id]?.deposito ?? 0)}`} size="sm" />
               )}
             </View>

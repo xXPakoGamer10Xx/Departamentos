@@ -43,3 +43,4 @@ backend/backups/
 .claude/
 .antigravity/
 skills-lock.json
+.expo/

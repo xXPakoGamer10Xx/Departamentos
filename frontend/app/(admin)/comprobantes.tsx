@@ -11,6 +11,7 @@ import { Colors } from '../../constants/Colors';
 import { Theme } from '../../constants/Theme';
 import api from '../../services/api';
 import { useSSEEvent } from '../../hooks/useSSE';
+import { usePermisoGuard } from '../../hooks/usePermisoGuard';
 
 const DOCK_HEIGHT = 104;
 
@@ -31,6 +32,7 @@ function avisar(mensaje: string) {
 }
 
 export default function AdminComprobantesScreen() {
+  usePermisoGuard('pagos.marcar');
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const theme = isDark ? Colors.dark : Colors.light;

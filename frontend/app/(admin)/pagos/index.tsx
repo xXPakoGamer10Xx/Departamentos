@@ -29,6 +29,10 @@ const SORT_OPTS: { key: SortMode; label: string }[] = [
   { key: 'nombre', label: 'Nombre del inquilino (A–Z)' },
 ];
 
+const fmt = (n: number) => '$' + Number(n).toLocaleString('es-MX', { minimumFractionDigits: 2 });
+const fmt0 = (n: number) => '$' + Number(n).toLocaleString('es-MX', { maximumFractionDigits: 0 });
+const initials = (n: string) => n?.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase() || '??';
+
 export default function PagosScreen() {
   usePermisoGuard('pagos');
   const router = useRouter();
@@ -273,10 +277,6 @@ export default function PagosScreen() {
   });
 
   const sortLabel = SORT_OPTS.find(o => o.key === sortMode)?.label ?? '';
-
-  const fmt = (n: number) => '$' + Number(n).toLocaleString('es-MX', { minimumFractionDigits: 2 });
-  const fmt0 = (n: number) => '$' + Number(n).toLocaleString('es-MX', { maximumFractionDigits: 0 });
-  const initials = (n: string) => n?.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase() || '??';
 
   const mesActual = new Intl.DateTimeFormat('es-MX', { month: 'long', year: 'numeric' }).format(new Date());
 

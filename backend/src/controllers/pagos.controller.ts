@@ -1029,6 +1029,7 @@ export async function getSaldosInquilinos(req: AuthRequest, res: Response, next:
               ${DEUDA_VENCIDA} AS deuda_vencida,
               ${DEUDA_TOTAL} AS deuda_total,
               ${PERIODO_VENCIDO} AS periodo_vencido,
+              COALESCE(SUM(CASE WHEN NOT (${MES_VENCIDO}) THEN GREATEST(i.renta - COALESCE(ab.total, 0), 0) ELSE 0 END), 0) AS deuda_renta_actual,
               COALESCE((SELECT SUM(monto) FROM cuotas_extra WHERE inquilino_id = i.id AND estado = 'pendiente'), 0) AS deuda_cuotas_extra,
               GREATEST(MAX(i.deposito) - COALESCE((SELECT SUM(monto) FROM abonos_deposito WHERE inquilino_id = i.id), 0), 0) AS deuda_deposito
        FROM inquilinos i

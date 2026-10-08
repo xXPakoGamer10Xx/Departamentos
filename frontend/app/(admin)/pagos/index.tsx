@@ -44,7 +44,7 @@ export default function PagosScreen() {
 
   const [inquilinos, setInquilinos] = useState<any[]>([]);
   const [estados, setEstados] = useState<Record<string, any>>({});
-  const [saldos, setSaldos] = useState<Record<string, { total: number; vencida: number; periodoVencido: string | null; cuotasExtra: number; deposito: number; }>>({});
+  const [saldos, setSaldos] = useState<Record<string, { total: number; rentaActual: number; vencida: number; periodoVencido: string | null; cuotasExtra: number; deposito: number; }>>({});
   const [usaQr, setUsaQr] = useState(true);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -66,11 +66,12 @@ export default function PagosScreen() {
         const map: Record<string, any> = {};
         (estRes.data || []).forEach((e: any) => { map[e.inquilino_id] = e; });
         setEstados(map);
-        const saldoMap: Record<string, { total: number; vencida: number; periodoVencido: string | null; cuotasExtra: number; deposito: number; }> = {};
+        const saldoMap: Record<string, { total: number; rentaActual: number; vencida: number; periodoVencido: string | null; cuotasExtra: number; deposito: number; }> = {};
         (saldosRes.data || []).forEach((s: any) => {
           saldoMap[s.inquilino_id] = {
             total: parseFloat(s.deuda_total ?? 0),
-            vencida: parseFloat(s.deuda_vencida ?? s.deuda_total ?? 0),
+            vencida: parseFloat(s.deuda_vencida ?? 0),
+            rentaActual: parseFloat(s.deuda_renta_actual ?? 0),
             periodoVencido: s.periodo_vencido ?? null,
             cuotasExtra: parseFloat(s.deuda_cuotas_extra ?? 0),
             deposito: parseFloat(s.deuda_deposito ?? 0),
@@ -164,7 +165,8 @@ export default function PagosScreen() {
     todos: rows.length,
     pagados: rows.filter(r => r.state === 'pagado').length,
     revision: rows.filter(r => r.state === 'revision').length,
-    pendientes: rows.filter(r => r.state === 'pendiente').length,
+    // Por pagar = todo el que aún no paga la renta de este mes (incluye atrasados).
+    pendientes: rows.filter(r => r.state === 'pendiente' || r.state === 'atrasado').length,
     atrasados: rows.filter(r => r.state === 'atrasado').length,
     cuotas_extra: rows.filter(r => (saldos[r.item.id]?.cuotasExtra ?? 0) > 0.5).length,
     deposito: rows.filter(r => (saldos[r.item.id]?.deposito ?? 0) > 0.5).length,
@@ -179,12 +181,10 @@ export default function PagosScreen() {
     switch (tab) {
       case 'pagados':
       case 'pendientes':
-        porRecaudar = inquilinos.reduce((a, i) => {
-          const t = saldos[i.id]?.total ?? 0;
-          const v = saldos[i.id]?.vencida ?? 0;
-          const c = saldos[i.id]?.cuotasExtra ?? 0;
-          return a + Math.max(0, t - v - c);
-        }, 0);
+        // Renta del mes de todos los que aún no pagan (por pagar + atrasados).
+        porRecaudar = rows
+          .filter(r => r.state === 'pendiente' || r.state === 'atrasado')
+          .reduce((a, r) => a + Number(r.item.renta || 0), 0);
         break;
       case 'atrasados':
         porRecaudar = inquilinos.reduce((a, i) => a + (saldos[i.id]?.vencida ?? 0), 0);
@@ -209,9 +209,7 @@ export default function PagosScreen() {
       case 'pagados':
       case 'pendientes':
         porRecaudarLabel = 'RENTAS POR COBRAR';
-        porRecaudarSub = vencido > 0
-          ? `${fmt0(vencido)} vencido${counts.pendientes > 0 ? ` · ${counts.pendientes} por vencer` : ''}`
-          : counts.pendientes > 0 ? `${counts.pendientes} por pagar · al corriente` : 'Todo cobrado';
+        porRecaudarSub = '';
         break;
       case 'atrasados':
         porRecaudarLabel = 'DINERO ATRASADO';
@@ -227,9 +225,7 @@ export default function PagosScreen() {
         break;
       default:
         porRecaudarLabel = 'POR RECAUDAR TOTAL';
-        porRecaudarSub = vencido > 0
-          ? `${fmt0(vencido)} vencido${counts.pendientes > 0 ? ` · ${counts.pendientes} por vencer` : ''}`
-          : counts.pendientes > 0 ? `${counts.pendientes} por pagar · al corriente` : 'Todo cobrado';
+        porRecaudarSub = '';
         break;
     }
 
@@ -263,7 +259,7 @@ export default function PagosScreen() {
   const filtered = rows.filter(({ item, state }) => {
     if (tab === 'pagados' && state !== 'pagado') return false;
     if (tab === 'revision' && state !== 'revision') return false;
-    if (tab === 'pendientes' && state !== 'pendiente') return false;
+    if (tab === 'pendientes' && state !== 'pendiente' && state !== 'atrasado') return false;
     if (tab === 'atrasados' && state !== 'atrasado') return false;
     if (tab === 'cuotas_extra' && (saldos[item.id]?.cuotasExtra ?? 0) <= 0.5) return false;
     if (tab === 'deposito' && (saldos[item.id]?.deposito ?? 0) <= 0.5) return false;

@@ -177,8 +177,14 @@ export default function PagosScreen() {
     
     let porRecaudar = 0;
     switch (tab) {
+      case 'pagados':
       case 'pendientes':
-        porRecaudar = inquilinos.reduce((a, i) => a + Math.max(0, (saldos[i.id]?.total ?? 0) - (saldos[i.id]?.cuotasExtra ?? 0)), 0);
+        porRecaudar = inquilinos.reduce((a, i) => {
+          const t = saldos[i.id]?.total ?? 0;
+          const v = saldos[i.id]?.vencida ?? 0;
+          const c = saldos[i.id]?.cuotasExtra ?? 0;
+          return a + Math.max(0, t - v - c);
+        }, 0);
         break;
       case 'atrasados':
         porRecaudar = inquilinos.reduce((a, i) => a + (saldos[i.id]?.vencida ?? 0), 0);
@@ -189,7 +195,7 @@ export default function PagosScreen() {
       case 'deposito':
         porRecaudar = inquilinos.reduce((a, i) => a + (saldos[i.id]?.deposito ?? 0), 0);
         break;
-      default: // 'todos', 'pagados', 'revision'
+      default: // 'todos', 'revision'
         porRecaudar = inquilinos.reduce((a, i) => a + (saldos[i.id]?.total ?? 0) + (saldos[i.id]?.deposito ?? 0), 0);
         break;
     }
@@ -200,6 +206,7 @@ export default function PagosScreen() {
     let porRecaudarSub = '';
     
     switch (tab) {
+      case 'pagados':
       case 'pendientes':
         porRecaudarLabel = 'RENTAS POR COBRAR';
         porRecaudarSub = vencido > 0

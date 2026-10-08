@@ -30,7 +30,7 @@ module.exports = {
       softwareKeyboardLayoutMode: 'pan',
     },
     web: {
-      favicon: './assets/favicon.png',
+      favicon: './assets/icon.png',
       bundler: 'metro',
     },
     plugins: [

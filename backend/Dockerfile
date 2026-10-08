@@ -9,6 +9,7 @@ ENV EXPO_PUBLIC_API_URL=/api
 # Llave pública VAPID para Web Push (pública por diseño, va embebida en el bundle del cliente)
 ENV EXPO_PUBLIC_VAPID_PUBLIC_KEY=BHyeq9PZ1co5YK671ZOWXLfUn2VwPvRMPFjZVpWf3EB_WbgXAhTlIKfGuAhbZnkipi2Mgr9yGqOtcaHQcOxMIt8
 RUN npx expo export -p web
+RUN if [ -d public ]; then cp -r public/* dist/ 2>/dev/null || true; fi
 
 # ---- Build Backend ----
 FROM node:22-alpine AS backend-builder

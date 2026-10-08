@@ -433,7 +433,8 @@ export default function PagosScreen() {
     const busy = busyId === item.id;
     const atrasado = state === 'atrasado';
     const totalDeuda = saldos[item.id]?.total ?? 0;
-    const amountToShow = totalDeuda > 0 ? totalDeuda : item.renta;
+    const vencida = saldos[item.id]?.vencida ?? 0;
+    const amountToShow = atrasado && vencida > 0 ? vencida : (totalDeuda > 0 ? totalDeuda : item.renta);
 
     return (
       <View key={item.id} style={[styles.tr, { borderColor: theme.border }, i === visible.length - 1 && { borderBottomWidth: 0 }, atrasado && { backgroundColor: theme.danger + '08' }]}>
@@ -444,14 +445,14 @@ export default function PagosScreen() {
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={[styles.rowName, { color: theme.text }]} numberOfLines={1}>{item.nombre_completo}</Text>
-            <Text style={[styles.rowMeta, { color: theme.textSecondary }]} numberOfLines={1}>
-              Renta mensual · {rentaLabel(item, atrasado)}
+            <Text style={[styles.rowMeta, { color: atrasado ? theme.danger : theme.textSecondary }]} numberOfLines={1}>
+              {rentaLabel(item, atrasado)}
             </Text>
             {diaPago(item) != null && (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
                 <Ionicons name="calendar-outline" size={12} color={atrasado ? theme.danger : theme.textMuted} />
                 <Text style={[styles.rowMeta, { fontSize: 11, color: atrasado ? theme.danger : theme.textMuted }]}>
-                  {atrasado ? `Venció el ${diaPago(item)}` : `Paga el día ${diaPago(item)} de cada mes`}
+                  {atrasado ? `Vence el día ${diaPago(item)}` : `Paga el día ${diaPago(item)} de cada mes`}
                 </Text>
               </View>
             )}
@@ -459,9 +460,19 @@ export default function PagosScreen() {
         </TouchableOpacity>
 
         <View style={{ flex: 2 }}>
-          <Text style={[styles.rowMonto, { color: theme.text }]}>{fmt(amountToShow)}</Text>
-          {totalDeuda > 0 && totalDeuda !== Number(item.renta) && (
-             <Text style={[styles.rowMora, { color: atrasado ? theme.danger : theme.textSecondary }]}>
+          <Text style={[styles.rowMonto, { color: atrasado ? theme.danger : theme.text }]}>{fmt(amountToShow)}</Text>
+          {atrasado && vencida < Number(item.renta) && (
+             <Text style={[styles.rowMora, { color: theme.textSecondary }]}>
+               Renta: {fmt0(item.renta)} (abonó {fmt0(Number(item.renta) - vencida)})
+             </Text>
+          )}
+          {atrasado && vencida >= Number(item.renta) && (
+             <Text style={[styles.rowMora, { color: theme.danger }]}>
+               Mes vencido
+             </Text>
+          )}
+          {!atrasado && totalDeuda > 0 && totalDeuda !== Number(item.renta) && (
+             <Text style={[styles.rowMora, { color: theme.textSecondary }]}>
                Renta: {fmt0(item.renta)}
              </Text>
           )}
@@ -537,8 +548,16 @@ export default function PagosScreen() {
   }
 
   function rentaLabel(item: any, atrasado: boolean): string {
-    if (atrasado) return periodoVencidoLabel(saldos[item.id]?.periodoVencido) ?? mesLabel();
-    return mesLabel();
+    if (atrasado) {
+      const vencida = saldos[item.id]?.vencida ?? 0;
+      const renta = Number(item.renta || 0);
+      const per = periodoVencidoLabel(saldos[item.id]?.periodoVencido);
+      if (vencida > 0 && vencida < renta) {
+        return `Restante de ${per ?? 'mes anterior'}`;
+      }
+      return per ? `Adeudo de ${per}` : mesLabel();
+    }
+    return `Renta mensual · ${mesLabel()}`;
   }
 
   /* ---------------- Card móvil ---------------- */
@@ -549,7 +568,8 @@ export default function PagosScreen() {
     const busy = busyId === item.id;
     const atrasado = state === 'atrasado';
     const totalDeuda = saldos[item.id]?.total ?? 0;
-    const amountToShow = totalDeuda > 0 ? totalDeuda : item.renta;
+    const vencida = saldos[item.id]?.vencida ?? 0;
+    const amountToShow = atrasado && vencida > 0 ? vencida : (totalDeuda > 0 ? totalDeuda : item.renta);
 
     return (
       <SurfaceCard key={item.id} style={styles.mCard} padding={0}>
@@ -560,23 +580,31 @@ export default function PagosScreen() {
           </View>
           <View style={{ flex: 1, minWidth: 0, gap: 5 }}>
             <Text style={[styles.rowName, { color: theme.text }]} numberOfLines={1}>{item.nombre_completo}</Text>
+            <Text style={[styles.rowMeta, { fontSize: 11.5, color: atrasado ? theme.danger : theme.textSecondary }]}>
+              {rentaLabel(item, atrasado)}
+            </Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Text style={[styles.rowMonto, { color: theme.text }]}>{fmt(amountToShow)}</Text>
+              <Text style={[styles.rowMonto, { color: atrasado ? theme.danger : theme.text }]}>{fmt(amountToShow)}</Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                 <Ionicons name={m.icon} size={13} color={theme.textSecondary} />
                 <Text style={[styles.rowMeta, { color: theme.textSecondary }]}>{m.label}</Text>
               </View>
             </View>
+            {atrasado && vencida < Number(item.renta) && (
+              <Text style={[styles.rowMeta, { fontSize: 11, color: theme.textSecondary }]}>
+                Renta mensual: {fmt0(item.renta)} (ya abonó {fmt0(Number(item.renta) - vencida)})
+              </Text>
+            )}
             {diaPago(item) != null && (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                 <Ionicons name="calendar-outline" size={12} color={atrasado ? theme.danger : theme.textMuted} />
                 <Text style={[styles.rowMeta, { fontSize: 11, color: atrasado ? theme.danger : theme.textMuted }]}>
-                  {atrasado ? `Venció el ${diaPago(item)}` : `Paga el día ${diaPago(item)}`}
+                  {atrasado ? `Vence el día ${diaPago(item)}` : `Paga el día ${diaPago(item)}`}
                 </Text>
               </View>
             )}
-            {totalDeuda > 0 && totalDeuda !== Number(item.renta) && (
-              <Text style={[styles.rowMeta, { fontSize: 11, fontWeight: '700', color: atrasado ? theme.danger : theme.textSecondary }]}>
+            {!atrasado && totalDeuda > 0 && totalDeuda !== Number(item.renta) && (
+              <Text style={[styles.rowMeta, { fontSize: 11, fontWeight: '700', color: theme.textSecondary }]}>
                 Renta mensual: {fmt0(item.renta)}
               </Text>
             )}

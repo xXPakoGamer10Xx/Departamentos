@@ -170,18 +170,69 @@ export default function PagosScreen() {
     const expected = inquilinos.reduce((a, i) => a + Number(i.renta || 0), 0);
     const recaudado = rows.filter(r => r.state === 'pagado').reduce((a, r) => a + Number(r.item.renta || 0), 0);
     const spei = inquilinos.filter(i => i.metodo_pago === 'transferencia' || i.metodo_pago === 'ambos').length;
-    // Por recaudar = todo lo pendiente del ciclo + atrasos acumulados de meses anteriores.
-    const porRecaudar = inquilinos.reduce((a, i) => a + (saldos[i.id]?.total ?? 0), 0);
+    
+    let porRecaudar = 0;
+    switch (tab) {
+      case 'pendientes':
+        porRecaudar = inquilinos.reduce((a, i) => a + Math.max(0, (saldos[i.id]?.total ?? 0) - (saldos[i.id]?.cuotasExtra ?? 0)), 0);
+        break;
+      case 'atrasados':
+        porRecaudar = inquilinos.reduce((a, i) => a + (saldos[i.id]?.vencida ?? 0), 0);
+        break;
+      case 'cuotas_extra':
+        porRecaudar = inquilinos.reduce((a, i) => a + (saldos[i.id]?.cuotasExtra ?? 0), 0);
+        break;
+      case 'deposito':
+        porRecaudar = inquilinos.reduce((a, i) => a + (saldos[i.id]?.deposito ?? 0), 0);
+        break;
+      default: // 'todos', 'pagados', 'revision'
+        porRecaudar = inquilinos.reduce((a, i) => a + (saldos[i.id]?.total ?? 0) + (saldos[i.id]?.deposito ?? 0), 0);
+        break;
+    }
+
     const vencido = inquilinos.reduce((a, i) => a + (saldos[i.id]?.vencida ?? 0), 0);
+    
+    let porRecaudarLabel = 'POR RECAUDAR';
+    let porRecaudarSub = '';
+    
+    switch (tab) {
+      case 'pendientes':
+        porRecaudarLabel = 'RENTAS POR COBRAR';
+        porRecaudarSub = vencido > 0
+          ? `${fmt0(vencido)} vencido${counts.pendientes > 0 ? ` · ${counts.pendientes} por vencer` : ''}`
+          : counts.pendientes > 0 ? `${counts.pendientes} por pagar · al corriente` : 'Todo cobrado';
+        break;
+      case 'atrasados':
+        porRecaudarLabel = 'DINERO ATRASADO';
+        porRecaudarSub = `${counts.atrasados} inquilino(s) con atraso`;
+        break;
+      case 'cuotas_extra':
+        porRecaudarLabel = 'CUOTAS EXTRA';
+        porRecaudarSub = `${counts.cuotas_extra} inquilino(s) pendiente(s)`;
+        break;
+      case 'deposito':
+        porRecaudarLabel = 'FALTA DEPÓSITO';
+        porRecaudarSub = `${counts.deposito} inquilino(s) sin depósito`;
+        break;
+      default:
+        porRecaudarLabel = 'POR RECAUDAR TOTAL';
+        porRecaudarSub = vencido > 0
+          ? `${fmt0(vencido)} vencido${counts.pendientes > 0 ? ` · ${counts.pendientes} por vencer` : ''}`
+          : counts.pendientes > 0 ? `${counts.pendientes} por pagar · al corriente` : 'Todo cobrado';
+        break;
+    }
+
     return {
       expected, recaudado,
       porRecaudar,
+      porRecaudarLabel,
+      porRecaudarSub,
       vencido,
       pct: expected > 0 ? Math.round((recaudado / expected) * 100) : 0,
       porValidar: counts.revision,
       speiPct: inquilinos.length > 0 ? Math.round((spei / inquilinos.length) * 100) : 0,
     };
-  }, [inquilinos, rows, counts, saldos]);
+  }, [inquilinos, rows, counts, saldos, tab]);
 
   // ¿Este pago confirmado todavía se puede cancelar? (dentro de las 24 h)
   const puedeCancelar = (item: any): boolean => {
@@ -276,16 +327,12 @@ export default function PagosScreen() {
 
       <SurfaceCard style={styles.kpi} padding={Theme.spacing.md}>
         <View style={styles.kpiHead}>
-          <Text style={[styles.kpiLabel, { color: theme.textMuted }]}>POR RECAUDAR</Text>
+          <Text style={[styles.kpiLabel, { color: theme.textMuted }]}>{kpi.porRecaudarLabel}</Text>
           <Ionicons name="wallet-outline" size={15} color={theme.danger} />
         </View>
         <Text style={[styles.kpiValue, { color: theme.text }]}>{fmt0(kpi.porRecaudar)} <Text style={styles.kpiUnit}>MXN</Text></Text>
         <Text style={[styles.kpiMini, { color: kpi.vencido > 0 ? theme.danger : theme.textSecondary }]}>
-          {kpi.vencido > 0
-            ? `${fmt0(kpi.vencido)} vencido${counts.pendientes > 0 ? ` · ${counts.pendientes} por vencer` : ''}`
-            : counts.pendientes > 0
-              ? `${counts.pendientes} por pagar · al corriente`
-              : 'Todo cobrado'}
+          {kpi.porRecaudarSub}
         </Text>
       </SurfaceCard>
 
